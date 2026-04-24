@@ -3,6 +3,7 @@ import Link from "next/link";
 import { UserButton } from "@clerk/nextjs";
 import { currentUser } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
+import { GlobalSearch } from "@/components/global-search";
 
 /**
  * Authenticated app shell. Static chrome + streamed auth-dependent slots.
@@ -33,9 +34,12 @@ export default function AppLayout({
               <NavLink href="/settings" label="Settings" />
             </nav>
           </div>
-          <Suspense fallback={<HeaderUserSkeleton />}>
-            <HeaderUser />
-          </Suspense>
+          <div className="flex items-center gap-3">
+            <GlobalSearch />
+            <Suspense fallback={<HeaderUserSkeleton />}>
+              <HeaderUser />
+            </Suspense>
+          </div>
         </div>
       </header>
       <main className="flex-1">{children}</main>
