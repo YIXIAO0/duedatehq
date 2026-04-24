@@ -21,6 +21,12 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   FileSpreadsheet,
   ClipboardPaste,
   Download,
@@ -209,6 +215,7 @@ export function ImportWizard() {
   // =======================================================================
 
   return (
+    <TooltipProvider delayDuration={150}>
     <div className="space-y-6">
       <StepIndicator current={step} />
 
@@ -251,6 +258,7 @@ export function ImportWizard() {
         />
       ) : null}
     </div>
+    </TooltipProvider>
   );
 }
 
@@ -672,9 +680,44 @@ function PreviewStep({
                   ) : null}
                 </div>
                 {p.warnings.length > 0 ? (
-                  <AlertTriangle className="h-3.5 w-3.5 text-[var(--color-priority-medium)]" />
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        aria-label={`Warning: ${p.warnings.join("; ")}`}
+                        className="inline-flex items-center gap-1 rounded-sm px-1 py-0.5 text-xs text-[var(--color-priority-medium)] hover:bg-[var(--color-priority-medium-bg)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-priority-medium)]"
+                      >
+                        <AlertTriangle className="h-3.5 w-3.5" />
+                        <span className="hidden sm:inline font-medium">
+                          {p.warnings.length} warning
+                          {p.warnings.length === 1 ? "" : "s"}
+                        </span>
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="left" className="max-w-xs">
+                      <ul className="space-y-1">
+                        {p.warnings.map((w, i) => (
+                          <li key={i} className="text-xs">
+                            • {w}
+                          </li>
+                        ))}
+                      </ul>
+                    </TooltipContent>
+                  </Tooltip>
                 ) : (
-                  <CheckCircle2 className="h-3.5 w-3.5 text-[var(--color-priority-done)]" />
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span
+                        aria-label="Ready to import — no issues"
+                        className="inline-flex items-center"
+                      >
+                        <CheckCircle2 className="h-3.5 w-3.5 text-[var(--color-priority-done)]" />
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="left" className="text-xs">
+                      Ready to import
+                    </TooltipContent>
+                  </Tooltip>
                 )}
               </div>
             ))}
