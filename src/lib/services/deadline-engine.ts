@@ -197,7 +197,9 @@ export async function generateDeadlinesForEntity(
 export const ListDashboardInputSchema = z.object({
   orgId: z.string(),
   daysAhead: z.number().int().positive().max(365).default(60),
-  limit: z.number().int().positive().max(200).default(100),
+  // 1000 covers a solo CPA with ~200 clients × ~5 upcoming deadlines/entity.
+  // Beyond that we'd move filtering server-side.
+  limit: z.number().int().positive().max(1000).default(100),
 });
 export type ListDashboardInput = z.input<typeof ListDashboardInputSchema>;
 
