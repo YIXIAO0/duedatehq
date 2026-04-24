@@ -100,7 +100,9 @@ async function DeadlineDetail({ params }: { params: Params }) {
           >
             {d.client_name}
           </Link>{" "}
-          · {d.entity_name}{" "}
+          {d.entity_name && d.entity_name !== d.client_name ? (
+            <>· {d.entity_name} </>
+          ) : null}
           <span className="text-xs text-muted-foreground">
             ({entityLabel(d.entity_type)})
           </span>

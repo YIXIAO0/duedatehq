@@ -145,11 +145,15 @@ export async function globalSearch(input: SearchInput): Promise<SearchHit[]> {
   `);
 
   for (const row of deadlineRows.rows) {
+    const showEntityInSubtitle =
+      row.entity_name && row.entity_name !== row.client_name;
     results.push({
       type: "deadline",
       id: row.id,
       title: `${row.form_code} — ${row.client_name}`,
-      subtitle: `${row.entity_name} · ${row.rule_title}`,
+      subtitle: showEntityInSubtitle
+        ? `${row.entity_name} · ${row.rule_title}`
+        : row.rule_title,
       href: `/deadlines/${row.id}`,
       dueDate: row.effective_due_date,
     });

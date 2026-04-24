@@ -675,8 +675,12 @@ function DeadlineRow({
           <div className="truncate text-sm font-medium">{d.rule_title}</div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <span className="truncate">{d.client_name}</span>
-            <span>·</span>
-            <span className="truncate">{d.entity_name}</span>
+            {d.entity_name && d.entity_name !== d.client_name ? (
+              <>
+                <span>·</span>
+                <span className="truncate">{d.entity_name}</span>
+              </>
+            ) : null}
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
