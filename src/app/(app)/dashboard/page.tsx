@@ -3,12 +3,10 @@ import { Suspense } from "react";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Plus,
   Calendar,
@@ -22,6 +20,10 @@ import {
   getDashboardStats,
   listDashboardDeadlines,
 } from "@/lib/services/deadline-engine";
+import {
+  DashboardClient,
+  type DashboardDeadline,
+} from "./dashboard-client";
 
 export default function DashboardPage() {
   return (
@@ -105,166 +107,15 @@ async function UpcomingDeadlines() {
   const rows = await listDashboardDeadlines({
     orgId: ctx.organization.id,
     daysAhead: 60,
-    limit: 100,
+    limit: 500,
   });
-
-  if (rows.length === 0) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Welcome to DueDateHQ</CardTitle>
-          <CardDescription>
-            Get set up in 2 minutes. Pick the path that fits:
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 md:grid-cols-2">
-            {/* Path 1: Import (recommended for existing CPAs) */}
-            <Link
-              href="/clients/import"
-              className="group flex flex-col rounded-lg border-2 border-primary/30 bg-primary/5 p-6 transition-all hover:border-primary hover:bg-primary/10"
-            >
-              <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
-                <FileSpreadsheet className="h-5 w-5" />
-              </div>
-              <h3 className="font-semibold">
-                Import from spreadsheet
-                <span className="ml-2 rounded bg-primary/20 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-primary">
-                  Recommended
-                </span>
-              </h3>
-              <p className="mt-1.5 text-sm text-muted-foreground">
-                Bring in your existing client list from Excel, File In Time,
-                ProConnect, or any CSV. AI maps the columns for you.
-              </p>
-              <p className="mt-auto pt-3 text-sm font-medium text-primary group-hover:underline">
-                Start import →
-              </p>
-            </Link>
-
-            {/* Path 2: Manual (for first-time solo practitioners) */}
-            <Link
-              href="/clients/new"
-              className="group flex flex-col rounded-lg border-2 border-border bg-card p-6 transition-all hover:border-slate-400 hover:bg-muted/30"
-            >
-              <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-md bg-muted text-foreground">
-                <Plus className="h-5 w-5" />
-              </div>
-              <h3 className="font-semibold">Add one client manually</h3>
-              <p className="mt-1.5 text-sm text-muted-foreground">
-                Starting fresh or testing the tool? Add a single client,
-                pick their entity type + states, see deadlines appear.
-              </p>
-              <p className="mt-auto pt-3 text-sm font-medium group-hover:underline">
-                Add client →
-              </p>
-            </Link>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
+  // All grouping / filtering / selection is interactive — delegate to the
+  // client component. Empty state also lives there for a single source of truth.
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Upcoming deadlines</CardTitle>
-        <CardDescription>
-          Next 60 days — most urgent first. Irrevocable deadlines show a red
-          badge.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="divide-y divide-border rounded-md border border-border">
-          {rows.map((row) => (
-            <DeadlineRow key={row.id} row={row} />
-          ))}
-        </div>
-      </CardContent>
-    </Card>
+    <DashboardClient deadlines={rows as unknown as DashboardDeadline[]} />
   );
 }
 
-type DeadlineRow = Awaited<ReturnType<typeof listDashboardDeadlines>>[number];
-
-function DeadlineRow({ row }: { row: DeadlineRow }) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const effectiveDate = row.effective_due_date;
-  const due = new Date(effectiveDate + "T00:00:00");
-  const daysUntil = Math.round(
-    (due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
-  );
-
-  const urgency =
-    daysUntil < 0
-      ? "urgent" // overdue
-      : daysUntil <= 3
-      ? "urgent"
-      : daysUntil <= 14
-      ? "high"
-      : daysUntil <= 30
-      ? "medium"
-      : "done";
-
-  const urgencyColor = {
-    urgent: "text-[var(--color-priority-urgent)]",
-    high: "text-[var(--color-priority-high)]",
-    medium: "text-[var(--color-priority-medium)]",
-    done: "text-muted-foreground",
-  }[urgency];
-
-  const daysLabel =
-    daysUntil < 0
-      ? `${Math.abs(daysUntil)}d overdue`
-      : daysUntil === 0
-      ? "Today"
-      : daysUntil === 1
-      ? "Tomorrow"
-      : `${daysUntil} days`;
-
-  return (
-    <Link
-      href={`/deadlines/${row.id}`}
-      className="flex items-center justify-between gap-4 px-4 py-3 hover:bg-muted/40 transition-colors"
-    >
-      <div className="flex min-w-0 flex-1 items-center gap-3">
-        <div className="w-20 shrink-0 text-sm">
-          <div className="font-medium">
-            {new Date(effectiveDate + "T00:00:00").toLocaleDateString("en-US", {
-              month: "short",
-              day: "numeric",
-            })}
-          </div>
-          <div className={`text-xs ${urgencyColor}`}>{daysLabel}</div>
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="truncate font-medium">{row.rule_title}</div>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span className="truncate">{row.client_name}</span>
-            <span>·</span>
-            <span className="truncate">{row.entity_name}</span>
-          </div>
-        </div>
-      </div>
-      <div className="flex shrink-0 items-center gap-2">
-        {row.is_extended ? (
-          <Badge variant="outline" className="text-xs">
-            Extended
-          </Badge>
-        ) : null}
-        {row.irrevocable ? (
-          <Badge className="bg-[var(--color-priority-urgent-bg)] text-[var(--color-priority-urgent)] hover:bg-[var(--color-priority-urgent-bg)]">
-            Irrevocable
-          </Badge>
-        ) : null}
-        <Badge variant="outline" className="font-mono text-xs">
-          {row.jurisdiction_code === "federal" ? "US" : row.jurisdiction_code}
-        </Badge>
-      </div>
-    </Link>
-  );
-}
 
 function StatCard({
   title,
