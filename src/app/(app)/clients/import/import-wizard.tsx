@@ -637,30 +637,26 @@ function PreviewStep({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {/* Historical opt-in */}
-          <label
-            htmlFor="include-historical"
-            className="mb-5 flex cursor-pointer items-start gap-3 rounded-md border border-border bg-muted/30 p-4 transition-colors hover:bg-muted/50"
-          >
+          {/* Historical opt-in — inline, minimal */}
+          <div className="mb-5 flex items-start gap-2.5 border-b border-border pb-5">
             <Checkbox
               id="include-historical"
               checked={includeHistorical}
               onCheckedChange={(v) => onToggleHistorical(v === true)}
               className="mt-0.5"
             />
-            <div className="text-sm">
-              <div className="font-medium">
-                Also bring in prior-year deadlines as completed filings
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Keeps a historical audit trail — past due dates (e.g. 3/15 S-Corp
-                returns, 4/15 individuals) show as{" "}
-                <strong>completed</strong>, not overdue. Each is marked
-                &ldquo;Imported as historical — verify actual filing date&rdquo;
-                so you can correct if needed. Unchecked = forward-only view.
-              </p>
-            </div>
-          </label>
+            <label
+              htmlFor="include-historical"
+              className="cursor-pointer text-sm leading-snug select-none"
+            >
+              <span className="font-medium">
+                Include prior-year filings as completed history
+              </span>
+              <span className="ml-2 text-xs text-muted-foreground">
+                Past due dates show as completed for audit trail — unchecked = forward-only view.
+              </span>
+            </label>
+          </div>
 
           {errored.length > 0 ? (
             <details className="mb-4">
