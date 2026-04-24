@@ -66,7 +66,21 @@ type DigestStats = {
 
 export type GenerateDigestResult =
   | { sent: true; messageId: string | null; weekKey: string }
-  | { sent: false; reason: "already-sent" | "no-recipient"; weekKey: string };
+  | {
+      sent: false;
+      reason: "already-sent" | "no-recipient" | "error";
+      weekKey: string;
+      /** Present when reason === "error" so the UI can show the real cause. */
+      errorMessage?: string;
+      /** Where in the pipeline we crashed (for support / logs). */
+      errorStage?:
+        | "stats"
+        | "ai"
+        | "render"
+        | "send"
+        | "record"
+        | "unknown";
+    };
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -479,18 +493,39 @@ export async function generateAndSendWeeklyDigest(
     }
   }
 
-  const stats = await gatherDigestStats(parsed.orgId);
-  const insight = await generateAiInsight(stats, parsed.orgName);
+  // Pipeline stages — each wrapped so a failure surfaces the exact stage
+  // instead of returning an opaque "server error". Lets the UI show
+  // actionable messages like "Resend rejected: domain not verified".
+  let stats: DigestStats;
+  try {
+    stats = await gatherDigestStats(parsed.orgId);
+  } catch (e) {
+    return digestError("stats", e, weekKey);
+  }
+
+  let insight: string;
+  try {
+    insight = await generateAiInsight(stats, parsed.orgName);
+  } catch (e) {
+    // generateAiInsight itself catches AI errors and falls back to a
+    // template — landing here means the fallback also crashed (rare).
+    return digestError("ai", e, weekKey);
+  }
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://duedatehq.com";
-  const { subject, html, text } = renderEmail({
-    recipientName: parsed.recipientName ?? "",
-    orgName: parsed.orgName,
-    appUrl,
-    weekKey,
-    insight,
-    stats,
-  });
+  let subject: string, html: string, text: string;
+  try {
+    ({ subject, html, text } = renderEmail({
+      recipientName: parsed.recipientName ?? "",
+      orgName: parsed.orgName,
+      appUrl,
+      weekKey,
+      insight,
+      stats,
+    }));
+  } catch (e) {
+    return digestError("render", e, weekKey);
+  }
 
   // Send via Resend. If the API key is missing, we silently log + record so
   // local dev / preview without a key can still exercise the flow.
@@ -500,18 +535,37 @@ export async function generateAndSendWeeklyDigest(
 
   let messageId: string | null = null;
   if (apiKey) {
-    const resend = new Resend(apiKey);
-    const result = await resend.emails.send({
-      from: fromEmail,
-      to: parsed.recipientEmail,
-      subject,
-      html,
-      text,
-    });
-    if (result.error) {
-      throw new Error(`Resend error: ${result.error.message}`);
+    try {
+      const resend = new Resend(apiKey);
+      const result = await resend.emails.send({
+        from: fromEmail,
+        to: parsed.recipientEmail,
+        subject,
+        html,
+        text,
+      });
+      if (result.error) {
+        // Resend's most common rejection: "You can only send testing emails
+        // to your own email address" — happens when from-domain is the
+        // shared `onboarding@resend.dev`. Surface verbatim so the user
+        // knows what knob to turn.
+        const msg = `Resend ${result.error.name ?? "error"}: ${result.error.message}`;
+        console.error("[digest] resend rejected:", msg, {
+          from: fromEmail,
+          to: parsed.recipientEmail,
+        });
+        return {
+          sent: false,
+          reason: "error",
+          errorStage: "send",
+          errorMessage: msg,
+          weekKey,
+        };
+      }
+      messageId = result.data?.id ?? null;
+    } catch (e) {
+      return digestError("send", e, weekKey);
     }
-    messageId = result.data?.id ?? null;
   } else {
     console.warn(
       "[digest] RESEND_API_KEY not set — would have sent to",
@@ -519,41 +573,65 @@ export async function generateAndSendWeeklyDigest(
     );
   }
 
-  // Insert dedupe record. onConflictDoNothing handles the rare race where
-  // two cron ticks fire ~simultaneously.
-  await db
-    .insert(digestSends)
-    .values({
-      orgId: parsed.orgId,
-      userId: parsed.userId,
-      weekKey,
-      digestType: "weekly",
-      recipientEmail: parsed.recipientEmail,
-      deadlineCount: stats.thisWeek.length + stats.nextWeek.length,
-      urgentCount:
-        stats.overdue.length + stats.irrevocableSoon.length,
-      aiSummary: insight,
-      providerMessageId: messageId,
-    })
-    .onConflictDoNothing();
+  try {
+    // Insert dedupe record. onConflictDoNothing handles the rare race where
+    // two cron ticks fire ~simultaneously.
+    await db
+      .insert(digestSends)
+      .values({
+        orgId: parsed.orgId,
+        userId: parsed.userId,
+        weekKey,
+        digestType: "weekly",
+        recipientEmail: parsed.recipientEmail,
+        deadlineCount: stats.thisWeek.length + stats.nextWeek.length,
+        urgentCount: stats.overdue.length + stats.irrevocableSoon.length,
+        aiSummary: insight,
+        providerMessageId: messageId,
+      })
+      .onConflictDoNothing();
 
-  await recordAudit({
-    orgId: parsed.orgId,
-    actorType: "cron",
-    actorId: "weekly-digest",
-    action: "digest.sent",
-    targetType: "user",
-    targetId: parsed.userId,
-    payload: {
-      weekKey,
-      recipientEmail: parsed.recipientEmail,
-      deadlineCount: stats.thisWeek.length + stats.nextWeek.length,
-      urgentCount: stats.overdue.length + stats.irrevocableSoon.length,
-      providerMessageId: messageId,
-    },
-  });
+    await recordAudit({
+      orgId: parsed.orgId,
+      actorType: "cron",
+      actorId: "weekly-digest",
+      action: "digest.sent",
+      targetType: "user",
+      targetId: parsed.userId,
+      payload: {
+        weekKey,
+        recipientEmail: parsed.recipientEmail,
+        deadlineCount: stats.thisWeek.length + stats.nextWeek.length,
+        urgentCount: stats.overdue.length + stats.irrevocableSoon.length,
+        providerMessageId: messageId,
+      },
+    });
+  } catch (e) {
+    // The mail already went out at this point — log loudly but don't claim
+    // failure to the caller, otherwise they'd resend and get a duplicate.
+    console.error(
+      "[digest] post-send bookkeeping failed (mail did go out):",
+      e,
+    );
+  }
 
   return { sent: true, messageId, weekKey };
+}
+
+function digestError(
+  stage: "stats" | "ai" | "render" | "send" | "record",
+  e: unknown,
+  weekKey: string,
+): GenerateDigestResult {
+  const message = e instanceof Error ? e.message : String(e);
+  console.error(`[digest] failed at stage=${stage}:`, message);
+  return {
+    sent: false,
+    reason: "error",
+    errorStage: stage,
+    errorMessage: message,
+    weekKey,
+  };
 }
 
 // ---------------------------------------------------------------------------

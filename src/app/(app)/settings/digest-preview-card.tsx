@@ -18,7 +18,7 @@ type State =
   | { status: "sending" }
   | { status: "sent"; weekKey: string; messageId: string | null }
   | { status: "skipped"; reason: string }
-  | { status: "error"; message: string };
+  | { status: "error"; message: string; stage?: string };
 
 export function DigestPreviewCard({
   recipientEmail,
@@ -39,10 +39,18 @@ export function DigestPreviewCard({
             weekKey: result.weekKey,
             messageId: result.messageId,
           });
+        } else if (result.reason === "error") {
+          setState({
+            status: "error",
+            message: result.errorMessage ?? "Send failed.",
+            stage: result.errorStage,
+          });
         } else {
           setState({ status: "skipped", reason: result.reason });
         }
       } catch (e) {
+        // Server actions now return structured errors; this catch is the
+        // last-resort fallback for things like network drops.
         setState({
           status: "error",
           message: e instanceof Error ? e.message : "Send failed.",
@@ -109,9 +117,32 @@ export function DigestPreviewCard({
         {state.status === "error" ? (
           <div className="mt-3 flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-            <div>
-              <div className="font-medium">Send failed</div>
-              <div className="text-xs">{state.message}</div>
+            <div className="min-w-0 flex-1">
+              <div className="font-medium">
+                Send failed{state.stage ? ` (stage: ${state.stage})` : ""}
+              </div>
+              <div className="mt-0.5 break-words text-xs">{state.message}</div>
+              {state.stage === "send" &&
+              state.message.toLowerCase().includes("testing emails") ? (
+                <div className="mt-2 rounded border border-destructive/20 bg-background p-2 text-xs text-foreground">
+                  <div className="font-medium">How to fix:</div>
+                  <div className="mt-1 text-muted-foreground">
+                    Resend&apos;s shared <code>onboarding@resend.dev</code>{" "}
+                    sender only delivers to your Resend account&apos;s signup
+                    email. Either (a) verify a domain at{" "}
+                    <a
+                      href="https://resend.com/domains"
+                      target="_blank"
+                      className="underline"
+                      rel="noreferrer"
+                    >
+                      resend.com/domains
+                    </a>{" "}
+                    and update <code>RESEND_FROM_EMAIL</code>, or (b) sign in
+                    here with the email tied to your Resend account.
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
         ) : null}
