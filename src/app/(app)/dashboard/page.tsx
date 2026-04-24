@@ -104,15 +104,20 @@ async function DashboardStats() {
 
 async function UpcomingDeadlines() {
   const ctx = await getCurrentContext();
+  // Fetch first page (100 rows) server-side for fast initial paint.
+  // Filter changes + Load More run via /api/deadlines/list.
   const rows = await listDashboardDeadlines({
     orgId: ctx.organization.id,
     daysAhead: 60,
-    limit: 500,
+    limit: 100,
+    offset: 0,
   });
-  // All grouping / filtering / selection is interactive — delegate to the
-  // client component. Empty state also lives there for a single source of truth.
+  const hasMore = rows.length === 100;
   return (
-    <DashboardClient deadlines={rows as unknown as DashboardDeadline[]} />
+    <DashboardClient
+      initialDeadlines={rows as unknown as DashboardDeadline[]}
+      initialHasMore={hasMore}
+    />
   );
 }
 

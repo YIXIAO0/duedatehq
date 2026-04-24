@@ -197,9 +197,13 @@ export async function generateDeadlinesForEntity(
 export const ListDashboardInputSchema = z.object({
   orgId: z.string(),
   daysAhead: z.number().int().positive().max(365).default(60),
-  // 1000 covers a solo CPA with ~200 clients × ~5 upcoming deadlines/entity.
-  // Beyond that we'd move filtering server-side.
-  limit: z.number().int().positive().max(1000).default(100),
+  limit: z.number().int().positive().max(200).default(100),
+  offset: z.number().int().nonnegative().default(0),
+  // Server-side filters so we don't ship 500+ rows on every filter change.
+  urgency: z.enum(["all", "urgent", "irrevocable"]).default("all"),
+  jurisdictionCode: z.string().default("all"),
+  entityType: z.string().default("all"),
+  status: z.enum(["active", "extended_only"]).default("active"),
 });
 export type ListDashboardInput = z.input<typeof ListDashboardInputSchema>;
 
@@ -213,10 +217,36 @@ export async function listDashboardDeadlines(input: ListDashboardInput) {
     d.setDate(d.getDate() + parsed.daysAhead);
     return d.toISOString().slice(0, 10);
   })();
+  // For "urgent" filter: today + 7 days
+  const urgentCutoff = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 7);
+    return d.toISOString().slice(0, 10);
+  })();
 
-  // Effective due date = extension_due_date if an extension was filed,
-  // otherwise the original due_date. This keeps the dashboard pointing
-  // at the REAL next filing date for each deadline.
+  // Build WHERE clause dynamically using conditional fragments.
+  const statusWhere =
+    parsed.status === "extended_only"
+      ? sql`di.status = 'extended'`
+      : sql`di.status IN ('pending', 'in_progress', 'extended')`;
+
+  const urgencyWhere =
+    parsed.urgency === "urgent"
+      ? sql`AND COALESCE(di.extension_due_date, di.due_date) <= ${urgentCutoff}`
+      : parsed.urgency === "irrevocable"
+      ? sql`AND r.irrevocable = true`
+      : sql``;
+
+  const jurisdictionWhere =
+    parsed.jurisdictionCode === "all"
+      ? sql``
+      : sql`AND r.jurisdiction_code = ${parsed.jurisdictionCode}`;
+
+  const entityTypeWhere =
+    parsed.entityType === "all"
+      ? sql``
+      : sql`AND e.entity_type::text = ${parsed.entityType}`;
+
   const rows = await db.execute<{
     id: string;
     due_date: string;
@@ -258,9 +288,13 @@ export async function listDashboardDeadlines(input: ListDashboardInput) {
     INNER JOIN deadline_rules r ON r.id = di.rule_id
     WHERE di.org_id = ${parsed.orgId}
       AND COALESCE(di.extension_due_date, di.due_date) BETWEEN ${today} AND ${future}
-      AND di.status IN ('pending', 'in_progress', 'extended')
-    ORDER BY effective_due_date ASC, r.irrevocable DESC
+      AND ${statusWhere}
+      ${urgencyWhere}
+      ${jurisdictionWhere}
+      ${entityTypeWhere}
+    ORDER BY effective_due_date ASC, r.irrevocable DESC, di.id ASC
     LIMIT ${parsed.limit}
+    OFFSET ${parsed.offset}
   `);
 
   return rows.rows;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
@@ -152,10 +152,28 @@ function bucketByTime(deadlines: DashboardDeadline[]): Bucket[] {
 // Client component
 // ---------------------------------------------------------------------------
 
+// Hardcoded filter options (from our seed data). If seed expands past
+// these, the API still supports whatever state/type the user data has —
+// this is just the dropdown labels.
+const STATE_OPTIONS = ["federal", "CA", "NY", "TX", "DE", "NJ"];
+const TYPE_OPTIONS = [
+  "individual",
+  "c_corp",
+  "s_corp",
+  "partnership",
+  "llc",
+  "trust",
+  "estate",
+  "nonprofit",
+];
+const PAGE_SIZE = 100;
+
 export function DashboardClient({
-  deadlines,
+  initialDeadlines,
+  initialHasMore,
 }: {
-  deadlines: DashboardDeadline[];
+  initialDeadlines: DashboardDeadline[];
+  initialHasMore: boolean;
 }) {
   const [filter, setFilter] = useState<FilterState>({
     urgency: "all",
@@ -163,55 +181,77 @@ export function DashboardClient({
     state: "all",
     entityType: "all",
   });
+  const [deadlines, setDeadlines] = useState(initialDeadlines);
+  const [hasMore, setHasMore] = useState(initialHasMore);
+  const [fetching, setFetching] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [collapsed, setCollapsed] = useState<Set<string>>(
     new Set(["this-month", "later"]),
   );
   const [applying, startApplying] = useTransition();
 
-  // Options for state / entity type dropdowns (derived from actual data)
-  const stateOptions = useMemo(() => {
-    const set = new Set<string>();
-    for (const d of deadlines) set.add(d.jurisdiction_code);
-    return Array.from(set).sort();
-  }, [deadlines]);
-
-  const typeOptions = useMemo(() => {
-    const set = new Set<string>();
-    for (const d of deadlines) set.add(d.entity_type);
-    return Array.from(set).sort();
-  }, [deadlines]);
-
-  // Apply filters
-  const filtered = useMemo(() => {
-    return deadlines.filter((d) => {
-      if (filter.urgency === "irrevocable" && !d.irrevocable) return false;
-      if (filter.urgency === "urgent") {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const due = new Date(d.effective_due_date + "T00:00:00").getTime();
-        const daysUntil = Math.round(
-          (due - today.getTime()) / (1000 * 60 * 60 * 24),
-        );
-        if (daysUntil > 7) return false;
-      }
-      if (filter.status === "active" && d.status === "extended") {
-        // "active" still shows extended since they have active next-filing date
-      }
-      if (filter.status === "extended_only" && d.status !== "extended") {
-        return false;
-      }
-      if (filter.state !== "all" && d.jurisdiction_code !== filter.state) {
-        return false;
-      }
-      if (filter.entityType !== "all" && d.entity_type !== filter.entityType) {
-        return false;
-      }
-      return true;
+  // When filter changes, refetch from server starting at offset 0.
+  // Skip the initial mount — initialDeadlines is already correct.
+  const isFirst = useRef(true);
+  useEffect(() => {
+    if (isFirst.current) {
+      isFirst.current = false;
+      return;
+    }
+    let cancelled = false;
+    setFetching(true);
+    setSelected(new Set()); // reset selection when filter changes
+    const params = new URLSearchParams({
+      limit: String(PAGE_SIZE),
+      offset: "0",
+      urgency: filter.urgency,
+      jurisdiction: filter.state,
+      entityType: filter.entityType,
+      status: filter.status,
     });
-  }, [deadlines, filter]);
+    fetch(`/api/deadlines/list?${params}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return;
+        setDeadlines(data.rows ?? []);
+        setHasMore(!!data.hasMore);
+      })
+      .catch((err) => {
+        console.error("[dashboard] filter fetch failed", err);
+      })
+      .finally(() => {
+        if (!cancelled) setFetching(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [filter]);
 
-  const buckets = useMemo(() => bucketByTime(filtered), [filtered]);
+  async function handleLoadMore() {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    try {
+      const params = new URLSearchParams({
+        limit: String(PAGE_SIZE),
+        offset: String(deadlines.length),
+        urgency: filter.urgency,
+        jurisdiction: filter.state,
+        entityType: filter.entityType,
+        status: filter.status,
+      });
+      const res = await fetch(`/api/deadlines/list?${params}`);
+      const data = await res.json();
+      setDeadlines((prev) => [...prev, ...(data.rows ?? [])]);
+      setHasMore(!!data.hasMore);
+    } catch (err) {
+      console.error("[dashboard] load more failed", err);
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
+  const buckets = useMemo(() => bucketByTime(deadlines), [deadlines]);
   const nonEmptyBuckets = buckets.filter((b) => b.deadlines.length > 0);
 
   // Selection helpers
@@ -248,11 +288,10 @@ export function DashboardClient({
     filter.state !== "all" ||
     filter.entityType !== "all";
 
-  const totalVisible = filtered.length;
-  const totalAll = deadlines.length;
-
-  // Empty state: 2-path welcome (Import vs Add one)
-  if (totalAll === 0) {
+  // Empty state: 2-path welcome (Import vs Add one).
+  // Shown only when no filters active AND no data returned — otherwise
+  // the "no match" state appears below the filter bar.
+  if (deadlines.length === 0 && !filtersActive && !fetching) {
     return (
       <Card>
         <CardHeader>
@@ -337,7 +376,7 @@ export function DashboardClient({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All jurisdictions</SelectItem>
-            {stateOptions.map((s) => (
+            {STATE_OPTIONS.map((s) => (
               <SelectItem key={s} value={s}>
                 {s === "federal" ? "US Federal" : s}
               </SelectItem>
@@ -354,7 +393,7 @@ export function DashboardClient({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All entity types</SelectItem>
-            {typeOptions.map((t) => (
+            {TYPE_OPTIONS.map((t) => (
               <SelectItem key={t} value={t}>
                 {entityTypeLabel(t)}
               </SelectItem>
@@ -395,13 +434,21 @@ export function DashboardClient({
           </Button>
         ) : null}
 
-        <div className="ml-auto text-xs text-muted-foreground">
-          {totalVisible} of {totalAll}
+        <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
+          {fetching ? (
+            <span className="flex items-center gap-1.5">
+              <Loader2 className="h-3 w-3 animate-spin" /> Updating…
+            </span>
+          ) : (
+            <span>
+              {deadlines.length} loaded{hasMore ? "+" : ""}
+            </span>
+          )}
         </div>
       </div>
 
       {/* Empty-filtered state */}
-      {nonEmptyBuckets.length === 0 ? (
+      {!fetching && nonEmptyBuckets.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
             <p className="text-sm text-muted-foreground">
@@ -493,6 +540,25 @@ export function DashboardClient({
           </div>
         );
       })}
+
+      {/* Load more */}
+      {hasMore && !fetching ? (
+        <div className="flex justify-center pt-2">
+          <Button
+            variant="outline"
+            onClick={handleLoadMore}
+            disabled={loadingMore}
+          >
+            {loadingMore ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading…
+              </>
+            ) : (
+              <>Load more ({PAGE_SIZE} at a time)</>
+            )}
+          </Button>
+        </div>
+      ) : null}
 
       {/* Floating bulk-action bar */}
       {selected.size > 0 ? (
