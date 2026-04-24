@@ -8,7 +8,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Plus, Users } from "lucide-react";
+import { Plus, Users, FileSpreadsheet } from "lucide-react";
 import { getCurrentContext } from "@/lib/auth/current-org";
 import { listClients } from "@/lib/services/clients";
 
@@ -23,11 +23,18 @@ export default function ClientsPage() {
             their deadlines.
           </p>
         </div>
-        <Button asChild>
-          <Link href="/clients/new">
-            <Plus className="mr-2 h-4 w-4" /> Add client
-          </Link>
-        </Button>
+        <div className="flex gap-2">
+          <Button asChild variant="outline">
+            <Link href="/clients/import">
+              <FileSpreadsheet className="mr-2 h-4 w-4" /> Import
+            </Link>
+          </Button>
+          <Button asChild>
+            <Link href="/clients/new">
+              <Plus className="mr-2 h-4 w-4" /> Add client
+            </Link>
+          </Button>
+        </div>
       </div>
 
       <Suspense fallback={<ClientsSkeleton />}>
