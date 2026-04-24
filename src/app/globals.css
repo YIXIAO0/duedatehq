@@ -168,8 +168,12 @@
   html {
     @apply font-sans;
   }
-  /* Larger click targets for older users */
-  button, a[role="button"], [data-slot="button"] {
+  /* Larger click targets for older users — scoped to actual action buttons
+     ONLY. We can't use the generic `button` selector because Radix primitives
+     (Checkbox, Switch, Select trigger, Dropdown trigger, etc.) all render as
+     <button> and would get stretched to 36px, breaking the compact list UX.
+     shadcn's <Button> is tagged with data-slot="button". */
+  [data-slot="button"], a[role="button"] {
     min-height: 2.25rem;
   }
 }
