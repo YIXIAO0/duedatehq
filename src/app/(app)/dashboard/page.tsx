@@ -15,6 +15,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   AlertCircle,
+  FileSpreadsheet,
 } from "lucide-react";
 import { getCurrentContext } from "@/lib/auth/current-org";
 import {
@@ -32,11 +33,18 @@ export default function DashboardPage() {
             All your clients&apos; deadlines at a glance.
           </p>
         </div>
-        <Button asChild>
-          <Link href="/clients/new">
-            <Plus className="mr-2 h-4 w-4" /> Add client
-          </Link>
-        </Button>
+        <div className="flex gap-2">
+          <Button asChild variant="outline">
+            <Link href="/clients/import">
+              <FileSpreadsheet className="mr-2 h-4 w-4" /> Import
+            </Link>
+          </Button>
+          <Button asChild>
+            <Link href="/clients/new">
+              <Plus className="mr-2 h-4 w-4" /> Add client
+            </Link>
+          </Button>
+        </div>
       </div>
 
       <Suspense fallback={<StatsSkeleton />}>
@@ -104,25 +112,53 @@ async function UpcomingDeadlines() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>No upcoming deadlines in the next 60 days</CardTitle>
+          <CardTitle>Welcome to DueDateHQ</CardTitle>
           <CardDescription>
-            Add clients and their tax entities — we&apos;ll auto-generate the
-            full-year calendar for each.
+            Get set up in 2 minutes. Pick the path that fits:
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-col gap-4 rounded-md border border-dashed border-border p-8 text-center">
-            <p className="text-sm text-muted-foreground">
-              Add a client and tell us their entity type + operating states.
-              We&apos;ll auto-generate their full-year deadline calendar.
-            </p>
-            <div className="flex justify-center">
-              <Button asChild size="lg">
-                <Link href="/clients/new">
-                  <Plus className="mr-2 h-4 w-4" /> Add your first client
-                </Link>
-              </Button>
-            </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            {/* Path 1: Import (recommended for existing CPAs) */}
+            <Link
+              href="/clients/import"
+              className="group flex flex-col rounded-lg border-2 border-primary/30 bg-primary/5 p-6 transition-all hover:border-primary hover:bg-primary/10"
+            >
+              <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
+                <FileSpreadsheet className="h-5 w-5" />
+              </div>
+              <h3 className="font-semibold">
+                Import from spreadsheet
+                <span className="ml-2 rounded bg-primary/20 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-primary">
+                  Recommended
+                </span>
+              </h3>
+              <p className="mt-1.5 text-sm text-muted-foreground">
+                Bring in your existing client list from Excel, File In Time,
+                ProConnect, or any CSV. AI maps the columns for you.
+              </p>
+              <p className="mt-auto pt-3 text-sm font-medium text-primary group-hover:underline">
+                Start import →
+              </p>
+            </Link>
+
+            {/* Path 2: Manual (for first-time solo practitioners) */}
+            <Link
+              href="/clients/new"
+              className="group flex flex-col rounded-lg border-2 border-border bg-card p-6 transition-all hover:border-slate-400 hover:bg-muted/30"
+            >
+              <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-md bg-muted text-foreground">
+                <Plus className="h-5 w-5" />
+              </div>
+              <h3 className="font-semibold">Add one client manually</h3>
+              <p className="mt-1.5 text-sm text-muted-foreground">
+                Starting fresh or testing the tool? Add a single client,
+                pick their entity type + states, see deadlines appear.
+              </p>
+              <p className="mt-auto pt-3 text-sm font-medium group-hover:underline">
+                Add client →
+              </p>
+            </Link>
           </div>
         </CardContent>
       </Card>

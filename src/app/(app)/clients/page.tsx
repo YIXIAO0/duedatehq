@@ -54,16 +54,43 @@ async function ClientsList() {
         <CardHeader>
           <CardTitle>No clients yet</CardTitle>
           <CardDescription>
-            Add your first client to get started. You&apos;ll then add their tax
-            entities and DueDateHQ auto-generates the full-year deadline calendar.
+            Two ways to get going:
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Button asChild>
-            <Link href="/clients/new">
-              <Plus className="mr-2 h-4 w-4" /> Add your first client
+          <div className="grid gap-4 md:grid-cols-2">
+            <Link
+              href="/clients/import"
+              className="group flex flex-col rounded-lg border-2 border-primary/30 bg-primary/5 p-6 transition-all hover:border-primary hover:bg-primary/10"
+            >
+              <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
+                <FileSpreadsheet className="h-5 w-5" />
+              </div>
+              <h3 className="font-semibold">
+                Import from spreadsheet
+                <span className="ml-2 rounded bg-primary/20 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-primary">
+                  Recommended
+                </span>
+              </h3>
+              <p className="mt-1.5 text-sm text-muted-foreground">
+                Excel / CSV / File In Time exports — AI maps the columns
+                for you.
+              </p>
             </Link>
-          </Button>
+            <Link
+              href="/clients/new"
+              className="group flex flex-col rounded-lg border-2 border-border bg-card p-6 transition-all hover:border-slate-400 hover:bg-muted/30"
+            >
+              <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-md bg-muted text-foreground">
+                <Plus className="h-5 w-5" />
+              </div>
+              <h3 className="font-semibold">Add one manually</h3>
+              <p className="mt-1.5 text-sm text-muted-foreground">
+                Type in a single client — useful for testing or first-time
+                practitioners.
+              </p>
+            </Link>
+          </div>
         </CardContent>
       </Card>
     );
