@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Tooltip,
   TooltipContent,
@@ -627,6 +627,75 @@ function PreviewStep({
         />
       </div>
 
+      {/* Historical records — dedicated decision card */}
+      <Card className="border-primary/30">
+        <CardHeader>
+          <CardTitle className="text-base">
+            What about last year&apos;s deadlines?
+          </CardTitle>
+          <CardDescription>
+            Some of your clients had deadlines earlier this year (e.g. 3/15 S-Corp
+            returns, 4/15 individuals). Choose how DueDateHQ should handle them:
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <RadioGroup
+            value={includeHistorical ? "include" : "skip"}
+            onValueChange={(v) => onToggleHistorical(v === "include")}
+            className="grid gap-3 md:grid-cols-2"
+          >
+            <label
+              htmlFor="skip-option"
+              className={`flex cursor-pointer flex-col gap-2 rounded-md border-2 p-4 transition-colors ${
+                !includeHistorical
+                  ? "border-primary bg-primary/5"
+                  : "border-border hover:bg-muted/30"
+              }`}
+            >
+              <div className="flex items-start gap-3">
+                <RadioGroupItem value="skip" id="skip-option" className="mt-0.5" />
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">Skip past deadlines</span>
+                    <span className="rounded bg-[var(--color-priority-done-bg)] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-[var(--color-priority-done)]">
+                      Recommended
+                    </span>
+                  </div>
+                  <p className="mt-1.5 text-sm text-muted-foreground">
+                    Clean start. Your dashboard shows only upcoming work —
+                    nothing marked overdue.
+                  </p>
+                </div>
+              </div>
+            </label>
+
+            <label
+              htmlFor="include-option"
+              className={`flex cursor-pointer flex-col gap-2 rounded-md border-2 p-4 transition-colors ${
+                includeHistorical
+                  ? "border-primary bg-primary/5"
+                  : "border-border hover:bg-muted/30"
+              }`}
+            >
+              <div className="flex items-start gap-3">
+                <RadioGroupItem
+                  value="include"
+                  id="include-option"
+                  className="mt-0.5"
+                />
+                <div className="flex-1">
+                  <span className="font-medium">Keep history as completed</span>
+                  <p className="mt-1.5 text-sm text-muted-foreground">
+                    Past deadlines are added as &ldquo;filed on time&rdquo; so
+                    you have a full record of last year&apos;s work.
+                  </p>
+                </div>
+              </div>
+            </label>
+          </RadioGroup>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Final review</CardTitle>
@@ -637,26 +706,6 @@ function PreviewStep({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {/* Historical opt-in — inline, minimal */}
-          <div className="mb-5 flex items-start gap-2.5 border-b border-border pb-5">
-            <Checkbox
-              id="include-historical"
-              checked={includeHistorical}
-              onCheckedChange={(v) => onToggleHistorical(v === true)}
-              className="mt-0.5"
-            />
-            <label
-              htmlFor="include-historical"
-              className="cursor-pointer text-sm leading-snug select-none"
-            >
-              <span className="font-medium">
-                Include prior-year filings as completed history
-              </span>
-              <span className="ml-2 text-xs text-muted-foreground">
-                Past due dates show as completed for audit trail — unchecked = forward-only view.
-              </span>
-            </label>
-          </div>
 
           {errored.length > 0 ? (
             <details className="mb-4">
