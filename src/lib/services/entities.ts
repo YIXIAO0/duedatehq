@@ -45,6 +45,8 @@ export const CreateEntityInputSchema = z.object({
     .default("12-31"),
   actorType: z.enum(["user", "agent", "cron", "system"]).default("user"),
   actorId: z.string().nullable().default(null),
+  /** Import opt-in: materialize past-tax-year deadlines as status="completed". */
+  includeHistoricalAsCompleted: z.boolean().default(false),
 });
 export type CreateEntityInput = z.input<typeof CreateEntityInputSchema>;
 
@@ -114,6 +116,7 @@ export async function createEntity(input: CreateEntityInput) {
         taxYear,
         actorType: parsed.actorType,
         actorId: parsed.actorId,
+        includeHistoricalAsCompleted: parsed.includeHistoricalAsCompleted,
       },
       row,
     );

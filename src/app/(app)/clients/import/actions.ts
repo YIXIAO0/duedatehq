@@ -59,6 +59,7 @@ export async function applyImportAction(
         ein: row.ein,
         actorType: "user",
         actorId: ctx.user.id,
+        includeHistoricalAsCompleted: parsed.includeHistoricalAsCompleted,
       });
       result.entitiesCreated += 1;
       result.deadlinesGenerated += entityResult.deadlinesCreated;

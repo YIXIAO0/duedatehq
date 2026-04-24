@@ -136,6 +136,8 @@ export const ApplyImportInputSchema = z.object({
       notes: z.string().max(2000).optional(),
     }),
   ),
+  /** Opt-in: also create past-tax-year deadlines marked as completed. */
+  includeHistoricalAsCompleted: z.boolean().default(false),
 });
 export type ApplyImportInput = z.input<typeof ApplyImportInputSchema>;
 

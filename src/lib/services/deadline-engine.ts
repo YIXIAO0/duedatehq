@@ -33,6 +33,13 @@ export const GenerateDeadlinesInputSchema = z.object({
   taxYear: z.number().int().min(2020).max(2040),
   actorType: z.enum(["user", "agent", "cron", "system"]).default("user"),
   actorId: z.string().nullable().default(null),
+  /**
+   * When true, past-due deadlines are materialized with status="completed"
+   * (assumed filed on the statutory date) instead of being skipped. Used
+   * by the import flow when the user opts into "include historical filings"
+   * for an audit-trail view.
+   */
+  includeHistoricalAsCompleted: z.boolean().default(false),
 });
 export type GenerateDeadlinesInput = z.input<typeof GenerateDeadlinesInputSchema>;
 
@@ -112,25 +119,39 @@ export async function generateDeadlinesForEntity(
     return { created: 0, skipped: 0 };
   }
 
-  // Skip deadlines whose computed due_date is already in the past.
-  // Rationale: on a fresh import, surfacing TY-prior deadlines as "overdue"
-  // creates false panic — the user hasn't committed to managing those, and
-  // there's no bulk "mark completed" yet. V2: offer "also import historical
-  // completed filings" as an explicit opt-in during the import flow.
+  // Two modes:
+  // - default (forward-looking): skip deadlines whose due_date is in the past
+  // - includeHistoricalAsCompleted: keep the past ones but mark them as
+  //   "completed" so they don't pollute the Overdue stat — used by import
+  //   opt-in to give CPAs a historical audit trail.
   const today = new Date().toISOString().slice(0, 10);
+  const includeHistorical = parsed.includeHistoricalAsCompleted;
+
   const values = rules
     .map((rule) => {
       const payload = rule.rulePayload as unknown as RulePayload;
+      const dueDate = computeDueDate(payload, parsed.taxYear);
+      const isPast = dueDate < today;
+
+      if (isPast && !includeHistorical) return null;
+
       return {
         orgId: parsed.orgId,
         entityId: parsed.entityId,
         ruleId: rule.id,
         taxYear: parsed.taxYear,
-        dueDate: computeDueDate(payload, parsed.taxYear),
-        status: "pending" as const,
+        dueDate,
+        status: isPast ? ("completed" as const) : ("pending" as const),
+        completedAt: isPast ? new Date(dueDate + "T23:59:59Z") : null,
+        completedByActorType: isPast ? ("system" as const) : null,
+        notes: isPast
+          ? "Imported as historical — verify actual filing date"
+          : null,
       };
     })
-    .filter((row) => row.dueDate >= today);
+    .filter(
+      (row): row is NonNullable<typeof row> => row !== null,
+    );
 
   const result = await db
     .insert(deadlineInstances)

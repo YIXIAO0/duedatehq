@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Tooltip,
   TooltipContent,
@@ -76,6 +77,7 @@ export function ImportWizard() {
   const [error, setError] = useState<string | null>(null);
   const [previews, setPreviews] = useState<RowPreview[]>([]);
   const [result, setResult] = useState<ApplyImportResult | null>(null);
+  const [includeHistorical, setIncludeHistorical] = useState(false);
   const [suggesting, startSuggesting] = useTransition();
   const [applying, startApplying] = useTransition();
 
@@ -197,7 +199,10 @@ export function ImportWizard() {
         notes: p.mapped.notes,
       }));
 
-    const payload: ApplyImportInput = { rows: validRows };
+    const payload: ApplyImportInput = {
+      rows: validRows,
+      includeHistoricalAsCompleted: includeHistorical,
+    };
 
     startApplying(async () => {
       try {
@@ -248,6 +253,8 @@ export function ImportWizard() {
           onBack={() => setStep("mapping")}
           onConfirm={handleApply}
           applying={applying}
+          includeHistorical={includeHistorical}
+          onToggleHistorical={setIncludeHistorical}
         />
       ) : null}
 
@@ -584,11 +591,15 @@ function PreviewStep({
   onBack,
   onConfirm,
   applying,
+  includeHistorical,
+  onToggleHistorical,
 }: {
   previews: RowPreview[];
   onBack: () => void;
   onConfirm: () => void;
   applying: boolean;
+  includeHistorical: boolean;
+  onToggleHistorical: (v: boolean) => void;
 }) {
   const valid = previews.filter((p) => p.errors.length === 0);
   const errored = previews.filter((p) => p.errors.length > 0);
@@ -626,6 +637,31 @@ function PreviewStep({
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {/* Historical opt-in */}
+          <label
+            htmlFor="include-historical"
+            className="mb-5 flex cursor-pointer items-start gap-3 rounded-md border border-border bg-muted/30 p-4 transition-colors hover:bg-muted/50"
+          >
+            <Checkbox
+              id="include-historical"
+              checked={includeHistorical}
+              onCheckedChange={(v) => onToggleHistorical(v === true)}
+              className="mt-0.5"
+            />
+            <div className="text-sm">
+              <div className="font-medium">
+                Also bring in prior-year deadlines as completed filings
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Keeps a historical audit trail — past due dates (e.g. 3/15 S-Corp
+                returns, 4/15 individuals) show as{" "}
+                <strong>completed</strong>, not overdue. Each is marked
+                &ldquo;Imported as historical — verify actual filing date&rdquo;
+                so you can correct if needed. Unchecked = forward-only view.
+              </p>
+            </div>
+          </label>
+
           {errored.length > 0 ? (
             <details className="mb-4">
               <summary className="cursor-pointer text-sm font-medium text-destructive">
