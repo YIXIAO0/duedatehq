@@ -189,6 +189,9 @@ export function DashboardClient({
   const [collapsed, setCollapsed] = useState<Set<string>>(
     new Set(["this-month", "later"]),
   );
+  const [collapsedClients, setCollapsedClients] = useState<Set<string>>(
+    new Set(),
+  );
   const [applying, startApplying] = useTransition();
 
   // When filter changes, refetch from server starting at offset 0.
@@ -278,6 +281,27 @@ export function DashboardClient({
       const next = new Set(prev);
       if (next.has(bucketId)) next.delete(bucketId);
       else next.add(bucketId);
+      return next;
+    });
+  }
+  function toggleClientCollapsed(clientId: string) {
+    setCollapsedClients((prev) => {
+      const next = new Set(prev);
+      if (next.has(clientId)) next.delete(clientId);
+      else next.add(clientId);
+      return next;
+    });
+  }
+  function toggleClientSelection(
+    clientDeadlines: DashboardDeadline[],
+    checked: boolean,
+  ) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const d of clientDeadlines) {
+        if (checked) next.add(d.id);
+        else next.delete(d.id);
+      }
       return next;
     });
   }
@@ -527,14 +551,80 @@ export function DashboardClient({
 
             {isOpen ? (
               <div className="divide-y divide-border border-t border-border">
-                {b.deadlines.map((d) => (
-                  <DeadlineRow
-                    key={d.id}
-                    d={d}
-                    selected={selected.has(d.id)}
-                    onToggle={() => toggleOne(d.id)}
-                  />
-                ))}
+                {groupByClient(b.deadlines).map((group) => {
+                  // Single-deadline client: flatten — shows as a normal row
+                  if (group.deadlines.length === 1) {
+                    const d = group.deadlines[0];
+                    return (
+                      <DeadlineRow
+                        key={d.id}
+                        d={d}
+                        selected={selected.has(d.id)}
+                        onToggle={() => toggleOne(d.id)}
+                        hideClientName={false}
+                      />
+                    );
+                  }
+                  // Multi-deadline client: collapsible group header
+                  const clientCollapsed = collapsedClients.has(group.clientId);
+                  const ids = group.deadlines.map((d) => d.id);
+                  const allSelected = ids.every((id) => selected.has(id));
+                  const someSelected = ids.some((id) => selected.has(id));
+                  return (
+                    <div key={group.clientId}>
+                      <div className="flex items-center gap-3 bg-muted/20 px-4 py-2">
+                        <Checkbox
+                          checked={
+                            allSelected
+                              ? true
+                              : someSelected
+                              ? "indeterminate"
+                              : false
+                          }
+                          onCheckedChange={(v) =>
+                            toggleClientSelection(group.deadlines, v === true)
+                          }
+                          aria-label={`Select all deadlines for ${group.clientName}`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => toggleClientCollapsed(group.clientId)}
+                          className="flex flex-1 cursor-pointer items-center gap-2 text-left"
+                          aria-expanded={!clientCollapsed}
+                        >
+                          {clientCollapsed ? (
+                            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                          ) : (
+                            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                          )}
+                          <span className="text-sm font-medium">
+                            {group.clientName}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {group.deadlines.length} deadlines
+                          </span>
+                          {group.deadlines.some((d) => d.irrevocable) ? (
+                            <Badge className="bg-[var(--color-priority-urgent-bg)] text-[var(--color-priority-urgent)] hover:bg-[var(--color-priority-urgent-bg)]">
+                              Irrevocable
+                            </Badge>
+                          ) : null}
+                        </button>
+                      </div>
+                      {!clientCollapsed
+                        ? group.deadlines.map((d) => (
+                            <div key={d.id} className="pl-7">
+                              <DeadlineRow
+                                d={d}
+                                selected={selected.has(d.id)}
+                                onToggle={() => toggleOne(d.id)}
+                                hideClientName={true}
+                              />
+                            </div>
+                          ))
+                        : null}
+                    </div>
+                  );
+                })}
               </div>
             ) : null}
           </div>
@@ -608,10 +698,13 @@ function DeadlineRow({
   d,
   selected,
   onToggle,
+  hideClientName = false,
 }: {
   d: DashboardDeadline;
   selected: boolean;
   onToggle: () => void;
+  /** Inside a client-group block, parent shows the client name once — don't repeat per row. */
+  hideClientName?: boolean;
 }) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -674,13 +767,24 @@ function DeadlineRow({
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium">{d.rule_title}</div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span className="truncate">{d.client_name}</span>
-            {d.entity_name && d.entity_name !== d.client_name ? (
+            {hideClientName ? (
+              // In grouped view, just show the entity (if meaningful)
+              <span className="truncate">
+                {d.entity_name && d.entity_name !== d.client_name
+                  ? d.entity_name
+                  : entityTypeLabel(d.entity_type)}
+              </span>
+            ) : (
               <>
-                <span>·</span>
-                <span className="truncate">{d.entity_name}</span>
+                <span className="truncate">{d.client_name}</span>
+                {d.entity_name && d.entity_name !== d.client_name ? (
+                  <>
+                    <span>·</span>
+                    <span className="truncate">{d.entity_name}</span>
+                  </>
+                ) : null}
               </>
-            ) : null}
+            )}
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -700,6 +804,40 @@ function DeadlineRow({
         </div>
       </Link>
     </div>
+  );
+}
+
+// Group deadlines by client for the "client-centric" view. Clients with
+// multiple deadlines in the same bucket get a shared header; single-deadline
+// clients are rendered flat (no extra nesting for no reason).
+function groupByClient(
+  deadlines: DashboardDeadline[],
+): Array<{
+  clientId: string;
+  clientName: string;
+  deadlines: DashboardDeadline[];
+}> {
+  const map = new Map<
+    string,
+    { clientId: string; clientName: string; deadlines: DashboardDeadline[] }
+  >();
+  for (const d of deadlines) {
+    const existing = map.get(d.client_id);
+    if (existing) {
+      existing.deadlines.push(d);
+    } else {
+      map.set(d.client_id, {
+        clientId: d.client_id,
+        clientName: d.client_name,
+        deadlines: [d],
+      });
+    }
+  }
+  // Sort groups by earliest due within group (preserves bucket's sort order)
+  return Array.from(map.values()).sort((a, b) =>
+    a.deadlines[0].effective_due_date.localeCompare(
+      b.deadlines[0].effective_due_date,
+    ),
   );
 }
 
