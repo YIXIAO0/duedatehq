@@ -78,7 +78,7 @@ export default function LandingPage() {
       {/* Footer */}
       <footer className="mt-auto border-t border-border">
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-6 text-sm text-muted-foreground">
-          <span>© {new Date().getFullYear()} DueDateHQ</span>
+          <span>© 2026 DueDateHQ</span>
           <span>v0.1.0 · beta</span>
         </div>
       </footer>
