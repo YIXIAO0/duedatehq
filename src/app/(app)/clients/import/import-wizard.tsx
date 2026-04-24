@@ -469,8 +469,6 @@ function MappingStep({
   aiSource: "ai" | "heuristic" | "preset" | null;
   aiPending: boolean;
 }) {
-  const totalErrors = previews.filter((p) => p.errors.length > 0).length;
-  const totalWarnings = previews.filter((p) => p.warnings.length > 0).length;
   const previewRows = previews.slice(0, 5);
 
   return (
@@ -571,27 +569,11 @@ function MappingStep({
         </CardContent>
       </Card>
 
-      <div className="flex items-center justify-between gap-4">
-        <div className="text-sm text-muted-foreground">
-          {totalErrors > 0 ? (
-            <span className="text-destructive">
-              {totalErrors} row{totalErrors === 1 ? "" : "s"} will be skipped
-              (missing name)
-            </span>
-          ) : null}
-          {totalErrors > 0 && totalWarnings > 0 ? <span> · </span> : null}
-          {totalWarnings > 0 ? (
-            <span>
-              {totalWarnings} warning{totalWarnings === 1 ? "" : "s"}
-            </span>
-          ) : null}
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={onBack}>
-            Back
-          </Button>
-          <Button onClick={onNext}>Continue to preview</Button>
-        </div>
+      <div className="flex items-center justify-end gap-2">
+        <Button variant="outline" onClick={onBack}>
+          Back
+        </Button>
+        <Button onClick={onNext}>Continue to preview</Button>
       </div>
     </div>
   );
