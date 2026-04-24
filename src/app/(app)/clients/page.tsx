@@ -8,7 +8,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Plus, Users, FileSpreadsheet } from "lucide-react";
+import { Plus, Users, FileSpreadsheet, Download } from "lucide-react";
 import { getCurrentContext } from "@/lib/auth/current-org";
 import { listClients } from "@/lib/services/clients";
 
@@ -24,6 +24,11 @@ export default function ClientsPage() {
           </p>
         </div>
         <div className="flex gap-2">
+          <Button asChild variant="outline">
+            <a href="/api/export/deadlines.csv" download>
+              <Download className="mr-2 h-4 w-4" /> Export CSV
+            </a>
+          </Button>
           <Button asChild variant="outline">
             <Link href="/clients/import">
               <FileSpreadsheet className="mr-2 h-4 w-4" /> Import
