@@ -5,6 +5,7 @@
  */
 
 import "server-only";
+import { cache } from "react";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { ensureUserAndOrg } from "@/lib/services/organizations";
@@ -17,28 +18,42 @@ export interface CurrentContext {
   email: string;
 }
 
-export async function getCurrentContext(): Promise<CurrentContext> {
-  const { userId: clerkUserId } = await auth();
-  if (!clerkUserId) redirect("/sign-in");
+/**
+ * getCurrentContext is wrapped in React `cache()` so that parallel Server
+ * Components in the same request (header + stats + upcoming list each
+ * under its own <Suspense>) share a single DB round-trip and — critically —
+ * a single `ensureUserAndOrg` invocation.
+ *
+ * Without this, first-sign-in requests trigger a race where multiple
+ * parallel components each try to INSERT the same user row and hit the
+ * clerk_user_id UNIQUE constraint.
+ */
+export const getCurrentContext = cache(
+  async (): Promise<CurrentContext> => {
+    const { userId: clerkUserId } = await auth();
+    if (!clerkUserId) redirect("/sign-in");
 
-  const clerkUser = await currentUser();
-  if (!clerkUser) redirect("/sign-in");
+    const clerkUser = await currentUser();
+    if (!clerkUser) redirect("/sign-in");
 
-  const email = clerkUser.emailAddresses[0]?.emailAddress;
-  if (!email) {
-    throw new Error("Clerk user has no email address — cannot bootstrap org");
-  }
+    const email = clerkUser.emailAddresses[0]?.emailAddress;
+    if (!email) {
+      throw new Error(
+        "Clerk user has no email address — cannot bootstrap org",
+      );
+    }
 
-  const fullName =
-    clerkUser.fullName ||
-    [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(" ") ||
-    null;
+    const fullName =
+      clerkUser.fullName ||
+      [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(" ") ||
+      null;
 
-  const { user, organization } = await ensureUserAndOrg({
-    clerkUserId,
-    email,
-    fullName,
-  });
+    const { user, organization } = await ensureUserAndOrg({
+      clerkUserId,
+      email,
+      fullName,
+    });
 
-  return { user, organization, clerkUserId, email };
-}
+    return { user, organization, clerkUserId, email };
+  },
+);

@@ -72,6 +72,9 @@ export async function ensureUserAndOrg(params: {
   }
 
   // 2) Create user (if new) → org → membership
+  // Use onConflictDoUpdate as belt-and-suspenders — guards against any
+  // remaining race condition across requests (e.g. two browser tabs
+  // opened simultaneously before the first-login bootstrap completes).
   let user: User;
   if (existingUsers.length > 0) {
     user = existingUsers[0];
@@ -82,6 +85,14 @@ export async function ensureUserAndOrg(params: {
         clerkUserId: params.clerkUserId,
         email: params.email,
         fullName: params.fullName ?? null,
+      })
+      .onConflictDoUpdate({
+        target: users.clerkUserId,
+        set: {
+          email: params.email,
+          fullName: params.fullName ?? null,
+          updatedAt: new Date(),
+        },
       })
       .returning();
     user = inserted;
@@ -102,6 +113,9 @@ export async function ensureUserAndOrg(params: {
       userId: user.id,
       orgId: organization.id,
       role: "owner",
+    })
+    .onConflictDoNothing({
+      target: [memberships.userId, memberships.orgId],
     })
     .returning();
 
