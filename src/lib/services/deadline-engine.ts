@@ -112,17 +112,25 @@ export async function generateDeadlinesForEntity(
     return { created: 0, skipped: 0 };
   }
 
-  const values = rules.map((rule) => {
-    const payload = rule.rulePayload as unknown as RulePayload;
-    return {
-      orgId: parsed.orgId,
-      entityId: parsed.entityId,
-      ruleId: rule.id,
-      taxYear: parsed.taxYear,
-      dueDate: computeDueDate(payload, parsed.taxYear),
-      status: "pending" as const,
-    };
-  });
+  // Skip deadlines whose computed due_date is already in the past.
+  // Rationale: on a fresh import, surfacing TY-prior deadlines as "overdue"
+  // creates false panic — the user hasn't committed to managing those, and
+  // there's no bulk "mark completed" yet. V2: offer "also import historical
+  // completed filings" as an explicit opt-in during the import flow.
+  const today = new Date().toISOString().slice(0, 10);
+  const values = rules
+    .map((rule) => {
+      const payload = rule.rulePayload as unknown as RulePayload;
+      return {
+        orgId: parsed.orgId,
+        entityId: parsed.entityId,
+        ruleId: rule.id,
+        taxYear: parsed.taxYear,
+        dueDate: computeDueDate(payload, parsed.taxYear),
+        status: "pending" as const,
+      };
+    })
+    .filter((row) => row.dueDate >= today);
 
   const result = await db
     .insert(deadlineInstances)
