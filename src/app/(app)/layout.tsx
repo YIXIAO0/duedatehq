@@ -17,7 +17,8 @@ export default function AppLayout({
 }) {
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="border-b border-border bg-background">
+      {/* Sticky, solid — nav must stay legible over long deadline tables */}
+      <header className="sticky top-0 z-40 border-b border-border bg-background">
         <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-6 py-3">
           <div className="flex items-center gap-8">
             <Link

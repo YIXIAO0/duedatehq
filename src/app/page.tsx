@@ -5,8 +5,8 @@ import { ArrowRight, Calendar, Shield, Zap } from "lucide-react";
 export default function LandingPage() {
   return (
     <main className="flex flex-col flex-1">
-      {/* Header */}
-      <header className="border-b border-border">
+      {/* Header — sticky, solid background (legibility > trendiness for a pro tool) */}
+      <header className="sticky top-0 z-40 border-b border-border bg-background">
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-4">
           <Link href="/" className="text-lg font-semibold tracking-tight">
             DueDateHQ
