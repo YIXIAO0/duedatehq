@@ -159,8 +159,14 @@ const styles = StyleSheet.create({
   },
 
   // Cover
+  // Explicit line-heights everywhere we have a custom font size: react-pdf
+  // does NOT reliably inherit page-level lineHeight onto Text nodes when
+  // fontSize differs significantly from the page default. Without these,
+  // big headings render with a box smaller than their actual glyphs and
+  // the next sibling text climbs up underneath them.
   brandLine: {
     fontSize: 9,
+    lineHeight: 1.3,
     color: COLOR.muted,
     textTransform: "uppercase",
     letterSpacing: 1.5,
@@ -168,6 +174,7 @@ const styles = StyleSheet.create({
   },
   orgName: {
     fontSize: 14,
+    lineHeight: 1.3,
     fontFamily: "Helvetica-Bold",
     color: COLOR.brand,
     marginTop: 4,
@@ -179,19 +186,21 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   title: {
-    fontSize: 28,
+    fontSize: 24, // was 28 — overflowed wide names on LETTER width
+    lineHeight: 1.25,
     fontFamily: "Helvetica-Bold",
-    marginBottom: 4,
+    marginBottom: 10,
   },
   subtitle: {
     fontSize: 11,
+    lineHeight: 1.4,
     color: COLOR.muted,
-    marginBottom: 22,
+    marginBottom: 26,
   },
   intro: {
     fontSize: 10.5,
     lineHeight: 1.5,
-    marginBottom: 22,
+    marginBottom: 24,
     color: COLOR.text,
   },
 
@@ -208,10 +217,12 @@ const styles = StyleSheet.create({
   },
   entityName: {
     fontSize: 13,
+    lineHeight: 1.3,
     fontFamily: "Helvetica-Bold",
   },
   entityKind: {
     fontSize: 9,
+    lineHeight: 1.3,
     color: COLOR.muted,
     textTransform: "uppercase",
     letterSpacing: 1,
@@ -222,6 +233,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
     marginBottom: 4,
     fontSize: 10,
+    lineHeight: 1.3,
     fontFamily: "Helvetica-Bold",
     color: COLOR.brand,
     letterSpacing: 1.2,
@@ -256,11 +268,13 @@ const styles = StyleSheet.create({
   },
   taskTitle: {
     fontSize: 11,
+    lineHeight: 1.35,
     fontFamily: "Helvetica-Bold",
     marginBottom: 1,
   },
   taskMeta: {
     fontSize: 9,
+    lineHeight: 1.4,
     color: COLOR.muted,
   },
   irrevTag: {
