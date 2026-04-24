@@ -892,18 +892,54 @@ function ResultStep({
             </dl>
 
             {result.errors.length > 0 ? (
-              <details className="mt-5">
-                <summary className="cursor-pointer text-sm font-medium">
-                  Errors ({result.errors.length})
-                </summary>
-                <ul className="mt-2 space-y-1 pl-4 text-xs text-muted-foreground">
-                  {result.errors.slice(0, 20).map((e, i) => (
-                    <li key={i}>
-                      Row {e.rowIndex + 1}: {e.message}
-                    </li>
-                  ))}
-                </ul>
-              </details>
+              <div className="mt-6 rounded-md border border-[var(--color-priority-medium)]/30 bg-[var(--color-priority-medium-bg)] p-4">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-priority-medium)]" />
+                  <div className="flex-1">
+                    <h3 className="text-sm font-semibold text-[var(--color-priority-medium)]">
+                      {result.errors.length}{" "}
+                      {result.errors.length === 1 ? "row" : "rows"} need your
+                      attention
+                    </h3>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      These rows had issues during import. Review below and fix
+                      from the clients page.
+                    </p>
+                    <ul className="mt-3 space-y-3">
+                      {result.errors.slice(0, 20).map((e, i) => (
+                        <li
+                          key={i}
+                          className="border-l-2 border-[var(--color-priority-medium)]/40 pl-3 text-xs"
+                        >
+                          <div className="font-medium text-foreground">
+                            Row {e.rowIndex + 1}
+                            {e.clientName ? (
+                              <span className="text-muted-foreground">
+                                {" · "}
+                                {e.clientName}
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="mt-0.5 text-muted-foreground">
+                            {e.message}
+                          </div>
+                          {e.suggestion ? (
+                            <div className="mt-1 text-foreground/80">
+                              <span className="font-medium">Next step:</span>{" "}
+                              {e.suggestion}
+                            </div>
+                          ) : null}
+                        </li>
+                      ))}
+                      {result.errors.length > 20 ? (
+                        <li className="pl-3 text-xs text-muted-foreground">
+                          … and {result.errors.length - 20} more
+                        </li>
+                      ) : null}
+                    </ul>
+                  </div>
+                </div>
+              </div>
             ) : null}
 
             <div className="mt-6 flex gap-2">

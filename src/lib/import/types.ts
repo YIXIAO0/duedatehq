@@ -146,5 +146,10 @@ export interface ApplyImportResult {
   entitiesCreated: number;
   deadlinesGenerated: number;
   rowsSkipped: number;
-  errors: Array<{ rowIndex: number; message: string }>;
+  errors: Array<{
+    rowIndex: number;
+    clientName: string | null;
+    message: string;
+    suggestion: string | null;
+  }>;
 }

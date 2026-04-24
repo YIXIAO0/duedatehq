@@ -153,6 +153,15 @@ export async function generateDeadlinesForEntity(
       (row): row is NonNullable<typeof row> => row !== null,
     );
 
+  // Guard: if all rules filter out (e.g. single-rule entity type like
+  // trust, where only federal 1041 applies and its due date is past
+  // without `includeHistoricalAsCompleted`), Drizzle's .values([]) throws.
+  // Silently succeed with 0 created — the entity still exists and will
+  // pick up deadlines in future tax years via a later generation run.
+  if (values.length === 0) {
+    return { created: 0, skipped: 0 };
+  }
+
   const result = await db
     .insert(deadlineInstances)
     .values(values)

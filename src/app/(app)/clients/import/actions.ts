@@ -12,6 +12,46 @@ import {
 import { recordAudit } from "@/lib/services/audit";
 
 /**
+ * Translate raw database / validation errors into CPA-friendly language
+ * with an actionable next step.
+ */
+function translateImportError(raw: string): {
+  message: string;
+  suggestion: string | null;
+} {
+  // Drizzle: empty insert
+  if (/values\(\) must be called with at least one value/i.test(raw)) {
+    return {
+      message:
+        "No deadlines applied — this entity type may not have any rules covering its states yet.",
+      suggestion:
+        "The client was created, but you may want to open it and adjust the entity type or home state.",
+    };
+  }
+  // Postgres: unique constraint
+  if (/duplicate key.*unique constraint/i.test(raw)) {
+    return {
+      message: "A client with these details already exists.",
+      suggestion: "Check your clients list — this one may be a duplicate.",
+    };
+  }
+  // Zod: validation errors are usually self-explanatory, just clean up
+  if (/^(invalid|expected|required)/i.test(raw)) {
+    return {
+      message: raw,
+      suggestion:
+        "Go back and adjust the column mapping or the source data for this row.",
+    };
+  }
+  // Fallback
+  return {
+    message: raw,
+    suggestion:
+      "Try re-importing this row individually, or add it manually from the Clients page.",
+  };
+}
+
+/**
  * Apply a batch of imported rows. Each row becomes 1 client + 1 entity.
  * Deadline generation is triggered automatically by createEntity().
  *
@@ -64,9 +104,15 @@ export async function applyImportAction(
       result.entitiesCreated += 1;
       result.deadlinesGenerated += entityResult.deadlinesCreated;
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const rawMessage = err instanceof Error ? err.message : String(err);
+      const { message, suggestion } = translateImportError(rawMessage);
       result.rowsSkipped += 1;
-      result.errors.push({ rowIndex: i, message });
+      result.errors.push({
+        rowIndex: i,
+        clientName: row.clientName ?? null,
+        message,
+        suggestion,
+      });
     }
   }
 
