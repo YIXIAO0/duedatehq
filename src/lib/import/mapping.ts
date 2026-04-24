@@ -87,56 +87,112 @@ const FIELD_ALIASES: Record<DueDateField, string[]> = {
 };
 
 // ---------------------------------------------------------------------------
-// Entity-type normalization — map messy source values to our enum
+// Entity-type normalization — map messy source values to our enum.
+//
+// Keys here are ALREADY normalized form: lowercased, punctuation stripped,
+// whitespace collapsed. Raw input like "501(c)(3)" → "501 c 3" → matches.
+// Raw like "S-Corp." → "s corp" → matches. See normalizeEntityType below.
 // ---------------------------------------------------------------------------
 
 const ENTITY_TYPE_MAP: Record<string, EntityType> = {
-  // Individual
+  // --- Individual ---
   individual: "individual",
   indiv: "individual",
   "1040": "individual",
   person: "individual",
+  personal: "individual",
   "sole proprietor": "individual",
   "sole prop": "individual",
-  schedule_c: "individual",
-  // C-Corp
-  "c-corp": "c_corp",
+  "sole proprietorship": "individual",
+  "schedule c": "individual",
+  "self employed": "individual",
+  contractor: "individual",
+  freelancer: "individual",
+  freelance: "individual",
+
+  // --- C-Corporation ---
   "c corp": "c_corp",
   "c corporation": "c_corp",
   "1120": "c_corp",
+  c: "c_corp",
   ccorp: "c_corp",
   corporation: "c_corp",
   corp: "c_corp",
-  // S-Corp
-  "s-corp": "s_corp",
+  inc: "c_corp",
+  incorporated: "c_corp",
+  // Professional entities — usually C-corp (federal default)
+  pc: "c_corp",
+  "p c": "c_corp",
+  "professional corporation": "c_corp",
+  pa: "c_corp",
+  "p a": "c_corp",
+  "professional association": "c_corp",
+
+  // --- S-Corporation ---
   "s corp": "s_corp",
   "s corporation": "s_corp",
   "1120s": "s_corp",
-  "1120-s": "s_corp",
+  "1120 s": "s_corp",
   scorp: "s_corp",
-  "s": "s_corp",
-  // Partnership
+  s: "s_corp",
+
+  // --- Partnership ---
   partnership: "partnership",
   "1065": "partnership",
   lp: "partnership",
   llp: "partnership",
-  // LLC
+  "general partnership": "partnership",
+  gp: "partnership",
+  "limited partnership": "partnership",
+  "limited liability partnership": "partnership",
+
+  // --- LLC ---
   llc: "llc",
+  "l l c": "llc",
   "limited liability": "llc",
   "limited liability company": "llc",
-  "smllc": "llc",
-  "llc partnership": "llc",
-  // Trust
+  smllc: "llc",
+  mmllc: "llc",
+  "single member llc": "llc",
+  "multi member llc": "llc",
+  disregarded: "llc",
+  "disregarded entity": "llc",
+  // Professional LLC
+  pllc: "llc",
+  "p l l c": "llc",
+  "professional llc": "llc",
+
+  // --- Trust ---
   trust: "trust",
   "1041": "trust",
-  // Estate
+  "revocable trust": "trust",
+  "irrevocable trust": "trust",
+  "grantor trust": "trust",
+  "living trust": "trust",
+  "testamentary trust": "trust",
+  "family trust": "trust",
+
+  // --- Estate ---
   estate: "estate",
-  // Nonprofit
+  "decedents estate": "estate",
+  "decedent estate": "estate",
+  deceased: "estate",
+  probate: "estate",
+
+  // --- Nonprofit / Tax-exempt ---
   nonprofit: "nonprofit",
-  "non-profit": "nonprofit",
+  "non profit": "nonprofit",
   "501c3": "nonprofit",
+  "501 c 3": "nonprofit",
+  "501 c3": "nonprofit",
+  "501c": "nonprofit",
+  "501c4": "nonprofit",
+  "501 c 4": "nonprofit",
   "990": "nonprofit",
   exempt: "nonprofit",
+  "tax exempt": "nonprofit",
+  charity: "nonprofit",
+  foundation: "nonprofit",
 };
 
 // ---------------------------------------------------------------------------
@@ -181,7 +237,16 @@ export function suggestMappingHeuristic(
 
 export function normalizeEntityType(raw: unknown): EntityType | null {
   if (raw == null) return null;
-  const key = String(raw).toLowerCase().trim().replace(/[.,]/g, "");
+  const key = String(raw)
+    .toLowerCase()
+    .trim()
+    // Replace common separators and punctuation with a single space so
+    // "501(c)(3)", "S-Corp.", "L.L.C.", "P.C." all collapse to our keys
+    .replace(/[-_/\\.,()]+/g, " ")
+    // Collapse any run of whitespace to one space
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!key) return null;
   return ENTITY_TYPE_MAP[key] ?? null;
 }
 
