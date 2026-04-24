@@ -428,53 +428,55 @@ export function DashboardClient({
                 : "border-border"
             } overflow-hidden bg-background`}
           >
-            <button
-              type="button"
-              onClick={() => toggleCollapsed(b.id)}
-              className="flex w-full cursor-pointer items-center gap-3 px-4 py-3 hover:bg-muted/30"
-            >
-              {isOpen ? (
-                <ChevronDown className="h-4 w-4 text-muted-foreground" />
-              ) : (
-                <ChevronRight className="h-4 w-4 text-muted-foreground" />
-              )}
-              <div
-                className="h-4 w-4"
-                onClick={(e) => {
-                  e.stopPropagation();
-                }}
+            {/* Bucket header: div container (NOT button — checkbox is a
+                button inside, nesting them is invalid HTML + hydration
+                error). Checkbox + chevron toggle are two separate
+                clickable zones. */}
+            <div className="flex items-center gap-3 px-4 py-3 hover:bg-muted/30">
+              <Checkbox
+                checked={
+                  allInBucketSelected
+                    ? true
+                    : someInBucketSelected
+                    ? "indeterminate"
+                    : false
+                }
+                onCheckedChange={(v) => toggleBucket(b, v === true)}
+                aria-label={`Select all in ${b.label}`}
+              />
+              <button
+                type="button"
+                onClick={() => toggleCollapsed(b.id)}
+                className="flex flex-1 cursor-pointer items-center gap-3 text-left"
+                aria-expanded={isOpen}
               >
-                <Checkbox
-                  checked={
-                    allInBucketSelected
-                      ? true
-                      : someInBucketSelected
-                      ? "indeterminate"
-                      : false
-                  }
-                  onCheckedChange={(v) => toggleBucket(b, v === true)}
-                  aria-label={`Select all in ${b.label}`}
-                />
-              </div>
-              <div className="flex-1 text-left">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold">{b.label}</span>
-                  <span
-                    className={`text-xs ${
-                      b.urgency === "urgent"
-                        ? "text-[var(--color-priority-urgent)]"
-                        : b.urgency === "high"
-                        ? "text-[var(--color-priority-high)]"
-                        : "text-muted-foreground"
-                    }`}
-                  >
-                    {b.deadlines.length}{" "}
-                    {b.deadlines.length === 1 ? "deadline" : "deadlines"}
-                  </span>
+                {isOpen ? (
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                )}
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold">{b.label}</span>
+                    <span
+                      className={`text-xs ${
+                        b.urgency === "urgent"
+                          ? "text-[var(--color-priority-urgent)]"
+                          : b.urgency === "high"
+                          ? "text-[var(--color-priority-high)]"
+                          : "text-muted-foreground"
+                      }`}
+                    >
+                      {b.deadlines.length}{" "}
+                      {b.deadlines.length === 1 ? "deadline" : "deadlines"}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {b.description}
+                  </p>
                 </div>
-                <p className="text-xs text-muted-foreground">{b.description}</p>
-              </div>
-            </button>
+              </button>
+            </div>
 
             {isOpen ? (
               <div className="divide-y divide-border border-t border-border">
