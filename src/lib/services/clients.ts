@@ -67,6 +67,85 @@ export async function createClient(input: CreateClientInput) {
   return row;
 }
 
+// ---------------------------------------------------------------------------
+// Update / Archive
+// ---------------------------------------------------------------------------
+
+export const UpdateClientInputSchema = z.object({
+  id: z.string().min(1),
+  orgId: z.string(),
+  name: z.string().min(1).max(200),
+  primaryContactEmail: z.string().email().optional().or(z.literal("")),
+  primaryContactPhone: z.string().max(50).optional(),
+  notes: z.string().max(2000).optional(),
+  actorType: z.enum(["user", "agent", "cron", "system"]).default("user"),
+  actorId: z.string().nullable().default(null),
+});
+export type UpdateClientInput = z.input<typeof UpdateClientInputSchema>;
+
+export async function updateClient(input: UpdateClientInput) {
+  const parsed = UpdateClientInputSchema.parse(input);
+  const db = getDb();
+
+  const [row] = await db
+    .update(clients)
+    .set({
+      name: parsed.name,
+      primaryContactEmail: parsed.primaryContactEmail || null,
+      primaryContactPhone: parsed.primaryContactPhone || null,
+      notes: parsed.notes || null,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(clients.id, parsed.id), eq(clients.orgId, parsed.orgId)))
+    .returning();
+
+  if (!row) throw new Error(`Client ${parsed.id} not found`);
+
+  await recordAudit({
+    orgId: parsed.orgId,
+    actorType: parsed.actorType,
+    actorId: parsed.actorId,
+    action: "client.updated",
+    targetType: "client",
+    targetId: row.id,
+    payload: { name: parsed.name },
+  });
+
+  return row;
+}
+
+export const ArchiveClientInputSchema = z.object({
+  id: z.string().min(1),
+  orgId: z.string(),
+  actorType: z.enum(["user", "agent", "cron", "system"]).default("user"),
+  actorId: z.string().nullable().default(null),
+});
+export type ArchiveClientInput = z.input<typeof ArchiveClientInputSchema>;
+
+export async function archiveClient(input: ArchiveClientInput) {
+  const parsed = ArchiveClientInputSchema.parse(input);
+  const db = getDb();
+
+  const [row] = await db
+    .update(clients)
+    .set({ archivedAt: new Date(), updatedAt: new Date() })
+    .where(and(eq(clients.id, parsed.id), eq(clients.orgId, parsed.orgId)))
+    .returning();
+
+  if (!row) throw new Error(`Client ${parsed.id} not found`);
+
+  await recordAudit({
+    orgId: parsed.orgId,
+    actorType: parsed.actorType,
+    actorId: parsed.actorId,
+    action: "client.archived",
+    targetType: "client",
+    targetId: row.id,
+  });
+
+  return row;
+}
+
 export async function listClients(input: ListClientsInput) {
   const parsed = ListClientsInputSchema.parse(input);
   const db = getDb();

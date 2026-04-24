@@ -126,6 +126,95 @@ export async function createEntity(input: CreateEntityInput) {
   return { entity: row, deadlinesCreated: created };
 }
 
+// ---------------------------------------------------------------------------
+// Update / Archive
+// ---------------------------------------------------------------------------
+
+export const UpdateEntityInputSchema = z.object({
+  id: z.string().min(1),
+  orgId: z.string(),
+  name: z.string().min(1).max(200),
+  entityType: z.enum(ENTITY_TYPES),
+  homeState: US_STATE.optional().or(z.literal("")),
+  operatingStates: z.array(US_STATE).default([]),
+  ein: z.string().max(20).optional(),
+  actorType: z.enum(["user", "agent", "cron", "system"]).default("user"),
+  actorId: z.string().nullable().default(null),
+});
+export type UpdateEntityInput = z.input<typeof UpdateEntityInputSchema>;
+
+export async function updateEntity(input: UpdateEntityInput) {
+  const parsed = UpdateEntityInputSchema.parse(input);
+  const db = getDb();
+
+  const operatingStates = Array.from(
+    new Set(
+      [parsed.homeState, ...parsed.operatingStates].filter(
+        (s): s is string => Boolean(s),
+      ),
+    ),
+  );
+
+  const [row] = await db
+    .update(entities)
+    .set({
+      name: parsed.name,
+      entityType: parsed.entityType,
+      homeState: parsed.homeState || null,
+      operatingStates,
+      ein: parsed.ein || null,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(entities.id, parsed.id), eq(entities.orgId, parsed.orgId)))
+    .returning();
+
+  if (!row) throw new Error(`Entity ${parsed.id} not found`);
+
+  await recordAudit({
+    orgId: parsed.orgId,
+    actorType: parsed.actorType,
+    actorId: parsed.actorId,
+    action: "entity.updated",
+    targetType: "entity",
+    targetId: row.id,
+    payload: { name: parsed.name, entityType: parsed.entityType },
+  });
+
+  return row;
+}
+
+export const ArchiveEntityInputSchema = z.object({
+  id: z.string().min(1),
+  orgId: z.string(),
+  actorType: z.enum(["user", "agent", "cron", "system"]).default("user"),
+  actorId: z.string().nullable().default(null),
+});
+export type ArchiveEntityInput = z.input<typeof ArchiveEntityInputSchema>;
+
+export async function archiveEntity(input: ArchiveEntityInput) {
+  const parsed = ArchiveEntityInputSchema.parse(input);
+  const db = getDb();
+
+  const [row] = await db
+    .update(entities)
+    .set({ archivedAt: new Date(), updatedAt: new Date() })
+    .where(and(eq(entities.id, parsed.id), eq(entities.orgId, parsed.orgId)))
+    .returning();
+
+  if (!row) throw new Error(`Entity ${parsed.id} not found`);
+
+  await recordAudit({
+    orgId: parsed.orgId,
+    actorType: parsed.actorType,
+    actorId: parsed.actorId,
+    action: "entity.archived",
+    targetType: "entity",
+    targetId: row.id,
+  });
+
+  return row;
+}
+
 export async function listEntitiesForClient(input: ListEntitiesInput): Promise<Entity[]> {
   const parsed = ListEntitiesInputSchema.parse(input);
   const db = getDb();

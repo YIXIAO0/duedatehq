@@ -15,7 +15,10 @@ import { ArrowLeft, Plus, Building2, User as UserIcon } from "lucide-react";
 import { getCurrentContext } from "@/lib/auth/current-org";
 import { getDb } from "@/lib/db";
 import { clients, entities, deadlineInstances, deadlineRules } from "@/lib/db/schema";
+import { isNull } from "drizzle-orm";
 import { AddEntityForm } from "./add-entity-form";
+import { ClientActions } from "./client-actions";
+import { EntityActions } from "./entity-actions";
 
 type Params = Promise<{ id: string }>;
 
@@ -54,28 +57,35 @@ async function ClientDetail({ params }: { params: Params }) {
     .select()
     .from(entities)
     .where(
-      and(eq(entities.clientId, id), eq(entities.orgId, ctx.organization.id)),
+      and(
+        eq(entities.clientId, id),
+        eq(entities.orgId, ctx.organization.id),
+        isNull(entities.archivedAt),
+      ),
     );
 
   return (
     <div className="space-y-8">
       {/* Client header */}
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">{client.name}</h1>
-        <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
-          {client.primaryContactEmail ? (
-            <span>{client.primaryContactEmail}</span>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">{client.name}</h1>
+          <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+            {client.primaryContactEmail ? (
+              <span>{client.primaryContactEmail}</span>
+            ) : null}
+            {client.primaryContactPhone ? (
+              <span>{client.primaryContactPhone}</span>
+            ) : null}
+            <span>Added {new Date(client.createdAt).toLocaleDateString()}</span>
+          </div>
+          {client.notes ? (
+            <p className="mt-3 max-w-2xl rounded border border-border bg-muted/30 p-3 text-sm">
+              {client.notes}
+            </p>
           ) : null}
-          {client.primaryContactPhone ? (
-            <span>{client.primaryContactPhone}</span>
-          ) : null}
-          <span>Added {new Date(client.createdAt).toLocaleDateString()}</span>
         </div>
-        {client.notes ? (
-          <p className="mt-3 max-w-2xl rounded border border-border bg-muted/30 p-3 text-sm">
-            {client.notes}
-          </p>
-        ) : null}
+        <ClientActions client={client} />
       </div>
 
       {/* Entities */}
@@ -143,8 +153,8 @@ async function EntityCard({
   return (
     <Card>
       <CardHeader className="pb-3">
-        <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10 text-primary">
+        <div className="flex items-start gap-3">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
             {icon}
           </div>
           <div className="min-w-0 flex-1">
@@ -165,6 +175,16 @@ async function EntityCard({
               ) : null}
             </div>
           </div>
+          <EntityActions
+            entity={{
+              id: entity.id,
+              name: entity.name,
+              entityType: entity.entityType,
+              homeState: entity.homeState,
+              operatingStates: entity.operatingStates ?? [],
+              ein: entity.ein,
+            }}
+          />
         </div>
       </CardHeader>
       <CardContent>
