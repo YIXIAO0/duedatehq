@@ -20,7 +20,6 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Tooltip,
   TooltipContent,
@@ -37,6 +36,10 @@ import {
   AlertTriangle,
   XCircle,
   Loader2,
+  Check,
+  History,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { parseFile, parsePasteText, extractSampleForSuggestion } from "@/lib/import/parse";
 import { buildRowPreviews, suggestMappingHeuristic } from "@/lib/import/mapping";
@@ -603,16 +606,25 @@ function PreviewStep({
 }) {
   const valid = previews.filter((p) => p.errors.length === 0);
   const errored = previews.filter((p) => p.errors.length > 0);
-  const warned = previews.filter((p) => p.warnings.length > 0 && p.errors.length === 0);
+  const warned = previews.filter(
+    (p) => p.warnings.length > 0 && p.errors.length === 0,
+  );
+  const [choiceMade, setChoiceMade] = useState(false);
+  const [showList, setShowList] = useState(false);
+
+  const pickSkip = () => {
+    onToggleHistorical(false);
+    setChoiceMade(true);
+  };
+  const pickKeep = () => {
+    onToggleHistorical(true);
+    setChoiceMade(true);
+  };
 
   return (
     <div className="space-y-5">
       <div className="grid gap-3 md:grid-cols-3">
-        <StatCard
-          label="Ready to import"
-          value={valid.length}
-          color="done"
-        />
+        <StatCard label="Ready to import" value={valid.length} color="done" />
         <StatCard
           label="With warnings"
           value={warned.length}
@@ -627,82 +639,54 @@ function PreviewStep({
         />
       </div>
 
-      {/* Historical records — dedicated decision card */}
-      <Card className="border-primary/30">
+      {/* Historical decision — gates the rest of the step */}
+      <Card>
         <CardHeader>
           <CardTitle className="text-base">
-            What about last year&apos;s deadlines?
+            Do you want last year&apos;s filings in here too?
           </CardTitle>
           <CardDescription>
-            Some of your clients had deadlines earlier this year (e.g. 3/15 S-Corp
-            returns, 4/15 individuals). Choose how DueDateHQ should handle them:
+            Some of your clients had deadlines earlier this year (3/15 S-Corps,
+            4/15 individuals, etc.). Pick one:
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <RadioGroup
-            value={includeHistorical ? "include" : "skip"}
-            onValueChange={(v) => onToggleHistorical(v === "include")}
-            className="grid gap-3 md:grid-cols-2"
-          >
-            <label
-              htmlFor="skip-option"
-              className={`flex cursor-pointer flex-col gap-2 rounded-md border-2 p-4 transition-colors ${
-                !includeHistorical
-                  ? "border-primary bg-primary/5"
-                  : "border-border hover:bg-muted/30"
-              }`}
-            >
-              <div className="flex items-start gap-3">
-                <RadioGroupItem value="skip" id="skip-option" className="mt-0.5" />
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">Skip past deadlines</span>
-                    <span className="rounded bg-[var(--color-priority-done-bg)] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-[var(--color-priority-done)]">
-                      Recommended
-                    </span>
-                  </div>
-                  <p className="mt-1.5 text-sm text-muted-foreground">
-                    Clean start. Your dashboard shows only upcoming work —
-                    nothing marked overdue.
-                  </p>
-                </div>
-              </div>
-            </label>
-
-            <label
-              htmlFor="include-option"
-              className={`flex cursor-pointer flex-col gap-2 rounded-md border-2 p-4 transition-colors ${
-                includeHistorical
-                  ? "border-primary bg-primary/5"
-                  : "border-border hover:bg-muted/30"
-              }`}
-            >
-              <div className="flex items-start gap-3">
-                <RadioGroupItem
-                  value="include"
-                  id="include-option"
-                  className="mt-0.5"
-                />
-                <div className="flex-1">
-                  <span className="font-medium">Keep history as completed</span>
-                  <p className="mt-1.5 text-sm text-muted-foreground">
-                    Past deadlines are added as &ldquo;filed on time&rdquo; so
-                    you have a full record of last year&apos;s work.
-                  </p>
-                </div>
-              </div>
-            </label>
-          </RadioGroup>
+          <div className="grid gap-3 md:grid-cols-2">
+            <ChoiceCard
+              icon={<Sparkles className="h-5 w-5" />}
+              title="Start fresh"
+              subtitle="Recommended"
+              body="Only track upcoming work. Last year's filings aren't brought in."
+              selected={choiceMade && !includeHistorical}
+              onClick={pickSkip}
+            />
+            <ChoiceCard
+              icon={<History className="h-5 w-5" />}
+              title="Include history"
+              body="Past deadlines are added as already-filed. Useful for keeping a record of last year's work."
+              selected={choiceMade && includeHistorical}
+              onClick={pickKeep}
+            />
+          </div>
+          {!choiceMade ? (
+            <p className="mt-4 text-center text-xs text-muted-foreground">
+              Pick one above to continue.
+            </p>
+          ) : null}
         </CardContent>
       </Card>
 
+      {choiceMade ? (
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Final review</CardTitle>
+          <CardTitle className="text-base">Ready to import</CardTitle>
           <CardDescription>
             This creates <strong>{valid.length} clients</strong> +{" "}
             <strong>{valid.length} tax entities</strong>. Each entity&apos;s
             deadlines will be auto-generated for the current and next tax year.
+            {includeHistorical ? (
+              <> Past-year deadlines will be included as completed history.</>
+            ) : null}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -725,76 +709,150 @@ function PreviewStep({
             </details>
           ) : null}
 
-          <div className="max-h-[360px] overflow-auto divide-y divide-border rounded-md border border-border">
-            {valid.slice(0, 100).map((p) => (
-              <div
-                key={p.index}
-                className="flex items-center justify-between px-4 py-2 text-sm"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="font-medium">{p.mapped.clientName}</span>
-                  <Badge variant="secondary" className="font-mono text-xs">
-                    {p.mapped.entityType}
-                  </Badge>
-                  {p.mapped.homeState ? (
-                    <Badge variant="outline" className="text-xs">
-                      {p.mapped.homeState}
+          <button
+            type="button"
+            onClick={() => setShowList((s) => !s)}
+            className="flex w-full cursor-pointer items-center justify-between rounded-md border border-border px-4 py-2.5 text-sm hover:bg-muted/40"
+          >
+            <span>
+              {showList ? "Hide" : "Show"} {valid.length} clients being imported
+            </span>
+            {showList ? (
+              <ChevronUp className="h-4 w-4 text-muted-foreground" />
+            ) : (
+              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+            )}
+          </button>
+
+          {showList ? (
+            <div className="mt-3 max-h-[360px] overflow-auto divide-y divide-border rounded-md border border-border">
+              {valid.slice(0, 100).map((p) => (
+                <div
+                  key={p.index}
+                  className="flex items-center justify-between px-4 py-2 text-sm"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="font-medium">{p.mapped.clientName}</span>
+                    <Badge variant="secondary" className="font-mono text-xs">
+                      {p.mapped.entityType}
                     </Badge>
-                  ) : null}
-                </div>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span
-                      tabIndex={0}
-                      aria-label={
-                        p.warnings.length > 0
-                          ? `Warning: ${p.warnings.join("; ")}`
-                          : "Ready to import"
-                      }
-                      className="inline-flex items-center rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    >
+                    {p.mapped.homeState ? (
+                      <Badge variant="outline" className="text-xs">
+                        {p.mapped.homeState}
+                      </Badge>
+                    ) : null}
+                  </div>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span
+                        tabIndex={0}
+                        aria-label={
+                          p.warnings.length > 0
+                            ? `Warning: ${p.warnings.join("; ")}`
+                            : "Ready to import"
+                        }
+                        className="inline-flex items-center rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        {p.warnings.length > 0 ? (
+                          <AlertTriangle className="h-3.5 w-3.5 text-[var(--color-priority-medium)]" />
+                        ) : (
+                          <CheckCircle2 className="h-3.5 w-3.5 text-[var(--color-priority-done)]" />
+                        )}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="left" className="max-w-xs">
                       {p.warnings.length > 0 ? (
-                        <AlertTriangle className="h-3.5 w-3.5 text-[var(--color-priority-medium)]" />
+                        <ul className="space-y-1">
+                          {p.warnings.map((w, i) => (
+                            <li key={i} className="text-xs">
+                              • {w}
+                            </li>
+                          ))}
+                        </ul>
                       ) : (
-                        <CheckCircle2 className="h-3.5 w-3.5 text-[var(--color-priority-done)]" />
+                        <span className="text-xs">Ready to import</span>
                       )}
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent side="left" className="max-w-xs">
-                    {p.warnings.length > 0 ? (
-                      <ul className="space-y-1">
-                        {p.warnings.map((w, i) => (
-                          <li key={i} className="text-xs">
-                            • {w}
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <span className="text-xs">Ready to import</span>
-                    )}
-                  </TooltipContent>
-                </Tooltip>
-              </div>
-            ))}
-          </div>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+              ))}
+            </div>
+          ) : null}
         </CardContent>
       </Card>
+      ) : null}
 
-      <div className="flex items-center justify-end gap-2">
+      <div className="flex items-center justify-between gap-2">
         <Button variant="outline" onClick={onBack} disabled={applying}>
           Back
         </Button>
-        <Button onClick={onConfirm} disabled={applying || valid.length === 0}>
-          {applying ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Importing…
-            </>
-          ) : (
-            <>Import {valid.length} clients</>
-          )}
-        </Button>
+        {choiceMade ? (
+          <Button onClick={onConfirm} disabled={applying || valid.length === 0}>
+            {applying ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Importing…
+              </>
+            ) : (
+              <>Import {valid.length} clients</>
+            )}
+          </Button>
+        ) : null}
       </div>
     </div>
+  );
+}
+
+function ChoiceCard({
+  icon,
+  title,
+  subtitle,
+  body,
+  selected,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  subtitle?: string;
+  body: string;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`group relative flex cursor-pointer flex-col items-start gap-3 rounded-lg border-2 p-5 text-left transition-all ${
+        selected
+          ? "border-primary bg-primary/5 shadow-sm"
+          : "border-border bg-card hover:border-slate-400 hover:bg-muted/30"
+      }`}
+    >
+      {selected ? (
+        <span className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground">
+          <Check className="h-3 w-3" strokeWidth={3} />
+        </span>
+      ) : null}
+      <div
+        className={`flex h-10 w-10 items-center justify-center rounded-md ${
+          selected
+            ? "bg-primary text-primary-foreground"
+            : "bg-muted text-foreground/80"
+        }`}
+      >
+        {icon}
+      </div>
+      <div>
+        <div className="flex items-center gap-2">
+          <span className="font-semibold">{title}</span>
+          {subtitle ? (
+            <span className="rounded bg-[var(--color-priority-done-bg)] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-[var(--color-priority-done)]">
+              {subtitle}
+            </span>
+          ) : null}
+        </div>
+        <p className="mt-1 text-sm text-muted-foreground">{body}</p>
+      </div>
+    </button>
   );
 }
 
