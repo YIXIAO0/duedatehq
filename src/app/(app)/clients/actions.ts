@@ -4,7 +4,11 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getCurrentContext } from "@/lib/auth/current-org";
-import { createClient } from "@/lib/services/clients";
+import {
+  createClient,
+  mergeClients,
+  type MergeClientsResult,
+} from "@/lib/services/clients";
 import { createEntity } from "@/lib/services/entities";
 
 const CreateClientFormSchema = z.object({
@@ -102,4 +106,31 @@ export async function createEntityAction(formData: FormData) {
   revalidatePath("/dashboard");
   revalidatePath(`/clients/${parsed.data.clientId}`);
   redirect(`/clients/${parsed.data.clientId}`);
+}
+
+// ---------------------------------------------------------------------------
+// Merge clients — called from /clients when the user selects 2+ clients
+// and confirms the merge dialog. Returns the result so the client can show
+// a toast like "Merged 3 clients into Sarah Johnson (2 entities moved)".
+// ---------------------------------------------------------------------------
+
+export async function mergeClientsAction(args: {
+  primaryId: string;
+  mergeIds: string[];
+}): Promise<MergeClientsResult> {
+  const ctx = await getCurrentContext();
+
+  const result = await mergeClients({
+    orgId: ctx.organization.id,
+    primaryId: args.primaryId,
+    mergeIds: args.mergeIds,
+    actorType: "user",
+    actorId: ctx.user.id,
+  });
+
+  revalidatePath("/clients");
+  revalidatePath("/dashboard");
+  revalidatePath(`/clients/${result.primaryId}`);
+
+  return result;
 }

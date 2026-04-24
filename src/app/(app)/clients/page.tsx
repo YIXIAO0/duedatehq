@@ -8,9 +8,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Plus, Users, FileSpreadsheet, Download } from "lucide-react";
+import { Plus, FileSpreadsheet, Download } from "lucide-react";
 import { getCurrentContext } from "@/lib/auth/current-org";
-import { listClients } from "@/lib/services/clients";
+import { listClientsWithEntityCount } from "@/lib/services/clients";
+import { ClientsList } from "./clients-list";
 
 export default function ClientsPage() {
   return (
@@ -43,24 +44,22 @@ export default function ClientsPage() {
       </div>
 
       <Suspense fallback={<ClientsSkeleton />}>
-        <ClientsList />
+        <ClientsListContainer />
       </Suspense>
     </div>
   );
 }
 
-async function ClientsList() {
+async function ClientsListContainer() {
   const ctx = await getCurrentContext();
-  const clients = await listClients({ orgId: ctx.organization.id });
+  const clients = await listClientsWithEntityCount({ orgId: ctx.organization.id });
 
   if (clients.length === 0) {
     return (
       <Card>
         <CardHeader>
           <CardTitle>No clients yet</CardTitle>
-          <CardDescription>
-            Two ways to get going:
-          </CardDescription>
+          <CardDescription>Two ways to get going:</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-2">
@@ -78,8 +77,8 @@ async function ClientsList() {
                 </span>
               </h3>
               <p className="mt-1.5 text-sm text-muted-foreground">
-                Excel / CSV / File In Time exports — AI maps the columns
-                for you.
+                Excel / CSV / File In Time exports — AI maps the columns for
+                you.
               </p>
             </Link>
             <Link
@@ -101,34 +100,7 @@ async function ClientsList() {
     );
   }
 
-  return (
-    <div className="divide-y divide-border rounded-lg border border-border">
-      {clients.map((client) => (
-        <Link
-          key={client.id}
-          href={`/clients/${client.id}`}
-          className="flex items-center justify-between px-5 py-4 hover:bg-muted/40 transition-colors"
-        >
-          <div className="flex items-center gap-4">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary">
-              <Users className="h-4 w-4" />
-            </div>
-            <div>
-              <div className="font-medium">{client.name}</div>
-              {client.primaryContactEmail ? (
-                <div className="text-xs text-muted-foreground">
-                  {client.primaryContactEmail}
-                </div>
-              ) : null}
-            </div>
-          </div>
-          <div className="text-sm text-muted-foreground">
-            Added {new Date(client.createdAt).toLocaleDateString()}
-          </div>
-        </Link>
-      ))}
-    </div>
-  );
+  return <ClientsList clients={clients} />;
 }
 
 function ClientsSkeleton() {
