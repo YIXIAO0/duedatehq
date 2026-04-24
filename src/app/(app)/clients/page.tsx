@@ -8,7 +8,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Plus, FileSpreadsheet, Download, FileText } from "lucide-react";
+import { Plus, FileSpreadsheet, Download } from "lucide-react";
 import { getCurrentContext } from "@/lib/auth/current-org";
 import { listClientsWithEntityCount } from "@/lib/services/clients";
 import { ClientsList } from "./clients-list";
@@ -25,14 +25,14 @@ export default function ClientsPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button asChild variant="outline">
-            <a href="/api/export/deadlines.pdf?range=60" download>
-              <FileText className="mr-2 h-4 w-4" /> PDF (next 60d)
-            </a>
-          </Button>
+          {/* Note: the firm-wide PDF route at /api/export/deadlines.pdf is
+              still live for partners who want a workload-review snapshot,
+              but we don't surface it here. The high-value PDF — per-client
+              annual calendar — lives on each client detail page instead.
+              CSV stays because Excel is a real workflow for many CPAs. */}
           <Button asChild variant="outline">
             <a href="/api/export/deadlines.csv" download>
-              <Download className="mr-2 h-4 w-4" /> CSV
+              <Download className="mr-2 h-4 w-4" /> Export CSV
             </a>
           </Button>
           <Button asChild variant="outline">

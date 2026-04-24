@@ -11,7 +11,12 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Plus, Building2, User as UserIcon } from "lucide-react";
+import {
+  ArrowLeft,
+  Building2,
+  User as UserIcon,
+  FileText,
+} from "lucide-react";
 import { getCurrentContext } from "@/lib/auth/current-org";
 import { getDb } from "@/lib/db";
 import { clients, entities, deadlineInstances, deadlineRules } from "@/lib/db/schema";
@@ -85,7 +90,22 @@ async function ClientDetail({ params }: { params: Params }) {
             </p>
           ) : null}
         </div>
-        <ClientActions client={client} />
+        <div className="flex items-start gap-2">
+          {/* The headline action on this page: hand the client a calendar
+              they can save, print, or pin to the fridge. Default to the
+              current calendar year — same shape CPAs use when they mail
+              engagement letters. */}
+          <Button asChild variant="outline" size="sm">
+            <a
+              href={`/api/export/clients/${client.id}/calendar.pdf?taxYear=${new Date().getFullYear()}`}
+              download
+            >
+              <FileText className="mr-2 h-4 w-4" />
+              Client calendar PDF
+            </a>
+          </Button>
+          <ClientActions client={client} />
+        </div>
       </div>
 
       {/* Entities */}
