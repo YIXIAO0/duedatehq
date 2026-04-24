@@ -27,7 +27,7 @@ export const ListUpcomingInputSchema = z.object({
   toDate: z.string().optional(), // ISO date; defaults to +30d
   limit: z.number().int().positive().max(500).default(100),
 });
-export type ListUpcomingInput = z.infer<typeof ListUpcomingInputSchema>;
+export type ListUpcomingInput = z.input<typeof ListUpcomingInputSchema>;
 
 export const MarkCompletedInputSchema = z.object({
   deadlineInstanceId: z.string(),
@@ -36,7 +36,7 @@ export const MarkCompletedInputSchema = z.object({
   actorId: z.string().nullable().default(null),
   notes: z.string().max(2000).optional(),
 });
-export type MarkCompletedInput = z.infer<typeof MarkCompletedInputSchema>;
+export type MarkCompletedInput = z.input<typeof MarkCompletedInputSchema>;
 
 // ---------------------------------------------------------------------------
 // Service functions

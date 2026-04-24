@@ -25,7 +25,7 @@ export const CreateClientInputSchema = z.object({
   actorType: z.enum(["user", "agent", "cron", "system"]).default("user"),
   actorId: z.string().nullable().default(null),
 });
-export type CreateClientInput = z.infer<typeof CreateClientInputSchema>;
+export type CreateClientInput = z.input<typeof CreateClientInputSchema>;
 
 export const ListClientsInputSchema = z.object({
   orgId: z.string(),
@@ -33,7 +33,7 @@ export const ListClientsInputSchema = z.object({
   limit: z.number().int().positive().max(500).default(100),
   offset: z.number().int().nonnegative().default(0),
 });
-export type ListClientsInput = z.infer<typeof ListClientsInputSchema>;
+export type ListClientsInput = z.input<typeof ListClientsInputSchema>;
 
 // ---------------------------------------------------------------------------
 // Service functions
