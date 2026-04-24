@@ -7,6 +7,10 @@ import { getCurrentContext } from "@/lib/auth/current-org";
 import { getDb } from "@/lib/db";
 import { organizations } from "@/lib/db/schema";
 import { recordAudit } from "@/lib/services/audit";
+import {
+  generateAndSendWeeklyDigest,
+  type GenerateDigestResult,
+} from "@/lib/services/digest";
 
 const UpdateOrgFormSchema = z.object({
   id: z.string().min(1),
@@ -49,4 +53,25 @@ export async function updateOrgAction(formData: FormData) {
   });
 
   revalidatePath("/settings");
+}
+
+// ---------------------------------------------------------------------------
+// Manual "send me this week's digest now"
+//
+// Pilot users want to see what the email looks like before Monday hits.
+// This skips the (user, week) idempotency guard via `force: true` so the
+// CPA can preview repeatedly. Since the action runs as the logged-in user,
+// it always sends to *their* email — no risk of spamming arbitrary
+// recipients.
+// ---------------------------------------------------------------------------
+export async function sendDigestPreviewAction(): Promise<GenerateDigestResult> {
+  const ctx = await getCurrentContext();
+  return generateAndSendWeeklyDigest({
+    orgId: ctx.organization.id,
+    userId: ctx.user.id,
+    recipientEmail: ctx.email,
+    recipientName: ctx.user.fullName,
+    orgName: ctx.organization.name,
+    force: true,
+  });
 }

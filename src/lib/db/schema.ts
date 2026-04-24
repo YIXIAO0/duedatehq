@@ -255,6 +255,42 @@ export const remindersSent = pgTable(
 );
 
 // ---------------------------------------------------------------------------
+// Weekly digest sends (idempotent — second cron tick this week is a no-op)
+//
+// Identified by ISO week (e.g., "2026-W17") so the dedupe boundary lines
+// up with how a CPA mentally schedules. If we change cadence later we
+// can add a `digest_type` discriminator on the unique index.
+// ---------------------------------------------------------------------------
+
+export const digestSends = pgTable(
+  "digest_sends",
+  {
+    id: text("id").primaryKey().$defaultFn(() => `dig_${nanoid(12)}`),
+    orgId: text("org_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    /** ISO 8601 week — e.g. "2026-W17". One digest per (user, week, type). */
+    weekKey: text("week_key").notNull(),
+    digestType: text("digest_type").notNull().default("weekly"),
+    recipientEmail: text("recipient_email").notNull(),
+    deadlineCount: integer("deadline_count").notNull().default(0),
+    urgentCount: integer("urgent_count").notNull().default(0),
+    /** AI-generated one-liner ("This week's heavier than usual…"). */
+    aiSummary: text("ai_summary"),
+    /** Resend message id, for clickthrough debugging. */
+    providerMessageId: text("provider_message_id"),
+    sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("digest_sends_user_week_idx").on(
+      t.userId,
+      t.weekKey,
+      t.digestType,
+    ),
+    index("digest_sends_org_idx").on(t.orgId),
+  ],
+);
+
+// ---------------------------------------------------------------------------
 // Audit log (Day 1 — invisible to users in MVP, visible in V2 small-firm tier)
 // ---------------------------------------------------------------------------
 
@@ -295,3 +331,5 @@ export type DeadlineInstance = typeof deadlineInstances.$inferSelect;
 export type NewDeadlineInstance = typeof deadlineInstances.$inferInsert;
 export type AuditEvent = typeof auditEvents.$inferSelect;
 export type NewAuditEvent = typeof auditEvents.$inferInsert;
+export type DigestSend = typeof digestSends.$inferSelect;
+export type NewDigestSend = typeof digestSends.$inferInsert;

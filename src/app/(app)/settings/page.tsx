@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/card";
 import { getCurrentContext } from "@/lib/auth/current-org";
 import { OrgSettingsForm } from "./org-settings-form";
+import { DigestPreviewCard } from "./digest-preview-card";
 import { Badge } from "@/components/ui/badge";
 
 export default function SettingsPage() {
@@ -30,12 +31,25 @@ export default function SettingsPage() {
           <OrgSettingsSection />
         </Suspense>
 
+        <Suspense
+          fallback={
+            <div className="h-40 animate-pulse rounded-lg border border-border bg-muted/40" />
+          }
+        >
+          <DigestSection />
+        </Suspense>
+
         <ProfileSection />
 
         <PreferencesSection />
       </div>
     </div>
   );
+}
+
+async function DigestSection() {
+  const ctx = await getCurrentContext();
+  return <DigestPreviewCard recipientEmail={ctx.email} />;
 }
 
 async function OrgSettingsSection() {
