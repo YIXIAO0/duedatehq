@@ -212,9 +212,13 @@ export async function listDashboardDeadlines(input: ListDashboardInput) {
     return d.toISOString().slice(0, 10);
   })();
 
+  // Effective due date = extension_due_date if an extension was filed,
+  // otherwise the original due_date. This keeps the dashboard pointing
+  // at the REAL next filing date for each deadline.
   const rows = await db.execute<{
     id: string;
     due_date: string;
+    effective_due_date: string;
     status: string;
     tax_year: number;
     client_id: string;
@@ -227,10 +231,12 @@ export async function listDashboardDeadlines(input: ListDashboardInput) {
     rule_title: string;
     jurisdiction_code: string;
     irrevocable: boolean;
+    is_extended: boolean;
   }>(sql`
     SELECT
       di.id,
       di.due_date,
+      COALESCE(di.extension_due_date, di.due_date) AS effective_due_date,
       di.status,
       di.tax_year,
       e.id AS entity_id,
@@ -242,15 +248,16 @@ export async function listDashboardDeadlines(input: ListDashboardInput) {
       r.form_code,
       r.title AS rule_title,
       r.jurisdiction_code,
-      r.irrevocable
+      r.irrevocable,
+      (di.status = 'extended') AS is_extended
     FROM deadline_instances di
     INNER JOIN entities e ON e.id = di.entity_id
     INNER JOIN clients c ON c.id = e.client_id
     INNER JOIN deadline_rules r ON r.id = di.rule_id
     WHERE di.org_id = ${parsed.orgId}
-      AND di.due_date BETWEEN ${today} AND ${future}
+      AND COALESCE(di.extension_due_date, di.due_date) BETWEEN ${today} AND ${future}
       AND di.status IN ('pending', 'in_progress', 'extended')
-    ORDER BY di.due_date ASC, r.irrevocable DESC
+    ORDER BY effective_due_date ASC, r.irrevocable DESC
     LIMIT ${parsed.limit}
   `);
 
@@ -263,6 +270,8 @@ export async function listDashboardDeadlines(input: ListDashboardInput) {
 export async function getDashboardStats(orgId: string) {
   const db = getDb();
 
+  // All counts use the effective due date (extension_due_date when present,
+  // otherwise due_date) so extended deadlines surface at their NEW date.
   const rows = await db.execute<{
     this_week: number;
     this_month: number;
@@ -271,16 +280,16 @@ export async function getDashboardStats(orgId: string) {
   }>(sql`
     SELECT
       COUNT(*) FILTER (
-        WHERE due_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '7 days'
-        AND status IN ('pending', 'in_progress')
+        WHERE COALESCE(extension_due_date, due_date) BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '7 days'
+        AND status IN ('pending', 'in_progress', 'extended')
       ) AS this_week,
       COUNT(*) FILTER (
-        WHERE due_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '30 days'
-        AND status IN ('pending', 'in_progress')
+        WHERE COALESCE(extension_due_date, due_date) BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '30 days'
+        AND status IN ('pending', 'in_progress', 'extended')
       ) AS this_month,
       COUNT(*) FILTER (
-        WHERE due_date < CURRENT_DATE
-        AND status IN ('pending', 'in_progress')
+        WHERE COALESCE(extension_due_date, due_date) < CURRENT_DATE
+        AND status IN ('pending', 'in_progress', 'extended')
       ) AS overdue,
       COUNT(*) FILTER (
         WHERE status = 'completed'

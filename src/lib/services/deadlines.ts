@@ -12,9 +12,14 @@
 
 import "server-only";
 import { z } from "zod";
-import { and, asc, eq, gte, lte, ne } from "drizzle-orm";
+import { and, asc, eq, gte, lte, ne, sql } from "drizzle-orm";
 import { getDb } from "@/lib/db";
-import { deadlineInstances } from "@/lib/db/schema";
+import {
+  clients,
+  deadlineInstances,
+  deadlineRules,
+  entities,
+} from "@/lib/db/schema";
 import { recordAudit } from "./audit";
 
 // ---------------------------------------------------------------------------
@@ -110,3 +115,230 @@ export async function markCompleted(input: MarkCompletedInput) {
 
   return row;
 }
+
+// ---------------------------------------------------------------------------
+// File extension — marks original as "extended" with a new effective due date
+// ---------------------------------------------------------------------------
+
+export const FileExtensionInputSchema = z.object({
+  deadlineInstanceId: z.string(),
+  orgId: z.string(),
+  newDueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Must be YYYY-MM-DD"),
+  actorType: z.enum(["user", "agent", "cron", "system"]).default("user"),
+  actorId: z.string().nullable().default(null),
+  notes: z.string().max(2000).optional(),
+});
+export type FileExtensionInput = z.input<typeof FileExtensionInputSchema>;
+
+export async function fileExtension(input: FileExtensionInput) {
+  const parsed = FileExtensionInputSchema.parse(input);
+  const db = getDb();
+
+  const [row] = await db
+    .update(deadlineInstances)
+    .set({
+      status: "extended",
+      extensionFiledAt: new Date(),
+      extensionDueDate: parsed.newDueDate,
+      notes: parsed.notes,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(deadlineInstances.id, parsed.deadlineInstanceId),
+        eq(deadlineInstances.orgId, parsed.orgId),
+      ),
+    )
+    .returning();
+
+  if (!row) {
+    throw new Error(
+      `Deadline ${parsed.deadlineInstanceId} not found in org ${parsed.orgId}`,
+    );
+  }
+
+  await recordAudit({
+    orgId: parsed.orgId,
+    actorType: parsed.actorType,
+    actorId: parsed.actorId,
+    action: "deadline.extension_filed",
+    targetType: "deadline_instance",
+    targetId: row.id,
+    payload: {
+      originalDueDate: row.dueDate,
+      newDueDate: parsed.newDueDate,
+    },
+  });
+
+  return row;
+}
+
+// ---------------------------------------------------------------------------
+// Update notes only — separate from completion/extension
+// ---------------------------------------------------------------------------
+
+export const UpdateNotesInputSchema = z.object({
+  deadlineInstanceId: z.string(),
+  orgId: z.string(),
+  notes: z.string().max(2000),
+  actorType: z.enum(["user", "agent", "cron", "system"]).default("user"),
+  actorId: z.string().nullable().default(null),
+});
+export type UpdateNotesInput = z.input<typeof UpdateNotesInputSchema>;
+
+export async function updateDeadlineNotes(input: UpdateNotesInput) {
+  const parsed = UpdateNotesInputSchema.parse(input);
+  const db = getDb();
+
+  const [row] = await db
+    .update(deadlineInstances)
+    .set({ notes: parsed.notes, updatedAt: new Date() })
+    .where(
+      and(
+        eq(deadlineInstances.id, parsed.deadlineInstanceId),
+        eq(deadlineInstances.orgId, parsed.orgId),
+      ),
+    )
+    .returning();
+
+  if (!row) {
+    throw new Error(`Deadline ${parsed.deadlineInstanceId} not found`);
+  }
+
+  await recordAudit({
+    orgId: parsed.orgId,
+    actorType: parsed.actorType,
+    actorId: parsed.actorId,
+    action: "deadline.notes_updated",
+    targetType: "deadline_instance",
+    targetId: row.id,
+  });
+
+  return row;
+}
+
+// ---------------------------------------------------------------------------
+// Re-open a completed deadline (in case CPA mis-clicked)
+// ---------------------------------------------------------------------------
+
+export async function reopenDeadline(input: MarkCompletedInput) {
+  const parsed = MarkCompletedInputSchema.parse(input);
+  const db = getDb();
+
+  const [row] = await db
+    .update(deadlineInstances)
+    .set({
+      status: "pending",
+      completedAt: null,
+      completedByUserId: null,
+      completedByActorType: null,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(deadlineInstances.id, parsed.deadlineInstanceId),
+        eq(deadlineInstances.orgId, parsed.orgId),
+      ),
+    )
+    .returning();
+
+  if (!row) throw new Error(`Deadline ${parsed.deadlineInstanceId} not found`);
+
+  await recordAudit({
+    orgId: parsed.orgId,
+    actorType: parsed.actorType,
+    actorId: parsed.actorId,
+    action: "deadline.reopened",
+    targetType: "deadline_instance",
+    targetId: row.id,
+  });
+
+  return row;
+}
+
+// ---------------------------------------------------------------------------
+// Fetch a single deadline with its joined context (rule + entity + client)
+// ---------------------------------------------------------------------------
+
+export async function getDeadlineDetail(
+  deadlineInstanceId: string,
+  orgId: string,
+) {
+  const db = getDb();
+
+  const rows = await db.execute<{
+    id: string;
+    org_id: string;
+    entity_id: string;
+    rule_id: string;
+    tax_year: number;
+    due_date: string;
+    status: string;
+    completed_at: string | null;
+    completed_by_user_id: string | null;
+    completed_by_actor_type: string | null;
+    extension_filed_at: string | null;
+    extension_due_date: string | null;
+    notes: string | null;
+    created_at: string;
+    updated_at: string;
+    rule_title: string;
+    rule_form_code: string;
+    rule_description: string | null;
+    rule_jurisdiction_type: string;
+    rule_jurisdiction_code: string;
+    rule_source_url: string;
+    rule_extension_form_code: string | null;
+    rule_penalty_summary: string | null;
+    rule_irrevocable: boolean;
+    entity_name: string;
+    entity_type: string;
+    entity_home_state: string | null;
+    client_id: string;
+    client_name: string;
+  }>(sql`
+    SELECT
+      di.id,
+      di.org_id,
+      di.entity_id,
+      di.rule_id,
+      di.tax_year,
+      di.due_date,
+      di.status,
+      di.completed_at,
+      di.completed_by_user_id,
+      di.completed_by_actor_type,
+      di.extension_filed_at,
+      di.extension_due_date,
+      di.notes,
+      di.created_at,
+      di.updated_at,
+      r.title AS rule_title,
+      r.form_code AS rule_form_code,
+      r.description AS rule_description,
+      r.jurisdiction_type AS rule_jurisdiction_type,
+      r.jurisdiction_code AS rule_jurisdiction_code,
+      r.source_url AS rule_source_url,
+      r.extension_form_code AS rule_extension_form_code,
+      r.penalty_summary AS rule_penalty_summary,
+      r.irrevocable AS rule_irrevocable,
+      e.name AS entity_name,
+      e.entity_type,
+      e.home_state AS entity_home_state,
+      c.id AS client_id,
+      c.name AS client_name
+    FROM deadline_instances di
+    INNER JOIN deadline_rules r ON r.id = di.rule_id
+    INNER JOIN entities e ON e.id = di.entity_id
+    INNER JOIN clients c ON c.id = e.client_id
+    WHERE di.id = ${deadlineInstanceId}
+      AND di.org_id = ${orgId}
+    LIMIT 1
+  `);
+
+  return rows.rows[0] ?? null;
+}
+
+export type DeadlineDetail = NonNullable<
+  Awaited<ReturnType<typeof getDeadlineDetail>>
+>;

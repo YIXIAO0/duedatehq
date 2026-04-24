@@ -190,7 +190,8 @@ type DeadlineRow = Awaited<ReturnType<typeof listDashboardDeadlines>>[number];
 function DeadlineRow({ row }: { row: DeadlineRow }) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const due = new Date(row.due_date + "T00:00:00");
+  const effectiveDate = row.effective_due_date;
+  const due = new Date(effectiveDate + "T00:00:00");
   const daysUntil = Math.round(
     (due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
   );
@@ -224,13 +225,13 @@ function DeadlineRow({ row }: { row: DeadlineRow }) {
 
   return (
     <Link
-      href={`/clients/${row.client_id}`}
+      href={`/deadlines/${row.id}`}
       className="flex items-center justify-between gap-4 px-4 py-3 hover:bg-muted/40 transition-colors"
     >
       <div className="flex min-w-0 flex-1 items-center gap-3">
         <div className="w-20 shrink-0 text-sm">
           <div className="font-medium">
-            {new Date(row.due_date + "T00:00:00").toLocaleDateString("en-US", {
+            {new Date(effectiveDate + "T00:00:00").toLocaleDateString("en-US", {
               month: "short",
               day: "numeric",
             })}
@@ -247,6 +248,11 @@ function DeadlineRow({ row }: { row: DeadlineRow }) {
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-2">
+        {row.is_extended ? (
+          <Badge variant="outline" className="text-xs">
+            Extended
+          </Badge>
+        ) : null}
         {row.irrevocable ? (
           <Badge className="bg-[var(--color-priority-urgent-bg)] text-[var(--color-priority-urgent)] hover:bg-[var(--color-priority-urgent-bg)]">
             Irrevocable
