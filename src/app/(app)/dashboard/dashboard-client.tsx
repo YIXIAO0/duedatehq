@@ -614,6 +614,17 @@ export function DashboardClient({
                     const hasIrrevocable = g.deadlines.some(
                       (d) => d.irrevocable,
                     );
+                    // Detect "all children share a date" — extremely common
+                    // for state pairs like TX Franchise + TX Public Info
+                    // Report (both May 15). Hoisting the date into the
+                    // client header avoids the same per-row repetition we
+                    // just fixed at the bucket level.
+                    const firstDate = g.deadlines[0].effective_due_date;
+                    const sharedDate = g.deadlines.every(
+                      (d) => d.effective_due_date === firstDate,
+                    )
+                      ? firstDate
+                      : null;
                     return (
                       <div key={g.clientId}>
                         <div className="flex items-center gap-3 px-4 py-2">
@@ -634,6 +645,9 @@ export function DashboardClient({
                             <span className="font-medium text-foreground">
                               {g.clientName}
                             </span>
+                            {sharedDate ? (
+                              <SharedDateInline date={sharedDate} />
+                            ) : null}
                             <span className="ml-2 text-muted-foreground">
                               {g.deadlines.length} deadlines
                             </span>
@@ -652,6 +666,7 @@ export function DashboardClient({
                               selected={selected.has(d.id)}
                               onToggle={() => toggleOne(d.id)}
                               hideClientName={true}
+                              hideDate={sharedDate !== null}
                             />
                           ))}
                         </div>
@@ -725,6 +740,42 @@ export function DashboardClient({
         </div>
       ) : null}
     </div>
+  );
+}
+
+// Inline "May 15 · in 19d" rendered next to a multi-deadline-client
+// header when every child of the group shares a date. Same urgency
+// coloring as DateSubheader so the time-pressure signal carries.
+function SharedDateInline({ date }: { date: string }) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const due = new Date(date + "T00:00:00");
+  const days = Math.round(
+    (due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
+  );
+  const accent =
+    days < 0 || days <= 3
+      ? "text-[var(--color-priority-urgent)]"
+      : days <= 14
+      ? "text-[var(--color-priority-high)]"
+      : days <= 30
+      ? "text-[var(--color-priority-medium)]"
+      : "text-muted-foreground";
+  const relLabel =
+    days < 0
+      ? `${Math.abs(days)}d overdue`
+      : days === 0
+      ? "Today"
+      : days === 1
+      ? "Tomorrow"
+      : `in ${days}d`;
+  return (
+    <>
+      <span className="ml-2 font-medium text-foreground">
+        {due.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+      </span>
+      <span className={`ml-1 ${accent}`}>{relLabel}</span>
+    </>
   );
 }
 
