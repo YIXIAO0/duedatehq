@@ -25,8 +25,10 @@ import {
   getDashboardStats,
   listDashboardDeadlines,
 } from "@/lib/services/deadline-engine";
-import { listAnnouncements } from "@/lib/services/announcements";
-import type { Announcement } from "@/lib/db/schema";
+import {
+  listAnnouncementsWithImpact,
+  type AnnouncementWithImpact,
+} from "@/lib/services/announcements";
 import {
   DashboardClient,
   type DashboardDeadline,
@@ -82,18 +84,19 @@ export default function DashboardPage() {
 // readable inline. No render at all when there's nothing high-signal,
 // so the dashboard stays focused on deadlines on quiet days.
 async function DashboardAnnouncements() {
-  // Mark this Suspense boundary as dynamic before listAnnouncements
+  // Mark this Suspense boundary as dynamic before listAnnouncementsWithImpact
   // hits `new Date()`. Cache Components requires this read of auth /
   // request data first; the parent page is dynamic via DashboardStats
   // but each Suspense boundary needs to qualify on its own.
-  await getCurrentContext();
-  // 30-day window — high-impact IRS regs (tip-income final regs,
-  // remittance tax regs, disaster-relief postponements) stay relevant
-  // for weeks, not days. The header "Updates" badge intentionally
-  // uses the tighter 7-day window so it can return to zero and
-  // signal "new alerts this week" — the card is stable display of
-  // "what's worth knowing right now", which is a different question.
-  const items = await listAnnouncements({
+  const ctx = await getCurrentContext();
+  // 30-day window — high-impact IRS regs stay relevant for weeks, not
+  // days. The header "IRS updates" badge intentionally uses the tighter
+  // 7-day window so it can return to zero and signal "new this week" —
+  // the card is stable display of "what's worth knowing right now".
+  // listAnnouncementsWithImpact also intersects each item's
+  // affected_jurisdictions with this org's clients' home_state, so we
+  // can render "Affects N of your clients" inline.
+  const items = await listAnnouncementsWithImpact(ctx.organization.id, {
     sinceDays: 30,
     minScore: 4,
     limit: 3,
@@ -128,10 +131,11 @@ async function DashboardAnnouncements() {
   );
 }
 
-function DashboardAnnouncementRow({ a }: { a: Announcement }) {
+function DashboardAnnouncementRow({ a }: { a: AnnouncementWithImpact }) {
   // Use the AI-rewritten summary when available — that's the value-add.
   // Fall back to title only when AI hasn't run yet (e.g. AI Gateway
   // outage day; the row will still appear, just without the summary).
+  const matchCount = a.affectedClients.length;
   return (
     <div className="flex items-start gap-3 px-4 py-3">
       <CategoryGlyph category={a.category} />
@@ -156,6 +160,25 @@ function DashboardAnnouncementRow({ a }: { a: Announcement }) {
         {a.aiSummary ? (
           <div className="mt-0.5 text-xs leading-snug text-foreground/75">
             {a.aiSummary}
+          </div>
+        ) : null}
+        {/* Client-impact line — the moat-deepening surface. Only renders
+            for state-specific items that actually intersect the user's
+            client base. Shows up to 4 names then "+N more". Federal-only
+            items naturally produce no matches and skip this line. */}
+        {matchCount > 0 ? (
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5 rounded-md border border-[var(--color-priority-urgent)]/40 bg-background/60 px-2 py-1.5">
+            <span className="text-[11px] font-semibold text-[var(--color-priority-urgent)]">
+              Affects {matchCount}{" "}
+              {matchCount === 1 ? "of your clients" : "of your clients"}
+            </span>
+            <span className="text-[11px] text-foreground/70">
+              {a.affectedClients
+                .slice(0, 4)
+                .map((c) => c.name)
+                .join(" · ")}
+              {matchCount > 4 ? ` · +${matchCount - 4} more` : ""}
+            </span>
           </div>
         ) : null}
         <div className="mt-1.5">

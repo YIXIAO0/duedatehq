@@ -33,7 +33,9 @@ export default function AppLayout({
               <NavLink href="/dashboard" label="Dashboard" />
               <NavLink href="/clients" label="Clients" />
               <Suspense
-                fallback={<NavLink href="/announcements" label="Updates" />}
+                fallback={
+                  <NavLink href="/announcements" label="IRS updates" />
+                }
               >
                 <UpdatesNavLink />
               </Suspense>
@@ -110,5 +112,5 @@ async function UpdatesNavLink() {
         {count > 9 ? "9+" : count}
       </span>
     ) : null;
-  return <NavLink href="/announcements" label="Updates" badge={badge} />;
+  return <NavLink href="/announcements" label="IRS updates" badge={badge} />;
 }

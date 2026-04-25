@@ -18,8 +18,10 @@ import {
   Newspaper,
 } from "lucide-react";
 import { getCurrentContext } from "@/lib/auth/current-org";
-import { listAnnouncements } from "@/lib/services/announcements";
-import type { Announcement } from "@/lib/db/schema";
+import {
+  listAnnouncementsWithImpact,
+  type AnnouncementWithImpact,
+} from "@/lib/services/announcements";
 
 export const metadata = {
   title: "IRS Updates · DueDateHQ",
@@ -64,13 +66,18 @@ export default function AnnouncementsPage() {
 async function Feed() {
   // getCurrentContext() reads auth headers, which marks this page as
   // dynamic — required by Cache Components before we touch `new Date()`
-  // inside listAnnouncements. Also serves as the auth gate (redirects
-  // anon users to sign-in).
-  await getCurrentContext();
+  // inside the listing call. Also serves as the auth gate (redirects
+  // anon users to sign-in) and gives us the org id for client matching.
+  const ctx = await getCurrentContext();
   // minScore: 3 — hide pure PR (1) and "vaguely tax-adjacent" (2) so
   // the page is useful signal, not IRS newsroom mirror. Deadline moves
   // / form changes are 4-5; routine useful reminders are 3.
-  const items = await listAnnouncements({ sinceDays: 30, minScore: 3 });
+  // …WithImpact intersects each item's affected_jurisdictions with the
+  // org's clients' home_state so we can show "Affects N of your clients".
+  const items = await listAnnouncementsWithImpact(ctx.organization.id, {
+    sinceDays: 30,
+    minScore: 3,
+  });
 
   if (items.length === 0) {
     return (
@@ -126,7 +133,7 @@ function AnnouncementRow({
   a,
   highlight = false,
 }: {
-  a: Announcement;
+  a: AnnouncementWithImpact;
   highlight?: boolean;
 }) {
   return (
@@ -162,6 +169,28 @@ function AnnouncementRow({
             <p className="mt-1 text-sm leading-snug text-foreground/80">
               {a.aiSummary}
             </p>
+          ) : null}
+          {/* Client-impact line — only state-specific items that actually
+              hit your client base will populate this. Federal-only items
+              produce zero matches and skip rendering. */}
+          {a.affectedClients.length > 0 ? (
+            <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-[var(--color-priority-urgent)]/40 bg-[var(--color-priority-urgent-bg)]/50 px-2.5 py-1.5">
+              <span className="text-xs font-semibold text-[var(--color-priority-urgent)]">
+                Affects {a.affectedClients.length}{" "}
+                {a.affectedClients.length === 1
+                  ? "of your clients"
+                  : "of your clients"}
+              </span>
+              <span className="text-xs text-foreground/75">
+                {a.affectedClients
+                  .slice(0, 6)
+                  .map((c) => c.name)
+                  .join(" · ")}
+                {a.affectedClients.length > 6
+                  ? ` · +${a.affectedClients.length - 6} more`
+                  : ""}
+              </span>
+            </div>
           ) : null}
           <div className="mt-2">
             <a

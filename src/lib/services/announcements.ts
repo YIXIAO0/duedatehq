@@ -58,6 +58,108 @@ export async function listAnnouncements(
     .limit(parsed.limit);
 }
 
+// ---------------------------------------------------------------------------
+// Announcement × client matching — the moat-deepening feature.
+//
+// For each announcement, intersect its `affected_jurisdictions` with the
+// home_state of the org's active entities. Returns the list of clients
+// whose entities sit in any of those states, so the UI can surface
+// "Affects 3 of your clients" inline on each row.
+//
+// "federal" announcements correctly produce zero matches (no entity has
+// home_state="federal"), which is the right behavior — "1099-K threshold
+// changed" affects everyone equally, no per-client highlight earned.
+// State-specific items ("FL hurricane disaster relief") will only
+// highlight when the org actually has FL clients.
+//
+// Composed as a LATERAL subquery to keep this a single round-trip.
+// ---------------------------------------------------------------------------
+
+export type AffectedClient = {
+  id: string;
+  name: string;
+};
+
+export type AnnouncementWithImpact = Announcement & {
+  affectedClients: AffectedClient[];
+};
+
+export async function listAnnouncementsWithImpact(
+  orgId: string,
+  input: ListAnnouncementsInput = {},
+): Promise<AnnouncementWithImpact[]> {
+  const parsed = ListAnnouncementsInputSchema.parse(input);
+  const db = getDb();
+
+  const sinceFilter =
+    parsed.sinceDays > 0
+      ? sql`AND a.published_at >= NOW() - (${parsed.sinceDays}::int * INTERVAL '1 day')`
+      : sql``;
+
+  const categoryFilter = parsed.category
+    ? sql`AND a.category = ${parsed.category}`
+    : sql``;
+
+  const rows = await db.execute<{
+    id: string;
+    source: string;
+    external_id: string;
+    title: string;
+    summary: string | null;
+    url: string;
+    published_at: Date;
+    category: string;
+    affected_jurisdictions: string[];
+    relevance_score: number;
+    ai_summary: string | null;
+    created_at: Date;
+    affected_clients: AffectedClient[] | null;
+  }>(sql`
+    SELECT
+      a.id, a.source, a.external_id, a.title, a.summary, a.url,
+      a.published_at, a.category, a.affected_jurisdictions,
+      a.relevance_score, a.ai_summary, a.created_at,
+      COALESCE(
+        (
+          SELECT jsonb_agg(
+            DISTINCT jsonb_build_object('id', c.id, 'name', c.name)
+          )
+          FROM clients c
+          INNER JOIN entities e ON e.client_id = c.id
+          WHERE c.org_id = ${orgId}
+            AND c.archived_at IS NULL
+            AND e.archived_at IS NULL
+            AND e.home_state IS NOT NULL
+            -- jsonb ? string returns true if string is in the jsonb array
+            AND a.affected_jurisdictions ? e.home_state
+        ),
+        '[]'::jsonb
+      ) AS affected_clients
+    FROM announcements a
+    WHERE a.relevance_score >= ${parsed.minScore}
+      ${sinceFilter}
+      ${categoryFilter}
+    ORDER BY a.relevance_score DESC, a.published_at DESC
+    LIMIT ${parsed.limit}
+  `);
+
+  return rows.rows.map((r) => ({
+    id: r.id,
+    source: r.source,
+    externalId: r.external_id,
+    title: r.title,
+    summary: r.summary,
+    url: r.url,
+    publishedAt: new Date(r.published_at),
+    category: r.category,
+    affectedJurisdictions: r.affected_jurisdictions ?? [],
+    relevanceScore: r.relevance_score,
+    aiSummary: r.ai_summary,
+    createdAt: new Date(r.created_at),
+    affectedClients: r.affected_clients ?? [],
+  }));
+}
+
 export type DashboardAnnouncementSummary = {
   /** Items in last 7 days with score >= 4. The dashboard banner key. */
   highRelevance7d: number;
