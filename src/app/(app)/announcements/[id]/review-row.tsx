@@ -74,7 +74,7 @@ export function ReviewRow({
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <Link
-            href={`/clients/${client.clientId}`}
+            href={`/clients/${client.clientId}?fromAnnouncement=${announcementId}`}
             className={`text-sm font-semibold hover:underline ${
               optimisticAcked ? "text-foreground/70" : ""
             }`}
@@ -107,7 +107,7 @@ export function ReviewRow({
       </div>
 
       <Link
-        href={`/clients/${client.clientId}`}
+        href={`/clients/${client.clientId}?fromAnnouncement=${announcementId}`}
         className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border bg-background px-2.5 py-1 text-xs font-medium text-foreground/80 transition-colors hover:bg-muted hover:text-foreground"
       >
         Open client <ArrowRight className="h-3 w-3" />

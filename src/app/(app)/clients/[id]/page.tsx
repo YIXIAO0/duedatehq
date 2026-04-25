@@ -33,29 +33,51 @@ import { ClientActions } from "./client-actions";
 import { EntityActions } from "./entity-actions";
 
 type Params = Promise<{ id: string }>;
+type SearchParams = Promise<{ fromAnnouncement?: string }>;
 
-// Outer component stays synchronous so PPR can prerender the static shell
-// (back button). The async data-fetching child lives inside <Suspense>.
-export default function ClientDetailPage({ params }: { params: Params }) {
+// Outer page stays sync so Cache Components can prerender the static
+// shell. Reading searchParams (which are dynamic) has to happen inside
+// the Suspense boundary — putting it on the outer component blocks
+// the entire route from prerendering. The back-link target is computed
+// inside the async child below.
+export default function ClientDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Params;
+  searchParams: SearchParams;
+}) {
   return (
     <div className="mx-auto w-full max-w-5xl px-6 py-8">
-      <Button asChild variant="ghost" size="sm" className="mb-4 -ml-3">
-        <Link href="/clients">
-          <ArrowLeft className="mr-2 h-4 w-4" /> Back to clients
-        </Link>
-      </Button>
-
       <Suspense fallback={<DetailSkeleton />}>
-        <ClientDetail params={params} />
+        <ClientDetail params={params} searchParams={searchParams} />
       </Suspense>
     </div>
   );
 }
 
-async function ClientDetail({ params }: { params: Params }) {
+async function ClientDetail({
+  params,
+  searchParams,
+}: {
+  params: Params;
+  searchParams: SearchParams;
+}) {
   const { id } = await params;
+  const { fromAnnouncement } = await searchParams;
   const ctx = await getCurrentContext();
   const db = getDb();
+
+  // Smart back-link: when the CPA arrives from "Open client" inside an
+  // announcement review, return them there — not to the global /clients
+  // list. Eliminates the "I lost my place in the checklist" frustration
+  // when walking through 7 affected clients one by one.
+  const backHref = fromAnnouncement
+    ? `/announcements/${fromAnnouncement}`
+    : "/clients";
+  const backLabel = fromAnnouncement
+    ? "Back to announcement review"
+    : "Back to clients";
 
   const [client] = await db
     .select()
@@ -86,6 +108,12 @@ async function ClientDetail({ params }: { params: Params }) {
 
   return (
     <div className="space-y-8">
+      <Button asChild variant="ghost" size="sm" className="-ml-3">
+        <Link href={backHref}>
+          <ArrowLeft className="mr-2 h-4 w-4" /> {backLabel}
+        </Link>
+      </Button>
+
       {/* Client header */}
       <div className="flex items-start justify-between gap-4">
         <div>
@@ -426,6 +454,8 @@ function entityTypeLabel(type: string): string {
 function DetailSkeleton() {
   return (
     <div className="space-y-6">
+      {/* Reserve the back-link slot so layout doesn't shift after hydrate. */}
+      <div className="h-7 w-40 animate-pulse rounded bg-muted" />
       <div className="h-8 w-64 animate-pulse rounded bg-muted" />
       <div className="h-4 w-96 animate-pulse rounded bg-muted" />
       <div className="grid gap-3 md:grid-cols-2">

@@ -446,6 +446,11 @@ export async function getAnnouncementReview(
       -- because we can't yet reliably scope them to the announcement
       -- (no AI-extracted dates/forms). Showing all of them implied
       -- "these are the affected deadlines" which was misleading.
+      --
+      -- Window MUST match listDeadlinesForClient on /clients/[id]
+      -- (overdue OR within +365d) — otherwise this count and the
+      -- count on the client page disagree and the user (rightly)
+      -- spots the inconsistency.
       (
         SELECT COUNT(*)::int
         FROM deadline_instances di
@@ -453,6 +458,11 @@ export async function getAnnouncementReview(
         WHERE e2.client_id = c.id
           AND e2.archived_at IS NULL
           AND di.status IN ('pending', 'in_progress', 'extended')
+          AND (
+            COALESCE(di.extension_due_date, di.due_date) <= CURRENT_DATE
+            OR COALESCE(di.extension_due_date, di.due_date)
+               <= (CURRENT_DATE + INTERVAL '365 days')
+          )
       ) AS open_deadline_count,
       EXISTS (
         SELECT 1 FROM announcement_client_acks ack
