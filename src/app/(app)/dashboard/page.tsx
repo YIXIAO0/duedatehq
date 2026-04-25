@@ -20,6 +20,7 @@ import {
   getDashboardStats,
   listDashboardDeadlines,
 } from "@/lib/services/deadline-engine";
+import { getAnnouncementsSummary } from "@/lib/services/announcements";
 import {
   DashboardClient,
   type DashboardDeadline,
@@ -49,6 +50,13 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* IRS update banner — only renders when there's actual signal in
+          the past 7 days. Suspense lets the page paint without waiting
+          for the announcements query. */}
+      <Suspense fallback={null}>
+        <AnnouncementsBanner />
+      </Suspense>
+
       <Suspense fallback={<StatsSkeleton />}>
         <DashboardStats />
       </Suspense>
@@ -59,6 +67,38 @@ export default function DashboardPage() {
         </Suspense>
       </div>
     </div>
+  );
+}
+
+// Banner only renders when there's "real" signal: ≥1 high-relevance
+// (score≥4) IRS announcement in the last 7 days. Otherwise we render
+// nothing so the dashboard stays focused on the user's deadlines.
+async function AnnouncementsBanner() {
+  const summary = await getAnnouncementsSummary();
+  if (summary.highRelevance7d === 0) return null;
+
+  return (
+    <Link
+      href="/announcements"
+      className="mb-6 flex items-start gap-3 rounded-lg border border-[var(--color-priority-urgent)]/30 bg-[var(--color-priority-urgent-bg)]/40 p-3 transition-colors hover:bg-[var(--color-priority-urgent-bg)]/70"
+    >
+      <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-[var(--color-priority-urgent)]" />
+      <div className="min-w-0 flex-1">
+        <div className="text-sm font-semibold text-[var(--color-priority-urgent)]">
+          {summary.highRelevance7d}{" "}
+          {summary.highRelevance7d === 1 ? "IRS update" : "IRS updates"} in
+          the last 7 days
+        </div>
+        {summary.topRecent ? (
+          <div className="mt-0.5 truncate text-xs text-foreground/80">
+            {summary.topRecent.aiSummary ?? summary.topRecent.title}
+          </div>
+        ) : null}
+      </div>
+      <span className="self-center text-xs font-medium text-[var(--color-priority-urgent)]">
+        Review →
+      </span>
+    </Link>
   );
 }
 

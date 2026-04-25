@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 import path from "node:path";
+import { withWorkflow } from "workflow/next";
 
 const nextConfig: NextConfig = {
   // Cache Components (PPR successor) — lets us cache the seed deadline DB
@@ -18,4 +19,8 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// Workflow DevKit — enables the "use workflow" / "use step" directives
+// used in src/lib/workflows/*. The wrapper injects the runtime endpoints
+// at /.well-known/workflow/* and rewires the build for those code paths.
+// https://useworkflow.dev
+export default withWorkflow(nextConfig);

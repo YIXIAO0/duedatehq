@@ -291,6 +291,67 @@ export const digestSends = pgTable(
 );
 
 // ---------------------------------------------------------------------------
+// Tax-authority announcements — IRS Newsroom + state DOR feeds.
+//
+// Org-agnostic on purpose: an IRS hurricane relief notice is identical
+// for every CPA, so we store it once and let each org's UI compute
+// "does this affect any of my clients?" on read by intersecting
+// `affected_jurisdictions` with the org's clients' home states.
+//
+// Idempotency: `external_id` (RSS GUID / canonical link) is unique. The
+// scrape workflow runs daily; second-run hits ON CONFLICT DO NOTHING.
+// ---------------------------------------------------------------------------
+
+export const announcements = pgTable(
+  "announcements",
+  {
+    id: text("id").primaryKey().$defaultFn(() => `ann_${nanoid(12)}`),
+    /** Origin feed — "irs_newsroom" today, state DORs in V2. */
+    source: text("source").notNull(),
+    /** RSS GUID or canonical URL — guaranteed unique per source. */
+    externalId: text("external_id").notNull(),
+    title: text("title").notNull(),
+    summary: text("summary"),
+    url: text("url").notNull(),
+    publishedAt: timestamp("published_at", { withTimezone: true }).notNull(),
+
+    /** AI classification — see ANNOUNCEMENT_CATEGORIES below. */
+    category: text("category").notNull().default("general"),
+    /** AI extraction — ["federal"] or ["FL", "TX"] or [] when unclear. */
+    affectedJurisdictions: jsonb("affected_jurisdictions")
+      .$type<string[]>()
+      .notNull()
+      .default([]),
+    /** AI relevance score 1–5; bell only fires for >= 4. */
+    relevanceScore: integer("relevance_score").notNull().default(3),
+    /** AI one-line summary in CPA-friendly language. */
+    aiSummary: text("ai_summary"),
+
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("announcements_source_external_idx").on(
+      t.source,
+      t.externalId,
+    ),
+    index("announcements_published_idx").on(t.publishedAt),
+    index("announcements_score_published_idx").on(
+      t.relevanceScore,
+      t.publishedAt,
+    ),
+  ],
+);
+
+export const ANNOUNCEMENT_CATEGORIES = [
+  "disaster_relief", // IRS extends deadline for storm/wildfire victims
+  "form_change",     // Form 1099-K threshold change, new schedule, etc.
+  "procedural",      // E-file requirement, filing-method change
+  "general",         // Everything else / lowest priority
+] as const;
+
+// ---------------------------------------------------------------------------
 // Audit log (Day 1 — invisible to users in MVP, visible in V2 small-firm tier)
 // ---------------------------------------------------------------------------
 
@@ -333,3 +394,5 @@ export type AuditEvent = typeof auditEvents.$inferSelect;
 export type NewAuditEvent = typeof auditEvents.$inferInsert;
 export type DigestSend = typeof digestSends.$inferSelect;
 export type NewDigestSend = typeof digestSends.$inferInsert;
+export type Announcement = typeof announcements.$inferSelect;
+export type NewAnnouncement = typeof announcements.$inferInsert;

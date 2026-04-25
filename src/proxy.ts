@@ -16,6 +16,7 @@ const isProtectedRoute = createRouteMatcher([
 const isPublicApiRoute = createRouteMatcher([
   "/api/cron/(.*)", // Vercel Cron hits this — protected by CRON_SECRET, not auth
   "/api/mcp(.*)",   // MCP stub — V2 will add API-key auth
+  "/.well-known/workflow/(.*)", // Workflow DevKit runtime endpoints
 ]);
 
 export default clerkMiddleware(async (auth, req) => {
@@ -27,8 +28,8 @@ export default clerkMiddleware(async (auth, req) => {
 
 export const config = {
   matcher: [
-    // Skip Next.js internals and static files
-    "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
+    // Skip Next.js internals, Workflow DevKit internals, and static files
+    "/((?!_next|\\.well-known/workflow|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
     // Always run for API routes
     "/(api|trpc)(.*)",
   ],
