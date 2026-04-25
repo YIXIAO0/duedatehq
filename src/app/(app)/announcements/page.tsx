@@ -204,6 +204,16 @@ function AnnouncementRow({
   /** When true, this row IS dismissed — show "Restore" instead of X. */
   showDismissed?: boolean;
 }) {
+  // Same per-client review state used by the dashboard CTA: drives the
+  // "Review N more" / "All N reviewed" copy. Items with affectedClients
+  // get a clickable CTA into the per-announcement detail page; items
+  // with zero affected clients (federal-only news) only show the
+  // "Read on IRS.gov" link, no CTA.
+  const matchCount = a.affectedClients.length;
+  const ackedCount = a.ackedClientCount;
+  const pendingCount = matchCount - ackedCount;
+  const allReviewed = matchCount > 0 && pendingCount === 0;
+
   return (
     <article
       className={`rounded-lg border p-4 transition-colors ${
@@ -238,34 +248,54 @@ function AnnouncementRow({
               {a.aiSummary}
             </p>
           ) : null}
-          {/* Client-impact line — only state-specific items that actually
-              hit your client base will populate this. Federal-only items
-              produce zero matches and skip rendering. */}
-          {a.affectedClients.length > 0 ? (
-            <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-[var(--color-priority-urgent)]/40 bg-[var(--color-priority-urgent-bg)]/50 px-2.5 py-1.5">
-              <span className="text-xs font-semibold text-[var(--color-priority-urgent)]">
-                Affects {a.affectedClients.length}{" "}
-                {a.affectedClients.length === 1
-                  ? "of your clients"
-                  : "of your clients"}
-              </span>
-              <span className="text-xs text-foreground/75">
-                {a.affectedClients
-                  .slice(0, 6)
-                  .map((c) => c.name)
-                  .join(" · ")}
-                {a.affectedClients.length > 6
-                  ? ` · +${a.affectedClients.length - 6} more`
-                  : ""}
-              </span>
-            </div>
+
+          {/* Client-impact CTA — clickable Link to the per-client review
+              page. Mirrors the dashboard "Heads up" pattern so both
+              surfaces feel like the same affordance. Federal-only items
+              (no client matches) skip this block entirely. */}
+          {matchCount > 0 ? (
+            <Link
+              href={`/announcements/${a.id}`}
+              className={`mt-2 flex items-center gap-3 rounded-md border px-3 py-2 transition-colors ${
+                allReviewed
+                  ? "border-[var(--color-priority-done)]/40 bg-[var(--color-priority-done-bg)]/40 hover:bg-[var(--color-priority-done-bg)]/70"
+                  : "border-[var(--color-priority-urgent)]/40 bg-background/60 hover:bg-[var(--color-priority-urgent-bg)]/50"
+              }`}
+            >
+              <div className="min-w-0 flex-1">
+                <div
+                  className={`text-[12px] font-semibold ${
+                    allReviewed
+                      ? "text-[var(--color-priority-done)]"
+                      : "text-[var(--color-priority-urgent)]"
+                  }`}
+                >
+                  {allReviewed
+                    ? `All ${matchCount} clients reviewed`
+                    : ackedCount === 0
+                    ? `Review ${matchCount} affected ${
+                        matchCount === 1 ? "client" : "clients"
+                      }`
+                    : `${pendingCount} more to review (${ackedCount}/${matchCount} done)`}
+                </div>
+                <div className="mt-0.5 truncate text-[11px] text-foreground/65">
+                  {a.affectedClients
+                    .slice(0, 6)
+                    .map((c) => c.name)
+                    .join(" · ")}
+                  {matchCount > 6 ? ` · +${matchCount - 6} more` : ""}
+                </div>
+              </div>
+              <span className="text-sm font-semibold">→</span>
+            </Link>
           ) : null}
+
           <div className="mt-2 flex items-center justify-between gap-3">
             <a
               href={a.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+              className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground hover:underline"
             >
               Read on IRS.gov <ExternalLink className="h-3 w-3" />
             </a>
