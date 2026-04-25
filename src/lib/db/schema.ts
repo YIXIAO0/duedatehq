@@ -195,6 +195,16 @@ export const deadlineRules = pgTable(
   (t) => [
     index("deadline_rules_jurisdiction_idx").on(t.jurisdictionType, t.jurisdictionCode),
     index("deadline_rules_form_idx").on(t.formCode),
+    // Natural key — without this, re-running db:seed silently duplicates
+    // every existing rule because onConflictDoNothing() has no target to
+    // match against. Title is included in the key so we can evolve the
+    // wording of an existing rule by bumping `version`.
+    uniqueIndex("deadline_rules_natural_key_idx").on(
+      t.jurisdictionCode,
+      t.formCode,
+      t.title,
+      t.version,
+    ),
   ],
 );
 
