@@ -110,12 +110,16 @@ async function UpdatesNavLink() {
   // so by the time this runs, ctx is guaranteed.
   const ctx = await getCurrentContext();
   const summary = await getAnnouncementsSummary(ctx.user.id);
-  const count = summary.highRelevance7d;
-  const badge =
-    count > 0 ? (
-      <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--color-priority-urgent)] px-1 text-[10px] font-semibold text-white">
-        {count > 9 ? "9+" : count}
-      </span>
-    ) : null;
+  const hasUnseen = summary.highRelevance7d > 0;
+  // Subtle dot, not a loud red number — IRS updates is a secondary
+  // surface, the dashboard "Heads up" card is where deadline-affecting
+  // items get real estate. The dot just signals "there's something" so
+  // the user knows to check; the count lives on the page itself.
+  const badge = hasUnseen ? (
+    <span
+      aria-label={`${summary.highRelevance7d} new`}
+      className="inline-flex h-1.5 w-1.5 rounded-full bg-[var(--color-priority-urgent)]/70"
+    />
+  ) : null;
   return <NavLink href="/announcements" label="IRS updates" badge={badge} />;
 }

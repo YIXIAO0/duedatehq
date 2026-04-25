@@ -419,6 +419,12 @@ export async function getAnnouncementReview(
   //
   //    We also LEFT JOIN announcement_client_acks for the calling user so
   //    each row carries its own "acked?" flag.
+  //
+  //    NB: pre-stringified jsonb literal — Drizzle binds JS arrays as
+  //    raw params without a type, so `${array} @> ...` makes Postgres
+  //    treat it as text and the `@>` operator fails to resolve. Explicit
+  //    `::jsonb` cast on a JSON-string literal is the reliable shape.
+  const affectedJsonb = JSON.stringify(ann.affectedJurisdictions ?? []);
   const rows = await db.execute<{
     client_id: string;
     client_name: string;
@@ -447,7 +453,7 @@ export async function getAnnouncementReview(
         WHERE e.client_id = c.id
           AND e.archived_at IS NULL
           AND e.home_state IS NOT NULL
-          AND ${ann.affectedJurisdictions} @> jsonb_build_array(e.home_state)
+          AND (${affectedJsonb}::jsonb) ? e.home_state
       ) AS matched_states,
       (
         SELECT COALESCE(jsonb_agg(d ORDER BY d.effective_due_date ASC), '[]'::jsonb)
@@ -469,9 +475,7 @@ export async function getAnnouncementReview(
             -- Match on jurisdiction OR federal — federal items affect every
             -- federal-form deadline regardless of client state.
             AND (
-              r.jurisdiction_code = ANY(
-                SELECT jsonb_array_elements_text(${ann.affectedJurisdictions})
-              )
+              (${affectedJsonb}::jsonb) ? r.jurisdiction_code
               OR r.jurisdiction_code = 'federal'
             )
         ) d
@@ -490,7 +494,7 @@ export async function getAnnouncementReview(
         WHERE e.client_id = c.id
           AND e.archived_at IS NULL
           AND e.home_state IS NOT NULL
-          AND ${ann.affectedJurisdictions} @> jsonb_build_array(e.home_state)
+          AND (${affectedJsonb}::jsonb) ? e.home_state
       )
     ORDER BY acked ASC, c.name ASC
   `);

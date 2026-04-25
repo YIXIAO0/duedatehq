@@ -46,8 +46,8 @@ export function AnnouncementDismissButton({
       aria-label={variant === "undismiss" ? "Restore" : "Dismiss"}
       className={
         variant === "undismiss"
-          ? "inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
-          : "inline-flex items-center justify-center rounded-md p-1 text-muted-foreground/70 transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+          ? "inline-flex cursor-pointer items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+          : "inline-flex cursor-pointer items-center justify-center rounded-md p-1 text-muted-foreground/70 transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
       }
     >
       <Icon className={`${dim} ${pending ? "animate-spin" : ""}`} />

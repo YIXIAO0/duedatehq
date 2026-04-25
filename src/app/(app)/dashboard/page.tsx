@@ -211,9 +211,11 @@ function DashboardAnnouncementRow({ a }: { a: AnnouncementWithImpact }) {
               >
                 {allReviewed
                   ? `All ${matchCount} clients reviewed`
-                  : `Review ${pendingCount} of ${matchCount} affected ${
+                  : ackedCount === 0
+                  ? `Review ${matchCount} affected ${
                       matchCount === 1 ? "client" : "clients"
-                    }`}
+                    }`
+                  : `${pendingCount} more to review (${ackedCount}/${matchCount} done)`}
               </div>
               <div className="mt-0.5 truncate text-[11px] text-foreground/65">
                 {a.affectedClients
