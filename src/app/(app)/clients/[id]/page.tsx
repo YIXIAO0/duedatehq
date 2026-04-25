@@ -200,24 +200,12 @@ function DeadlinesSection({
     );
   }
 
-  // Group by entity when there are 2+ entities so the CPA's eye groups
-  // the work by sub-business. Single-entity clients render flat — the
-  // entity name would just be redundant noise.
-  const entityGroups = new Map<
-    string,
-    { entityName: string; entityType: string; rows: ClientDeadlineRow[] }
-  >();
-  for (const d of deadlines) {
-    const g = entityGroups.get(d.entityId);
-    if (g) g.rows.push(d);
-    else
-      entityGroups.set(d.entityId, {
-        entityName: d.entityName,
-        entityType: d.entityType,
-        rows: [d],
-      });
-  }
-
+  // Pure chronological order. Earlier I grouped by entity which broke
+  // the time flow (Mar 15 from entity A above Jun 15 from entity A
+  // above Apr 15 from entity B). For a CPA scanning "what's coming
+  // next?" the date axis must dominate. When the client has multiple
+  // entities, we show a small entity column so the row still answers
+  // "for which sub-business?".
   return (
     <section>
       <div className="mb-4 flex items-baseline justify-between">
@@ -231,46 +219,28 @@ function DeadlinesSection({
           Earliest first · filed history not shown
         </span>
       </div>
-
-      {showEntityCol ? (
-        <div className="space-y-4">
-          {Array.from(entityGroups.values()).map((g) => (
-            <div
-              key={g.rows[0].entityId}
-              className="overflow-hidden rounded-lg border border-border"
-            >
-              <div className="flex items-center gap-2 border-b border-border bg-muted/30 px-4 py-2">
-                <span className="text-sm font-medium">{g.entityName}</span>
-                <Badge variant="outline" className="text-[10px]">
-                  {entityTypeLabel(g.entityType)}
-                </Badge>
-                <span className="ml-auto text-xs text-muted-foreground">
-                  {g.rows.length}{" "}
-                  {g.rows.length === 1 ? "deadline" : "deadlines"}
-                </span>
-              </div>
-              <div className="divide-y divide-border">
-                {g.rows.map((d) => (
-                  <DeadlineRow key={d.id} d={d} />
-                ))}
-              </div>
-            </div>
+      <div className="overflow-hidden rounded-lg border border-border">
+        <div className="divide-y divide-border">
+          {deadlines.map((d) => (
+            <DeadlineRow
+              key={d.id}
+              d={d}
+              showEntityCol={showEntityCol}
+            />
           ))}
         </div>
-      ) : (
-        <div className="overflow-hidden rounded-lg border border-border">
-          <div className="divide-y divide-border">
-            {deadlines.map((d) => (
-              <DeadlineRow key={d.id} d={d} />
-            ))}
-          </div>
-        </div>
-      )}
+      </div>
     </section>
   );
 }
 
-function DeadlineRow({ d }: { d: ClientDeadlineRow }) {
+function DeadlineRow({
+  d,
+  showEntityCol,
+}: {
+  d: ClientDeadlineRow;
+  showEntityCol: boolean;
+}) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const due = new Date(d.effectiveDueDate + "T00:00:00");
@@ -305,7 +275,7 @@ function DeadlineRow({ d }: { d: ClientDeadlineRow }) {
         <div className="text-[11px] text-muted-foreground">{relLabel}</div>
       </div>
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
           <span className="font-mono text-sm font-semibold">{d.formCode}</span>
           {d.irrevocable ? (
             <Badge className="bg-[var(--color-priority-urgent-bg)] text-[10px] text-[var(--color-priority-urgent)] hover:bg-[var(--color-priority-urgent-bg)]">
@@ -317,6 +287,11 @@ function DeadlineRow({ d }: { d: ClientDeadlineRow }) {
             · {d.ruleTitle}
           </span>
         </div>
+        {showEntityCol ? (
+          <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
+            {d.entityName} · {entityTypeLabel(d.entityType)}
+          </div>
+        ) : null}
       </div>
       <StatusBadge status={d.status} isOverdue={isOverdue} />
     </Link>
