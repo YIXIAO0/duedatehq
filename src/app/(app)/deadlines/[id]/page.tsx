@@ -19,7 +19,11 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { getCurrentContext } from "@/lib/auth/current-org";
-import { getDeadlineDetail } from "@/lib/services/deadlines";
+import {
+  getDeadlineDetail,
+  getDeadlineHistory,
+  type DeadlineHistoryEntry,
+} from "@/lib/services/deadlines";
 import { DeadlineActionBar } from "./deadline-action-bar";
 import { NotesForm } from "./notes-form";
 
@@ -47,6 +51,10 @@ async function DeadlineDetail({ params }: { params: Params }) {
 
   const d = await getDeadlineDetail(id, ctx.organization.id);
   if (!d) notFound();
+
+  // History timeline pulled from audit_events. Cheap query (indexed),
+  // and rendered below Notes so the primary actions stay above the fold.
+  const history = await getDeadlineHistory(d.id, ctx.organization.id);
 
   const effectiveDueDate = d.extension_due_date ?? d.due_date;
   const status = d.status;
@@ -149,6 +157,7 @@ async function DeadlineDetail({ params }: { params: Params }) {
                   deadlineId={d.id}
                   status={status}
                   defaultNewDueDate={defaultNewDueDate}
+                  currentExtensionDueDate={d.extension_due_date}
                 />
               </div>
             </div>
@@ -169,6 +178,29 @@ async function DeadlineDetail({ params }: { params: Params }) {
           <NotesForm deadlineId={d.id} initialNotes={d.notes} />
         </CardContent>
       </Card>
+
+      {/* History — chronological audit trail of every change to this
+          deadline. Reads from audit_events. Lets a CPA prove "we filed
+          extension on Apr 25 to Oct 15, then disaster relief moved it
+          to Jan 15" without digging through DB rows. */}
+      {history.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">History</CardTitle>
+            <CardDescription>
+              Every change to this deadline. Useful when a client (or the
+              IRS) asks &ldquo;when did this extension get filed?&rdquo;
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ol className="space-y-3">
+              {history.map((h) => (
+                <HistoryEntry key={h.id} entry={h} />
+              ))}
+            </ol>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {/* Rule reference */}
       <Card>
@@ -236,6 +268,131 @@ async function DeadlineDetail({ params }: { params: Params }) {
       </Card>
     </div>
   );
+}
+
+// ---------------------------------------------------------------------------
+// History timeline rendering
+//
+// Each audit_events action gets a tailored one-liner that reads the
+// payload fields we ship from the service layer. This is intentionally
+// dumb — no AI, no rephrasing — because audit timelines need to be
+// reproducible and exact for IRS / client disputes.
+// ---------------------------------------------------------------------------
+
+function HistoryEntry({ entry }: { entry: DeadlineHistoryEntry }) {
+  const { label, body, accent } = describeHistory(entry);
+  const actorLabel =
+    entry.actorType === "cron"
+      ? "Automated"
+      : entry.actorType === "agent"
+      ? "AI agent"
+      : entry.actorType === "system"
+      ? "System"
+      : entry.actorName ?? entry.actorEmail ?? "User";
+  return (
+    <li className="flex gap-3">
+      <div
+        className={`mt-1 h-2 w-2 shrink-0 rounded-full ${accent}`}
+        aria-hidden
+      />
+      <div className="min-w-0 flex-1">
+        <div className="text-sm">
+          <span className="font-medium">{label}</span>
+          {body ? (
+            <span className="ml-1 text-muted-foreground">{body}</span>
+          ) : null}
+        </div>
+        <div className="mt-0.5 text-xs text-muted-foreground">
+          {actorLabel} ·{" "}
+          {entry.occurredAt.toLocaleString("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+            hour: "numeric",
+            minute: "2-digit",
+          })}
+        </div>
+      </div>
+    </li>
+  );
+}
+
+function describeHistory(entry: DeadlineHistoryEntry): {
+  label: string;
+  body: string;
+  accent: string;
+} {
+  const p = entry.payload ?? {};
+  switch (entry.action) {
+    case "deadline.extension_filed": {
+      const isReExtension = Boolean(p.isReExtension);
+      const prevExt = (p.previousExtensionDueDate ?? null) as string | null;
+      const orig = (p.originalDueDate ?? null) as string | null;
+      const newDate = (p.newDueDate ?? null) as string | null;
+      // For re-extensions, show "From the prior extension date → new"
+      // so a CPA reading the timeline can reconstruct the chain:
+      // Apr 15 → Oct 15 (1st extension), Oct 15 → Jan 15 (disaster).
+      const fromDate = isReExtension && prevExt ? prevExt : orig;
+      return {
+        label: isReExtension
+          ? "Extension re-filed (replaces prior extension)"
+          : "Extension filed",
+        body: fromDate && newDate
+          ? `from ${humanDate(fromDate)} → ${humanDate(newDate)}`
+          : "",
+        accent: "bg-[var(--color-priority-high)]",
+      };
+    }
+    case "deadline.completed": {
+      const wasExtended = Boolean(p.wasExtended);
+      const eff = (p.effectiveDueDate ?? p.originalDueDate ?? null) as
+        | string
+        | null;
+      return {
+        label: "Marked as filed",
+        body: eff
+          ? wasExtended
+            ? `(was extended, due ${humanDate(eff)})`
+            : `(due ${humanDate(eff)})`
+          : "",
+        accent: "bg-[var(--color-priority-done)]",
+      };
+    }
+    case "deadline.reopened": {
+      const prev = (p.previousStatus ?? null) as string | null;
+      return {
+        label: "Reopened",
+        body: prev ? `from ${prev}` : "",
+        accent: "bg-muted-foreground",
+      };
+    }
+    case "deadline.notes_updated": {
+      const had = Boolean(p.hadNotes);
+      const has = Boolean(p.hasNotes);
+      return {
+        label:
+          !had && has ? "Notes added" : had && !has ? "Notes cleared" : "Notes updated",
+        body: "",
+        accent: "bg-muted-foreground",
+      };
+    }
+    default:
+      // Unknown action — surface raw to be safe rather than hide.
+      return {
+        label: entry.action,
+        body: "",
+        accent: "bg-muted-foreground",
+      };
+  }
+}
+
+function humanDate(iso: string): string {
+  const d = new Date(iso + (iso.length === 10 ? "T00:00:00" : ""));
+  return d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 function StatusBadge({

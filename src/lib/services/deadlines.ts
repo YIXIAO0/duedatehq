@@ -81,6 +81,26 @@ export async function markCompleted(input: MarkCompletedInput) {
   const parsed = MarkCompletedInputSchema.parse(input);
   const db = getDb();
 
+  // Read pre-state so the audit payload knows what we transitioned FROM.
+  // Cheap (one indexed read) + makes the history timeline properly
+  // narratable: "Filed (was extended, due Oct 15)".
+  const [pre] = await db
+    .select()
+    .from(deadlineInstances)
+    .where(
+      and(
+        eq(deadlineInstances.id, parsed.deadlineInstanceId),
+        eq(deadlineInstances.orgId, parsed.orgId),
+      ),
+    )
+    .limit(1);
+
+  if (!pre) {
+    throw new Error(
+      `Deadline ${parsed.deadlineInstanceId} not found in org ${parsed.orgId}`,
+    );
+  }
+
   const [row] = await db
     .update(deadlineInstances)
     .set({
@@ -110,7 +130,14 @@ export async function markCompleted(input: MarkCompletedInput) {
     action: "deadline.completed",
     targetType: "deadline_instance",
     targetId: row.id,
-    payload: { taxYear: row.taxYear, dueDate: row.dueDate },
+    payload: {
+      taxYear: row.taxYear,
+      originalDueDate: row.dueDate,
+      effectiveDueDate: row.extensionDueDate ?? row.dueDate,
+      previousStatus: pre.status,
+      wasExtended: pre.status === "extended",
+      completedAt: row.completedAt?.toISOString(),
+    },
   });
 
   return row;
@@ -133,6 +160,27 @@ export type FileExtensionInput = z.input<typeof FileExtensionInputSchema>;
 export async function fileExtension(input: FileExtensionInput) {
   const parsed = FileExtensionInputSchema.parse(input);
   const db = getDb();
+
+  // Capture pre-state — critical here. If this is the SECOND extension
+  // (e.g., disaster relief stacking on top of Form 4868), the previous
+  // extension_due_date is about to be overwritten and we need to log it
+  // in the audit chain so the timeline can read "Apr 15 → Oct 15 → Jan 15".
+  const [pre] = await db
+    .select()
+    .from(deadlineInstances)
+    .where(
+      and(
+        eq(deadlineInstances.id, parsed.deadlineInstanceId),
+        eq(deadlineInstances.orgId, parsed.orgId),
+      ),
+    )
+    .limit(1);
+
+  if (!pre) {
+    throw new Error(
+      `Deadline ${parsed.deadlineInstanceId} not found in org ${parsed.orgId}`,
+    );
+  }
 
   const [row] = await db
     .update(deadlineInstances)
@@ -166,7 +214,11 @@ export async function fileExtension(input: FileExtensionInput) {
     targetId: row.id,
     payload: {
       originalDueDate: row.dueDate,
+      previousExtensionDueDate: pre.extensionDueDate, // null on first extension
+      previousStatus: pre.status, // "pending" first time, "extended" if stacking
       newDueDate: parsed.newDueDate,
+      extensionFiledAt: row.extensionFiledAt?.toISOString(),
+      isReExtension: pre.status === "extended",
     },
   });
 
@@ -190,6 +242,24 @@ export async function updateDeadlineNotes(input: UpdateNotesInput) {
   const parsed = UpdateNotesInputSchema.parse(input);
   const db = getDb();
 
+  // Pre-state for the audit; we deliberately do NOT log the notes
+  // content (could contain SSNs, PII, client gossip) — just the
+  // boolean had/has so the timeline can say "notes updated".
+  const [pre] = await db
+    .select({ notes: deadlineInstances.notes })
+    .from(deadlineInstances)
+    .where(
+      and(
+        eq(deadlineInstances.id, parsed.deadlineInstanceId),
+        eq(deadlineInstances.orgId, parsed.orgId),
+      ),
+    )
+    .limit(1);
+
+  if (!pre) {
+    throw new Error(`Deadline ${parsed.deadlineInstanceId} not found`);
+  }
+
   const [row] = await db
     .update(deadlineInstances)
     .set({ notes: parsed.notes, updatedAt: new Date() })
@@ -212,6 +282,11 @@ export async function updateDeadlineNotes(input: UpdateNotesInput) {
     action: "deadline.notes_updated",
     targetType: "deadline_instance",
     targetId: row.id,
+    payload: {
+      hadNotes: !!(pre.notes && pre.notes.length > 0),
+      hasNotes: !!(parsed.notes && parsed.notes.length > 0),
+      // Content deliberately omitted — too easy to leak PII into logs.
+    },
   });
 
   return row;
@@ -224,6 +299,21 @@ export async function updateDeadlineNotes(input: UpdateNotesInput) {
 export async function reopenDeadline(input: MarkCompletedInput) {
   const parsed = MarkCompletedInputSchema.parse(input);
   const db = getDb();
+
+  // Capture pre-state. A "reopened" event without context is hard to
+  // read on the timeline — we want "Reopened from Filed (was due Apr 15)".
+  const [pre] = await db
+    .select()
+    .from(deadlineInstances)
+    .where(
+      and(
+        eq(deadlineInstances.id, parsed.deadlineInstanceId),
+        eq(deadlineInstances.orgId, parsed.orgId),
+      ),
+    )
+    .limit(1);
+
+  if (!pre) throw new Error(`Deadline ${parsed.deadlineInstanceId} not found`);
 
   const [row] = await db
     .update(deadlineInstances)
@@ -251,6 +341,10 @@ export async function reopenDeadline(input: MarkCompletedInput) {
     action: "deadline.reopened",
     targetType: "deadline_instance",
     targetId: row.id,
+    payload: {
+      previousStatus: pre.status,
+      previousCompletedAt: pre.completedAt?.toISOString() ?? null,
+    },
   });
 
   return row;
@@ -452,5 +546,69 @@ export async function listDeadlinesForClient(args: {
     entityId: r.entity_id,
     entityName: r.entity_name,
     entityType: r.entity_type,
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// Deadline history — reads audit_events for one deadline and joins the
+// actor (user) so we can render "Sarah filed extension on Apr 25".
+//
+// Org-scoped via the deadline existence check (caller passes orgId).
+// Sorted oldest → newest because timelines read top-to-bottom that way.
+// ---------------------------------------------------------------------------
+
+export type DeadlineHistoryEntry = {
+  id: string;
+  action: string;
+  occurredAt: Date;
+  actorType: "user" | "agent" | "cron" | "system";
+  actorId: string | null;
+  actorName: string | null;
+  actorEmail: string | null;
+  payload: Record<string, unknown> | null;
+};
+
+export async function getDeadlineHistory(
+  deadlineInstanceId: string,
+  orgId: string,
+): Promise<DeadlineHistoryEntry[]> {
+  const db = getDb();
+  const rows = await db.execute<{
+    id: string;
+    action: string;
+    occurred_at: Date;
+    actor_type: "user" | "agent" | "cron" | "system";
+    actor_id: string | null;
+    actor_name: string | null;
+    actor_email: string | null;
+    payload: Record<string, unknown> | null;
+  }>(sql`
+    SELECT
+      ae.id,
+      ae.action,
+      ae.occurred_at,
+      ae.actor_type,
+      ae.actor_id,
+      u.full_name AS actor_name,
+      u.email AS actor_email,
+      ae.payload
+    FROM audit_events ae
+    LEFT JOIN users u
+      ON ae.actor_type = 'user' AND u.id = ae.actor_id
+    WHERE ae.org_id = ${orgId}
+      AND ae.target_type = 'deadline_instance'
+      AND ae.target_id = ${deadlineInstanceId}
+    ORDER BY ae.occurred_at ASC
+  `);
+
+  return rows.rows.map((r) => ({
+    id: r.id,
+    action: r.action,
+    occurredAt: new Date(r.occurred_at),
+    actorType: r.actor_type,
+    actorId: r.actor_id,
+    actorName: r.actor_name,
+    actorEmail: r.actor_email,
+    payload: r.payload,
   }));
 }
