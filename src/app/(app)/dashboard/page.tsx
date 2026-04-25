@@ -87,8 +87,14 @@ async function DashboardAnnouncements() {
   // request data first; the parent page is dynamic via DashboardStats
   // but each Suspense boundary needs to qualify on its own.
   await getCurrentContext();
+  // 30-day window — high-impact IRS regs (tip-income final regs,
+  // remittance tax regs, disaster-relief postponements) stay relevant
+  // for weeks, not days. The header "Updates" badge intentionally
+  // uses the tighter 7-day window so it can return to zero and
+  // signal "new alerts this week" — the card is stable display of
+  // "what's worth knowing right now", which is a different question.
   const items = await listAnnouncements({
-    sinceDays: 7,
+    sinceDays: 30,
     minScore: 4,
     limit: 3,
   });
@@ -103,7 +109,7 @@ async function DashboardAnnouncements() {
             IRS updates worth reviewing
           </span>
           <span className="text-xs text-muted-foreground">
-            · last 7 days
+            · last 30 days
           </span>
         </div>
         <Link
