@@ -174,9 +174,32 @@ function ClientRow({
           </div>
         ) : null}
       </div>
-      <div className="hidden text-sm text-muted-foreground sm:block">
-        Added {client.createdAt.toLocaleDateString()}
-      </div>
+      {/* Right-side stat — open work for this client at a glance.
+          Tinted red when there are active items so the eye lands on
+          high-load clients first. Suppressed when 0 (no entities or all
+          filed) so the row stays clean. */}
+      {client.activeDeadlineCount > 0 ? (
+        <div className="hidden flex-col items-end leading-tight sm:flex">
+          <span
+            className={`text-sm font-semibold ${
+              client.activeDeadlineCount >= 10
+                ? "text-[var(--color-priority-urgent)]"
+                : client.activeDeadlineCount >= 5
+                ? "text-[var(--color-priority-high)]"
+                : "text-foreground"
+            }`}
+          >
+            {client.activeDeadlineCount}
+          </span>
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            open
+          </span>
+        </div>
+      ) : (
+        <div className="hidden text-xs text-muted-foreground sm:block">
+          Added {client.createdAt.toLocaleDateString()}
+        </div>
+      )}
     </div>
   );
 

@@ -317,9 +317,11 @@ export async function mergeClients(
 }
 
 // ---------------------------------------------------------------------------
-// Client list WITH per-client entity counts — used by the /clients page so
-// users can see at a glance "which clients have only 1 entity" (candidates
-// for merge) vs "which already have multiple".
+// Client list WITH per-client entity + active-deadline counts — used by the
+// /clients page so the CPA can scan "who's structurally complex" (entities)
+// vs "who has the most work left" (active deadlines) in one pass. Active =
+// pending / in_progress / extended (the engine treats extended as still
+// open work because the filing hasn't actually happened yet).
 // ---------------------------------------------------------------------------
 
 export type ClientWithEntityCount = {
@@ -328,6 +330,8 @@ export type ClientWithEntityCount = {
   primaryContactEmail: string | null;
   createdAt: Date;
   entityCount: number;
+  /** Open deadlines: pending + in_progress + extended (not completed/missed). */
+  activeDeadlineCount: number;
 };
 
 export async function listClientsWithEntityCount(
@@ -336,31 +340,46 @@ export async function listClientsWithEntityCount(
   const parsed = ListClientsInputSchema.parse(input);
   const db = getDb();
 
-  // Single-query join: LEFT JOIN entities so clients with 0 entities still
-  // appear (with count=0). We filter archived entities out of the count so
-  // the number on screen matches what the user sees inside the client.
   const archivedFilter = parsed.includeArchived
     ? sql``
     : sql`AND c.archived_at IS NULL`;
 
+  // Scalar subqueries (not LEFT JOINs) for both counts — avoids the
+  // Cartesian-product bug you'd get from joining clients × entities ×
+  // deadline_instances and then needing COUNT(DISTINCT ...) gymnastics.
+  // Both subqueries hit existing indexes:
+  //   - entity count:  entities_client_idx + entities.archived_at IS NULL
+  //   - deadline count: deadline_instances_org_status_idx (org_id, status)
+  //                     + the join back via entities.client_id
   const rows = await db.execute<{
     id: string;
     name: string;
     primary_contact_email: string | null;
     created_at: Date;
     entity_count: number;
+    active_deadline_count: number;
   }>(sql`
     SELECT c.id,
            c.name,
            c.primary_contact_email,
            c.created_at,
-           COALESCE(COUNT(e.id) FILTER (WHERE e.archived_at IS NULL), 0)::int
-             AS entity_count
+           (
+             SELECT COUNT(*)::int
+             FROM entities e
+             WHERE e.client_id = c.id
+               AND e.archived_at IS NULL
+           ) AS entity_count,
+           (
+             SELECT COUNT(*)::int
+             FROM deadline_instances di
+             INNER JOIN entities e2 ON e2.id = di.entity_id
+             WHERE e2.client_id = c.id
+               AND e2.archived_at IS NULL
+               AND di.status IN ('pending', 'in_progress', 'extended')
+           ) AS active_deadline_count
     FROM clients c
-    LEFT JOIN entities e ON e.client_id = c.id
     WHERE c.org_id = ${parsed.orgId}
       ${archivedFilter}
-    GROUP BY c.id
     ORDER BY c.created_at DESC
     LIMIT ${parsed.limit}
     OFFSET ${parsed.offset}
@@ -372,5 +391,6 @@ export async function listClientsWithEntityCount(
     primaryContactEmail: r.primary_contact_email,
     createdAt: new Date(r.created_at),
     entityCount: Number(r.entity_count),
+    activeDeadlineCount: Number(r.active_deadline_count),
   }));
 }
