@@ -66,6 +66,8 @@ export type ScrapeResult = {
   classified: number;
   classifyErrors: number;
   storedIds: string[];
+  /** First few classification error messages, for fast triage. */
+  errorSamples: string[];
 };
 
 // ---------------------------------------------------------------------------
@@ -261,31 +263,44 @@ async function classifyAndStoreOne(
 ): Promise<{ id: string; classification: Classification }> {
   "use step";
   console.log(
-    `[scrape] step=classifyOne start externalId=${item.externalId.slice(-32)}`,
+    `[scrape] step=classifyOne start externalId=${item.externalId}`,
   );
   const t0 = Date.now();
 
-  const { experimental_output: out } = await generateText({
-    model: "anthropic/claude-haiku-4.5",
-    temperature: 0.2, // facts, not creativity
-    experimental_output: Output.object({ schema: ClassificationSchema }),
-    system:
-      "You are a CPA's research assistant classifying IRS Newsroom announcements. " +
-      "Be conservative on relevance. Score 5 only for items that change a real " +
-      "deadline or filing requirement (disaster relief, form threshold change, " +
-      "e-file mandate). General PR / outreach / op-ed = 1 or 2. " +
-      "If a state list isn't explicit, return [\"federal\"] for nationwide items. " +
-      "Categories: " +
-      ANNOUNCEMENT_CATEGORIES.join(", ") +
-      ".",
-    prompt: [
-      `Title: ${item.title}`,
-      `Published: ${item.pubDate}`,
-      `URL: ${item.link}`,
-      `Excerpt: ${item.description}`,
-    ].join("\n"),
-  });
-  const cls = out;
+  let cls: Classification;
+  try {
+    const { experimental_output: out } = await generateText({
+      model: "anthropic/claude-haiku-4.5",
+      temperature: 0.2, // facts, not creativity
+      experimental_output: Output.object({ schema: ClassificationSchema }),
+      system:
+        "You are a CPA's research assistant classifying IRS Newsroom announcements. " +
+        "Be conservative on relevance. Score 5 only for items that change a real " +
+        "deadline or filing requirement (disaster relief, form threshold change, " +
+        "e-file mandate). General PR / outreach / op-ed = 1 or 2. " +
+        'If a state list isn\'t explicit, return ["federal"] for nationwide items. ' +
+        "Categories: " +
+        ANNOUNCEMENT_CATEGORIES.join(", ") +
+        ".",
+      prompt: [
+        `Title: ${item.title}`,
+        `Published: ${item.pubDate}`,
+        `URL: ${item.link}`,
+        `Excerpt: ${item.description}`,
+      ].join("\n"),
+    });
+    cls = out;
+  } catch (e) {
+    // Log what AI Gateway / SDK actually said so we can fix it instead of
+    // staring at "classifyErrors: 14". Then re-throw as FatalError so the
+    // step doesn't burn 3 retries on what's almost certainly a config bug.
+    const message = e instanceof Error ? e.message : String(e);
+    const stack = e instanceof Error ? e.stack?.split("\n").slice(0, 3).join(" | ") : "";
+    console.error(
+      `[scrape] step=classifyOne ai_call_failed externalId=${item.externalId} message=${message} stack=${stack}`,
+    );
+    throw new FatalError(`AI classify: ${message}`);
+  }
 
   const db = getDb();
   // ON CONFLICT for the rare race where two cron ticks fire concurrently.
@@ -341,6 +356,7 @@ export async function scrapeAnnouncementsWorkflow(): Promise<ScrapeResult> {
   let classified = 0;
   let classifyErrors = 0;
   const storedIds: string[] = [];
+  const errorSamples: string[] = [];
 
   // Sequential per-item classification. Daily volume is 1–10 new items;
   // parallelism would only matter if we expanded to many feeds at once.
@@ -351,9 +367,15 @@ export async function scrapeAnnouncementsWorkflow(): Promise<ScrapeResult> {
       if (id) storedIds.push(id);
     } catch (e) {
       classifyErrors++;
+      const msg = e instanceof Error ? e.message : String(e);
       console.error(
-        `[scrape] classify failed externalId=${item.externalId.slice(-32)} err=${e instanceof Error ? e.message : String(e)}`,
+        `[scrape] classify failed externalId=${item.externalId} err=${msg}`,
       );
+      // Keep the first 3 distinct errors so the smoke-test response is
+      // self-debugging — no need to chase Vercel logs for a typo.
+      if (errorSamples.length < 3 && !errorSamples.includes(msg)) {
+        errorSamples.push(msg);
+      }
     }
   }
 
@@ -363,6 +385,7 @@ export async function scrapeAnnouncementsWorkflow(): Promise<ScrapeResult> {
     classified,
     classifyErrors,
     storedIds,
+    errorSamples,
   };
 
   console.log(
