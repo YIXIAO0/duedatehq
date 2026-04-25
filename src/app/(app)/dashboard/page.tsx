@@ -97,35 +97,25 @@ async function DashboardAnnouncements() {
     userId: ctx.user.id, // exclude this user's dismissed items
   });
 
-  // Reframe per coworker feedback: this product is about deadlines, not
-  // an IRS news feed. Only surface items that imply real client work:
-  //   - has at least one of our clients in the affected jurisdictions, OR
-  //   - is a deadline-shifting category (disaster_relief / form_change)
-  //     even if federal-only — those move every CPA's calendar.
-  // Procedural / general items live on /announcements only.
-  // ALSO hide items where every affected client has already been
-  // reviewed — the work is done, get it off the dashboard.
+  // Strict rule: only surface items where we can name specific clients
+  // affected. If `affectedClients.length === 0` we don't have a credible
+  // claim that this changes the CPA's work TODAY — the federal-only
+  // 1BBB regs are real news, but if we can't say "this hits Anderson,
+  // Martinez, Smith" then the dashboard is the wrong surface for it.
+  // Such items still appear on /announcements (header nav "IRS updates").
+  //
+  // Also hide items where every affected client is already reviewed.
   const deadlineRelevant = allItems.filter((a) => {
-    const isDeadlineRelevant =
-      a.affectedClients.length > 0 ||
-      a.category === "disaster_relief" ||
-      a.category === "form_change";
-    if (!isDeadlineRelevant) return false;
-    // Hide when fully reviewed (nothing left to do).
-    const fullyReviewed =
-      a.affectedClients.length > 0 &&
-      a.ackedClientCount >= a.affectedClients.length;
+    if (a.affectedClients.length === 0) return false;
+    const fullyReviewed = a.ackedClientCount >= a.affectedClients.length;
     return !fullyReviewed;
   });
 
-  // Sort: items affecting your clients first (most actionable), then by
-  // unfinished review progress (more pending → higher priority), then by
-  // recency. The CPA's eye lands on "I have 5 unreviewed clients" first.
+  // Sort: more pending reviews first (most work to do), then by recency.
+  // The CPA's eye lands on "I have 5 unreviewed clients" before
+  // "I have 1 unreviewed client".
   const items = deadlineRelevant
     .sort((a, b) => {
-      const aHas = a.affectedClients.length > 0 ? 1 : 0;
-      const bHas = b.affectedClients.length > 0 ? 1 : 0;
-      if (aHas !== bHas) return bHas - aHas;
       const aPending = a.affectedClients.length - a.ackedClientCount;
       const bPending = b.affectedClients.length - b.ackedClientCount;
       if (aPending !== bPending) return bPending - aPending;
@@ -141,7 +131,7 @@ async function DashboardAnnouncements() {
         <div className="flex items-center gap-2">
           <AlertTriangle className="h-4 w-4 text-[var(--color-priority-urgent)]" />
           <span className="text-sm font-semibold text-[var(--color-priority-urgent)]">
-            Heads up — these may affect your deadlines
+            Heads up — affecting your clients&apos; deadlines
           </span>
         </div>
         <Link
