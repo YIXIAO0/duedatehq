@@ -342,3 +342,97 @@ export async function getDeadlineDetail(
 export type DeadlineDetail = NonNullable<
   Awaited<ReturnType<typeof getDeadlineDetail>>
 >;
+
+// ---------------------------------------------------------------------------
+// Deadlines for a single client — used by the /clients/[id] page so the
+// CPA can see the full work surface for one client without bouncing to
+// the dashboard. Returns open + extended (NOT completed/missed); the
+// caller can opt-in to completed via includeFiled if we add that toggle.
+// Sorted by effective due date so the next thing to do is at the top.
+// ---------------------------------------------------------------------------
+
+export type ClientDeadlineRow = {
+  id: string;
+  taxYear: number;
+  dueDate: string;
+  effectiveDueDate: string;
+  status: string;
+  notes: string | null;
+  formCode: string;
+  ruleTitle: string;
+  jurisdictionCode: string;
+  irrevocable: boolean;
+  entityId: string;
+  entityName: string;
+  entityType: string;
+};
+
+export async function listDeadlinesForClient(args: {
+  orgId: string;
+  clientId: string;
+  /** Default false — only show work-still-to-do. Set true for full history. */
+  includeFiled?: boolean;
+}): Promise<ClientDeadlineRow[]> {
+  const db = getDb();
+  const includeFiled = args.includeFiled ?? false;
+
+  const statusFilter = includeFiled
+    ? sql``
+    : sql`AND di.status IN ('pending', 'in_progress', 'extended')`;
+
+  const rows = await db.execute<{
+    id: string;
+    tax_year: number;
+    due_date: string;
+    effective_due_date: string;
+    status: string;
+    notes: string | null;
+    form_code: string;
+    rule_title: string;
+    jurisdiction_code: string;
+    irrevocable: boolean;
+    entity_id: string;
+    entity_name: string;
+    entity_type: string;
+  }>(sql`
+    SELECT
+      di.id,
+      di.tax_year,
+      di.due_date::text AS due_date,
+      COALESCE(di.extension_due_date, di.due_date)::text AS effective_due_date,
+      di.status::text AS status,
+      di.notes,
+      r.form_code,
+      r.title AS rule_title,
+      r.jurisdiction_code,
+      r.irrevocable,
+      e.id AS entity_id,
+      e.name AS entity_name,
+      e.entity_type::text AS entity_type
+    FROM deadline_instances di
+    INNER JOIN deadline_rules r ON r.id = di.rule_id
+    INNER JOIN entities e ON e.id = di.entity_id
+    INNER JOIN clients c ON c.id = e.client_id
+    WHERE c.id = ${args.clientId}
+      AND c.org_id = ${args.orgId}
+      AND e.archived_at IS NULL
+      ${statusFilter}
+    ORDER BY effective_due_date ASC, e.name ASC, r.form_code ASC
+  `);
+
+  return rows.rows.map((r) => ({
+    id: r.id,
+    taxYear: r.tax_year,
+    dueDate: r.due_date,
+    effectiveDueDate: r.effective_due_date,
+    status: r.status,
+    notes: r.notes,
+    formCode: r.form_code,
+    ruleTitle: r.rule_title,
+    jurisdictionCode: r.jurisdiction_code,
+    irrevocable: r.irrevocable,
+    entityId: r.entity_id,
+    entityName: r.entity_name,
+    entityType: r.entity_type,
+  }));
+}

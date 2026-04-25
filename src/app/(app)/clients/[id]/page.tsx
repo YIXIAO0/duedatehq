@@ -16,11 +16,19 @@ import {
   Building2,
   User as UserIcon,
   FileText,
+  CheckCircle2,
+  AlertTriangle,
+  Calendar,
+  Clock,
 } from "lucide-react";
 import { getCurrentContext } from "@/lib/auth/current-org";
 import { getDb } from "@/lib/db";
 import { clients, entities, deadlineInstances, deadlineRules } from "@/lib/db/schema";
 import { isNull } from "drizzle-orm";
+import {
+  listDeadlinesForClient,
+  type ClientDeadlineRow,
+} from "@/lib/services/deadlines";
 import { AddEntityForm } from "./add-entity-form";
 import { ClientActions } from "./client-actions";
 import { EntityActions } from "./entity-actions";
@@ -69,6 +77,14 @@ async function ClientDetail({ params }: { params: Params }) {
       ),
     );
 
+  // All open + extended deadlines for this client, sorted by effective
+  // due date. We don't include filed/missed in the main view — there's
+  // a "Show filed" toggle for that on V2.
+  const deadlines = await listDeadlinesForClient({
+    orgId: ctx.organization.id,
+    clientId: id,
+  });
+
   return (
     <div className="space-y-8">
       {/* Client header */}
@@ -108,6 +124,17 @@ async function ClientDetail({ params }: { params: Params }) {
         </div>
       </div>
 
+      {/* Deadlines — the headline section. Sits above entities because
+          "what's due for this client" is the primary CPA question on
+          this page. Hidden when the client has no entities yet (no
+          deadlines materialized). */}
+      {entityRows.length > 0 ? (
+        <DeadlinesSection
+          deadlines={deadlines}
+          showEntityCol={entityRows.length > 1}
+        />
+      ) : null}
+
       {/* Entities */}
       <section>
         <div className="mb-4 flex items-center justify-between">
@@ -142,6 +169,209 @@ async function ClientDetail({ params }: { params: Params }) {
       </section>
     </div>
   );
+}
+
+function DeadlinesSection({
+  deadlines,
+  showEntityCol,
+}: {
+  deadlines: ClientDeadlineRow[];
+  showEntityCol: boolean;
+}) {
+  if (deadlines.length === 0) {
+    return (
+      <section>
+        <div className="mb-4 flex items-baseline justify-between">
+          <h2 className="text-lg font-semibold">Open deadlines</h2>
+          <span className="text-xs text-muted-foreground">
+            Filed history not shown
+          </span>
+        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>Nothing open</CardTitle>
+            <CardDescription>
+              All deadlines for this client are filed (or none have been
+              materialized yet — try adding an entity below).
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      </section>
+    );
+  }
+
+  // Group by entity when there are 2+ entities so the CPA's eye groups
+  // the work by sub-business. Single-entity clients render flat — the
+  // entity name would just be redundant noise.
+  const entityGroups = new Map<
+    string,
+    { entityName: string; entityType: string; rows: ClientDeadlineRow[] }
+  >();
+  for (const d of deadlines) {
+    const g = entityGroups.get(d.entityId);
+    if (g) g.rows.push(d);
+    else
+      entityGroups.set(d.entityId, {
+        entityName: d.entityName,
+        entityType: d.entityType,
+        rows: [d],
+      });
+  }
+
+  return (
+    <section>
+      <div className="mb-4 flex items-baseline justify-between">
+        <h2 className="text-lg font-semibold">
+          Open deadlines{" "}
+          <span className="text-sm font-normal text-muted-foreground">
+            ({deadlines.length})
+          </span>
+        </h2>
+        <span className="text-xs text-muted-foreground">
+          Earliest first · filed history not shown
+        </span>
+      </div>
+
+      {showEntityCol ? (
+        <div className="space-y-4">
+          {Array.from(entityGroups.values()).map((g) => (
+            <div
+              key={g.rows[0].entityId}
+              className="overflow-hidden rounded-lg border border-border"
+            >
+              <div className="flex items-center gap-2 border-b border-border bg-muted/30 px-4 py-2">
+                <span className="text-sm font-medium">{g.entityName}</span>
+                <Badge variant="outline" className="text-[10px]">
+                  {entityTypeLabel(g.entityType)}
+                </Badge>
+                <span className="ml-auto text-xs text-muted-foreground">
+                  {g.rows.length}{" "}
+                  {g.rows.length === 1 ? "deadline" : "deadlines"}
+                </span>
+              </div>
+              <div className="divide-y divide-border">
+                {g.rows.map((d) => (
+                  <DeadlineRow key={d.id} d={d} />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="overflow-hidden rounded-lg border border-border">
+          <div className="divide-y divide-border">
+            {deadlines.map((d) => (
+              <DeadlineRow key={d.id} d={d} />
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function DeadlineRow({ d }: { d: ClientDeadlineRow }) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const due = new Date(d.effectiveDueDate + "T00:00:00");
+  const days = Math.round(
+    (due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
+  );
+  const isOverdue = days < 0;
+  const isUrgent = days >= 0 && days <= 7;
+  const dateColor = isOverdue
+    ? "text-[var(--color-priority-urgent)]"
+    : isUrgent
+    ? "text-[var(--color-priority-high)]"
+    : "text-foreground";
+
+  const relLabel = isOverdue
+    ? `${Math.abs(days)}d overdue`
+    : days === 0
+    ? "Today"
+    : days === 1
+    ? "Tomorrow"
+    : `In ${days}d`;
+
+  return (
+    <Link
+      href={`/deadlines/${d.id}`}
+      className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-muted/40"
+    >
+      <div className="w-20 shrink-0">
+        <div className={`text-sm font-semibold ${dateColor}`}>
+          {formatShortDate(d.effectiveDueDate)}
+        </div>
+        <div className="text-[11px] text-muted-foreground">{relLabel}</div>
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-sm font-semibold">{d.formCode}</span>
+          {d.irrevocable ? (
+            <Badge className="bg-[var(--color-priority-urgent-bg)] text-[10px] text-[var(--color-priority-urgent)] hover:bg-[var(--color-priority-urgent-bg)]">
+              Irrevocable
+            </Badge>
+          ) : null}
+          <span className="truncate text-xs text-muted-foreground">
+            {d.jurisdictionCode === "federal" ? "US Federal" : d.jurisdictionCode}{" "}
+            · {d.ruleTitle}
+          </span>
+        </div>
+      </div>
+      <StatusBadge status={d.status} isOverdue={isOverdue} />
+    </Link>
+  );
+}
+
+function StatusBadge({
+  status,
+  isOverdue,
+}: {
+  status: string;
+  isOverdue: boolean;
+}) {
+  if (status === "extended") {
+    return (
+      <Badge variant="outline" className="shrink-0 text-[10px]">
+        <Calendar className="mr-1 h-2.5 w-2.5" /> Extended
+      </Badge>
+    );
+  }
+  if (status === "in_progress") {
+    return (
+      <Badge variant="outline" className="shrink-0 text-[10px]">
+        <Clock className="mr-1 h-2.5 w-2.5" /> In progress
+      </Badge>
+    );
+  }
+  if (status === "completed") {
+    return (
+      <Badge className="shrink-0 bg-[var(--color-priority-done-bg)] text-[10px] text-[var(--color-priority-done)] hover:bg-[var(--color-priority-done-bg)]">
+        <CheckCircle2 className="mr-1 h-2.5 w-2.5" /> Filed
+      </Badge>
+    );
+  }
+  if (isOverdue) {
+    return (
+      <Badge className="shrink-0 bg-[var(--color-priority-urgent-bg)] text-[10px] text-[var(--color-priority-urgent)] hover:bg-[var(--color-priority-urgent-bg)]">
+        <AlertTriangle className="mr-1 h-2.5 w-2.5" /> Overdue
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className="shrink-0 text-[10px]">
+      Pending
+    </Badge>
+  );
+}
+
+function formatShortDate(iso: string): string {
+  const d = new Date(iso + "T00:00:00");
+  return d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 async function EntityCard({
