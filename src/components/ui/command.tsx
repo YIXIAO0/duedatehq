@@ -11,10 +11,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import {
-  InputGroup,
-  InputGroupAddon,
-} from "@/components/ui/input-group"
 import { SearchIcon, CheckIcon } from "lucide-react"
 
 function Command({
@@ -53,8 +49,11 @@ function CommandDialog({
         <DialogDescription>{description}</DialogDescription>
       </DialogHeader>
       <DialogContent
+        // Wider than the default `sm:max-w-sm` — a 560px palette feels
+        // intentional instead of "why is the input floating in a big box".
+        // top-[20%] pushes it up from dead-center for faster eye-tracking.
         className={cn(
-          "top-1/3 translate-y-0 overflow-hidden rounded-xl! p-0",
+          "top-[20%] translate-y-0 overflow-hidden rounded-xl! p-0 sm:max-w-[560px]",
           className
         )}
         showCloseButton={showCloseButton}
@@ -69,21 +68,24 @@ function CommandInput({
   className,
   ...props
 }: React.ComponentProps<typeof CommandPrimitive.Input>) {
+  // Tall input (h-11 = 44px) with its own border + focus ring lives
+  // directly under the dialog edge — no nested InputGroup wrapper that
+  // squished it down to h-8 before. Border-b on the outer wrapper splits
+  // input from the results region.
   return (
-    <div data-slot="command-input-wrapper" className="p-1 pb-0">
-      <InputGroup className="h-8! rounded-lg! border-input/30 bg-input/30 shadow-none! *:data-[slot=input-group-addon]:pl-2!">
-        <CommandPrimitive.Input
-          data-slot="command-input"
-          className={cn(
-            "w-full text-sm outline-hidden disabled:cursor-not-allowed disabled:opacity-50",
-            className
-          )}
-          {...props}
-        />
-        <InputGroupAddon>
-          <SearchIcon className="size-4 shrink-0 opacity-50" />
-        </InputGroupAddon>
-      </InputGroup>
+    <div
+      data-slot="command-input-wrapper"
+      className="flex items-center gap-3 border-b border-border px-4"
+    >
+      <SearchIcon className="size-4 shrink-0 text-muted-foreground" />
+      <CommandPrimitive.Input
+        data-slot="command-input"
+        className={cn(
+          "flex h-12 w-full bg-transparent text-[15px] leading-none outline-hidden placeholder:text-muted-foreground/60 disabled:cursor-not-allowed disabled:opacity-50",
+          className
+        )}
+        {...props}
+      />
     </div>
   )
 }

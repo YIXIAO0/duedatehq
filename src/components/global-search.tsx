@@ -130,13 +130,12 @@ export function GlobalSearch() {
           ) : null}
 
           {!loading && !query ? (
-            <div className="px-4 py-6 text-sm text-muted-foreground">
-              <p className="font-medium text-foreground">
-                Start typing to search
-              </p>
-              <p className="mt-1 text-xs">
-                Across clients, their tax entities, and upcoming deadlines.
-              </p>
+            // Compact empty state — the big title/subtitle was making the
+            // dialog look half-empty. Now a single hint line that fits
+            // the new 44px-input + 560px-wide palette proportions.
+            <div className="flex items-center gap-2 px-4 py-3 text-xs text-muted-foreground">
+              <SearchIcon className="h-3 w-3" />
+              Start typing — searches clients, entities, and deadlines.
             </div>
           ) : null}
 
