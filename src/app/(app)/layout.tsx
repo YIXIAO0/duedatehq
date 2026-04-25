@@ -4,6 +4,7 @@ import { UserButton } from "@clerk/nextjs";
 import { currentUser } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { GlobalSearch } from "@/components/global-search";
+import { getAnnouncementsSummary } from "@/lib/services/announcements";
 
 /**
  * Authenticated app shell. Static chrome + streamed auth-dependent slots.
@@ -31,6 +32,11 @@ export default function AppLayout({
             <nav className="flex items-center gap-1 text-sm">
               <NavLink href="/dashboard" label="Dashboard" />
               <NavLink href="/clients" label="Clients" />
+              <Suspense
+                fallback={<NavLink href="/announcements" label="Updates" />}
+              >
+                <UpdatesNavLink />
+              </Suspense>
               <NavLink href="/settings" label="Settings" />
             </nav>
           </div>
@@ -71,13 +77,38 @@ function HeaderUserSkeleton() {
   );
 }
 
-function NavLink({ href, label }: { href: string; label: string }) {
+function NavLink({
+  href,
+  label,
+  badge,
+}: {
+  href: string;
+  label: string;
+  badge?: React.ReactNode;
+}) {
   return (
     <Link
       href={href}
-      className="rounded-md px-3 py-1.5 text-foreground/80 hover:bg-muted hover:text-foreground transition-colors"
+      className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-foreground/80 hover:bg-muted hover:text-foreground transition-colors"
     >
       {label}
+      {badge}
     </Link>
   );
+}
+
+// Live unread-count badge for /announcements. Mirrors the dashboard
+// banner threshold (score≥4 in last 7d) so the two surfaces agree on
+// "what counts as worth your attention". Renders nothing when zero —
+// no badge means no urgent IRS items, which is the default state.
+async function UpdatesNavLink() {
+  const summary = await getAnnouncementsSummary();
+  const count = summary.highRelevance7d;
+  const badge =
+    count > 0 ? (
+      <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--color-priority-urgent)] px-1 text-[10px] font-semibold text-white">
+        {count > 9 ? "9+" : count}
+      </span>
+    ) : null;
+  return <NavLink href="/announcements" label="Updates" badge={badge} />;
 }

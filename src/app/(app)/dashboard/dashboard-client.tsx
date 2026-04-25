@@ -189,9 +189,6 @@ export function DashboardClient({
   const [collapsed, setCollapsed] = useState<Set<string>>(
     new Set(["this-month", "later"]),
   );
-  const [collapsedClients, setCollapsedClients] = useState<Set<string>>(
-    new Set(),
-  );
   const [applying, startApplying] = useTransition();
 
   // When filter changes, refetch from server starting at offset 0.
@@ -281,14 +278,6 @@ export function DashboardClient({
       const next = new Set(prev);
       if (next.has(bucketId)) next.delete(bucketId);
       else next.add(bucketId);
-      return next;
-    });
-  }
-  function toggleClientCollapsed(clientId: string) {
-    setCollapsedClients((prev) => {
-      const next = new Set(prev);
-      if (next.has(clientId)) next.delete(clientId);
-      else next.add(clientId);
       return next;
     });
   }
@@ -565,14 +554,22 @@ export function DashboardClient({
                       />
                     );
                   }
-                  // Multi-deadline client: collapsible group header
-                  const clientCollapsed = collapsedClients.has(group.clientId);
+                  // Multi-deadline client: a thin parent header (NOT a heavy
+                  // gray bar — that was the source of the "uncoordinated" feel
+                  // when sat next to flat single-deadline rows). The header
+                  // uses the same column geometry as a row, with date/title/
+                  // jurisdiction slots empty so the eye reads it as a quiet
+                  // separator. Children get a thin left border accent (no
+                  // extra indent) — that's the only visual marker of grouping.
                   const ids = group.deadlines.map((d) => d.id);
                   const allSelected = ids.every((id) => selected.has(id));
                   const someSelected = ids.some((id) => selected.has(id));
+                  const hasIrrevocable = group.deadlines.some((d) => d.irrevocable);
                   return (
                     <div key={group.clientId}>
-                      <div className="flex items-center gap-3 bg-muted/20 px-4 py-2">
+                      {/* Parent label row — tri-state select for bulk action.
+                          Same vertical rhythm as a deadline row. */}
+                      <div className="flex items-center gap-3 px-4 py-2">
                         <Checkbox
                           checked={
                             allSelected
@@ -586,42 +583,33 @@ export function DashboardClient({
                           }
                           aria-label={`Select all deadlines for ${group.clientName}`}
                         />
-                        <button
-                          type="button"
-                          onClick={() => toggleClientCollapsed(group.clientId)}
-                          className="flex flex-1 cursor-pointer items-center gap-2 text-left"
-                          aria-expanded={!clientCollapsed}
-                        >
-                          {clientCollapsed ? (
-                            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
-                          ) : (
-                            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-                          )}
-                          <span className="text-sm font-medium">
+                        <div className="min-w-0 flex-1 text-xs">
+                          <span className="font-medium text-foreground">
                             {group.clientName}
                           </span>
-                          <span className="text-xs text-muted-foreground">
+                          <span className="ml-2 text-muted-foreground">
                             {group.deadlines.length} deadlines
                           </span>
-                          {group.deadlines.some((d) => d.irrevocable) ? (
-                            <Badge className="bg-[var(--color-priority-urgent-bg)] text-[var(--color-priority-urgent)] hover:bg-[var(--color-priority-urgent-bg)]">
-                              Irrevocable
-                            </Badge>
+                          {hasIrrevocable ? (
+                            <span className="ml-2 text-[var(--color-priority-urgent)]">
+                              · includes irrevocable
+                            </span>
                           ) : null}
-                        </button>
+                        </div>
                       </div>
-                      {!clientCollapsed
-                        ? group.deadlines.map((d) => (
-                            <div key={d.id} className="pl-7">
-                              <DeadlineRow
-                                d={d}
-                                selected={selected.has(d.id)}
-                                onToggle={() => toggleOne(d.id)}
-                                hideClientName={true}
-                              />
-                            </div>
-                          ))
-                        : null}
+                      {/* Children — thin left border anchors them to the
+                          parent label without changing the row layout. */}
+                      <div className="border-l-2 border-primary/20">
+                        {group.deadlines.map((d) => (
+                          <DeadlineRow
+                            key={d.id}
+                            d={d}
+                            selected={selected.has(d.id)}
+                            onToggle={() => toggleOne(d.id)}
+                            hideClientName={true}
+                          />
+                        ))}
+                      </div>
                     </div>
                   );
                 })}

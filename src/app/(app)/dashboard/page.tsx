@@ -32,9 +32,6 @@ export default function DashboardPage() {
       <div className="mb-8 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            All your clients&apos; deadlines at a glance.
-          </p>
         </div>
         <div className="flex gap-2">
           <Button asChild variant="outline">
