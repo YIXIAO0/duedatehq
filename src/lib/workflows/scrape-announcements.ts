@@ -260,14 +260,19 @@ async function filterNewItems(items: ParsedItem[]): Promise<ParsedItem[]> {
 
 async function classifyAndStoreOne(
   item: ParsedItem,
-): Promise<{ id: string; classification: Classification }> {
+): Promise<{ id: string; classification: Classification; aiFailed: boolean }> {
   "use step";
   console.log(
     `[scrape] step=classifyOne start externalId=${item.externalId}`,
   );
   const t0 = Date.now();
 
+  // Resilience: if AI is unavailable (e.g. AI Gateway billing wall, model
+  // deprecated, schema validation throw), we still want the IRS item in
+  // the DB. Better to render a "general/score 3" row than to lose the
+  // announcement entirely. A future successful run can re-enrich.
   let cls: Classification;
+  let aiFailed = false;
   try {
     const { experimental_output: out } = await generateText({
       model: "anthropic/claude-haiku-4.5",
@@ -291,15 +296,17 @@ async function classifyAndStoreOne(
     });
     cls = out;
   } catch (e) {
-    // Log what AI Gateway / SDK actually said so we can fix it instead of
-    // staring at "classifyErrors: 14". Then re-throw as FatalError so the
-    // step doesn't burn 3 retries on what's almost certainly a config bug.
+    aiFailed = true;
     const message = e instanceof Error ? e.message : String(e);
-    const stack = e instanceof Error ? e.stack?.split("\n").slice(0, 3).join(" | ") : "";
-    console.error(
-      `[scrape] step=classifyOne ai_call_failed externalId=${item.externalId} message=${message} stack=${stack}`,
+    console.warn(
+      `[scrape] step=classifyOne ai_unavailable externalId=${item.externalId} fallback_to_default err=${message}`,
     );
-    throw new FatalError(`AI classify: ${message}`);
+    cls = {
+      category: "general",
+      affectedJurisdictions: [],
+      relevanceScore: 3,
+      summary: "", // empty so the UI knows AI hasn't enriched this yet
+    };
   }
 
   const db = getDb();
@@ -335,10 +342,10 @@ async function classifyAndStoreOne(
   }
 
   console.log(
-    `[scrape] step=classifyOne ok score=${cls.relevanceScore} cat=${cls.category} jurisdictions=${cls.affectedJurisdictions.join(",")} ms=${Date.now() - t0}`,
+    `[scrape] step=classifyOne ok ai=${aiFailed ? "FAILED-stored-as-default" : "ok"} score=${cls.relevanceScore} cat=${cls.category} jurisdictions=${cls.affectedJurisdictions.join(",")} ms=${Date.now() - t0}`,
   );
 
-  return { id: rowId, classification: cls };
+  return { id: rowId, classification: cls, aiFailed };
 }
 
 // ---------------------------------------------------------------------------
@@ -358,21 +365,30 @@ export async function scrapeAnnouncementsWorkflow(): Promise<ScrapeResult> {
   const storedIds: string[] = [];
   const errorSamples: string[] = [];
 
-  // Sequential per-item classification. Daily volume is 1–10 new items;
+  // Sequential per-item processing. Daily volume is 1–10 new items;
   // parallelism would only matter if we expanded to many feeds at once.
+  // The step itself never throws on AI failure — it stores the row with
+  // default classification and returns aiFailed=true. So a try/catch
+  // here only fires for unexpected (non-AI) breakage like a DB outage.
   for (const item of newItems) {
     try {
-      const { id } = await classifyAndStoreOne(item);
-      classified++;
+      const { id, aiFailed } = await classifyAndStoreOne(item);
+      if (aiFailed) {
+        classifyErrors++;
+        const msg = "AI Gateway unavailable — stored with default classification (see step logs for vendor message)";
+        if (errorSamples.length < 3 && !errorSamples.includes(msg)) {
+          errorSamples.push(msg);
+        }
+      } else {
+        classified++;
+      }
       if (id) storedIds.push(id);
     } catch (e) {
       classifyErrors++;
       const msg = e instanceof Error ? e.message : String(e);
       console.error(
-        `[scrape] classify failed externalId=${item.externalId} err=${msg}`,
+        `[scrape] classify hard-failed externalId=${item.externalId} err=${msg}`,
       );
-      // Keep the first 3 distinct errors so the smoke-test response is
-      // self-debugging — no need to chase Vercel logs for a typo.
       if (errorSamples.length < 3 && !errorSamples.includes(msg)) {
         errorSamples.push(msg);
       }
