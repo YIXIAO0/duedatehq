@@ -29,7 +29,7 @@
  */
 
 import "server-only";
-import { sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { generateText, Output } from "ai";
 import { z } from "zod";
 import { FatalError, RetryableError } from "workflow";
@@ -226,14 +226,21 @@ async function filterNewItems(items: ParsedItem[]): Promise<ParsedItem[]> {
 
   const db = getDb();
   const ids = items.map((i) => i.externalId);
-  // Postgres has a generous parameter limit; 50 IDs/day is safe.
-  const existing = await db.execute<{ external_id: string }>(sql`
-    SELECT external_id
-    FROM announcements
-    WHERE source = 'irs_newsroom'
-      AND external_id = ANY(${ids}::text[])
-  `);
-  const seen = new Set(existing.rows.map((r) => r.external_id));
+
+  // Use Drizzle's typed `inArray` rather than a hand-written sql template
+  // — `${ids}::text[]` spreads each element as its own param and produces
+  // `($1,$2,...)::text[]`, which Postgres reads as a row expression cast
+  // and rejects. inArray builds the proper `external_id IN ($1,$2,...)`.
+  const existing = await db
+    .select({ externalId: announcements.externalId })
+    .from(announcements)
+    .where(
+      and(
+        eq(announcements.source, "irs_newsroom"),
+        inArray(announcements.externalId, ids),
+      ),
+    );
+  const seen = new Set(existing.map((r) => r.externalId));
   const fresh = items.filter((i) => !seen.has(i.externalId));
   console.log(
     `[scrape] step=filterNew fresh=${fresh.length} dupes=${items.length - fresh.length}`,
