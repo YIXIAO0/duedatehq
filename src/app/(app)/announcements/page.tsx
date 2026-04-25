@@ -67,7 +67,10 @@ async function Feed() {
   // inside listAnnouncements. Also serves as the auth gate (redirects
   // anon users to sign-in).
   await getCurrentContext();
-  const items = await listAnnouncements({ sinceDays: 30, minScore: 1 });
+  // minScore: 3 — hide pure PR (1) and "vaguely tax-adjacent" (2) so
+  // the page is useful signal, not IRS newsroom mirror. Deadline moves
+  // / form changes are 4-5; routine useful reminders are 3.
+  const items = await listAnnouncements({ sinceDays: 30, minScore: 3 });
 
   if (items.length === 0) {
     return (

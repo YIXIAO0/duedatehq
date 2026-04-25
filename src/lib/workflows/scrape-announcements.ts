@@ -276,17 +276,49 @@ async function classifyAndStoreOne(
   try {
     const { experimental_output: out } = await generateText({
       model: "anthropic/claude-haiku-4.5",
-      temperature: 0.2, // facts, not creativity
+      temperature: 0.1, // facts, not creativity — lowest we'll go
       experimental_output: Output.object({ schema: ClassificationSchema }),
-      system:
-        "You are a CPA's research assistant classifying IRS Newsroom announcements. " +
-        "Be conservative on relevance. Score 5 only for items that change a real " +
-        "deadline or filing requirement (disaster relief, form threshold change, " +
-        "e-file mandate). General PR / outreach / op-ed = 1 or 2. " +
-        'If a state list isn\'t explicit, return ["federal"] for nationwide items. ' +
-        "Categories: " +
-        ANNOUNCEMENT_CATEGORIES.join(", ") +
-        ".",
+      system: [
+        "You classify IRS Newsroom announcements for a tool that manages",
+        "tax-filing deadlines for US CPAs. The ONLY question that matters:",
+        "does this item change what a CPA has to do or when they have to",
+        "do it? Most IRS Newsroom items are PR (awards, commemorations,",
+        "fraud warnings, TAS reports, volunteer-week shoutouts). Those are",
+        "NOT deadline-relevant.",
+        "",
+        "Scoring rubric (be strict — default is 1, not 3):",
+        "  5 = deadline explicitly extended/moved, OR filing requirement",
+        "      just changed (e.g. 'IRS postpones Apr 15 deadline for FL",
+        "      hurricane victims', '1099-K threshold lowered to $5,000',",
+        "      'e-file now required for X form').",
+        "  4 = new guidance / safe harbor / procedure that most CPAs in",
+        "      affected jurisdictions need to read this week.",
+        "  3 = routine reminder of an upcoming deadline, or generally-",
+        "      useful procedural update (e.g. 'direct deposit reminder',",
+        "      'how to get a transcript').",
+        "  2 = PR adjacent to filing but no action needed ('IRS has",
+        "      processed X million returns', 'watch out for tax scams').",
+        "  1 = pure PR / internal news / awards / commemorations / op-ed /",
+        "      leadership appointments / volunteer-week shoutouts / TAS",
+        "      annual report / statistics-of-income releases.",
+        "",
+        "Category rules:",
+        "  disaster_relief — ONLY when IRS explicitly postpones filing or",
+        "                    payment deadlines due to a declared disaster.",
+        "  form_change     — threshold / form / schedule change that",
+        "                    changes what gets filed.",
+        "  procedural      — e-file mandate, payment method change,",
+        "                    registration requirement, safe harbor.",
+        "  general         — everything else (default for score ≤ 2).",
+        "",
+        "Jurisdictions: return the 2-letter state codes explicitly named",
+        "in the title/excerpt, OR ['federal'] for nationwide items. If",
+        "unclear, return ['federal']. If a county-level scope (e.g.",
+        "'Harris County, TX'), still just return the state code.",
+        "",
+        "Summary: ONE short sentence, plain CPA English, max 160 chars.",
+        "Say WHAT changed and WHO is affected. Don't copy the title.",
+      ].join("\n"),
       prompt: [
         `Title: ${item.title}`,
         `Published: ${item.pubDate}`,
