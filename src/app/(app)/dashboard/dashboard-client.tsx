@@ -627,11 +627,7 @@ export function DashboardClient({
                       : null;
                     return (
                       <div key={g.clientId}>
-                        {/* Same bg + padding as DateSubheader so the two
-                            kinds of group-headers (date streak / single
-                            client) read as the same TYPE of UI element,
-                            not two unrelated patterns. */}
-                        <div className="flex items-center gap-3 bg-muted/20 px-4 py-2">
+                        <div className="flex items-center gap-3 px-4 py-2">
                           <Checkbox
                             checked={
                               allSelected
@@ -813,22 +809,15 @@ function DateSubheader({ date, count }: { date: string; count: number }) {
       : `in ${days}d`;
 
   return (
-    // Same shape + bg as the multi-client-group header below (in the
-    // bucket render). Mixed-case "May 15" so the date format is uniform
-    // across both kinds of group headers — uppercase here vs mixed case
-    // there was the visual inconsistency that read as "different UI
-    // element". The two headers carry different semantics (date streak
-    // vs single-client group) but should look like the same TYPE of
-    // separator row.
-    <div className="flex items-center gap-2 bg-muted/20 px-4 py-2 text-xs">
-      <span className="font-medium text-foreground">
+    <div className="flex items-center gap-2 bg-muted/20 px-4 py-1.5">
+      <span className="text-xs font-semibold uppercase tracking-wider">
         {due.toLocaleDateString("en-US", {
           month: "short",
           day: "numeric",
         })}
       </span>
-      <span className={accent}>{relLabel}</span>
-      <span className="ml-auto text-muted-foreground">
+      <span className={`text-[11px] ${accent}`}>{relLabel}</span>
+      <span className="ml-auto text-[11px] text-muted-foreground">
         {count} {count === 1 ? "deadline" : "deadlines"}
       </span>
     </div>
