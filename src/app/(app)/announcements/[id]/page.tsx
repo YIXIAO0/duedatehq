@@ -121,7 +121,7 @@ async function Detail({ params }: { params: Params }) {
             <div className="text-xs text-muted-foreground">
               {allDone
                 ? "Nothing else to do here. This announcement won't appear on your dashboard anymore."
-                : "Tick each client off as you confirm what action (if any) is needed."}
+                : "These clients are in the affected jurisdictions. Open each one, decide what to do, then tick them off."}
             </div>
           </div>
         </div>

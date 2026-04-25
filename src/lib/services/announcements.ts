@@ -372,22 +372,19 @@ export async function countDismissedAnnouncements(
 // deadline list as jsonb), then a join with the ack table.
 // ---------------------------------------------------------------------------
 
-export type ReviewableDeadline = {
-  id: string;
-  dueDate: string;
-  effectiveDueDate: string;
-  status: string;
-  formCode: string;
-  ruleTitle: string;
-  jurisdictionCode: string;
-};
-
 export type ReviewableClient = {
   clientId: string;
   clientName: string;
   primaryContactEmail: string | null;
   matchedStates: string[]; // which of the client's entity states matched
-  openDeadlines: ReviewableDeadline[];
+  /**
+   * Total open deadlines for this client (pending/in_progress/extended).
+   * Just a context number — we deliberately don't list them inline because
+   * we can't reliably narrow to the ones the announcement actually affects
+   * without structured AI date/form extraction (V2). Showing all of them
+   * was noisy and falsely implied "these are the affected ones".
+   */
+  openDeadlineCount: number;
   acked: boolean;
 };
 
@@ -430,17 +427,7 @@ export async function getAnnouncementReview(
     client_name: string;
     primary_contact_email: string | null;
     matched_states: string[];
-    open_deadlines:
-      | Array<{
-          id: string;
-          due_date: string;
-          effective_due_date: string;
-          status: string;
-          form_code: string;
-          rule_title: string;
-          jurisdiction_code: string;
-        }>
-      | null;
+    open_deadline_count: number;
     acked: boolean;
   }>(sql`
     SELECT
@@ -455,31 +442,18 @@ export async function getAnnouncementReview(
           AND e.home_state IS NOT NULL
           AND (${affectedJsonb}::jsonb) ? e.home_state
       ) AS matched_states,
+      -- Just the count; we deliberately don't list deadlines inline
+      -- because we can't yet reliably scope them to the announcement
+      -- (no AI-extracted dates/forms). Showing all of them implied
+      -- "these are the affected deadlines" which was misleading.
       (
-        SELECT COALESCE(jsonb_agg(d ORDER BY d.effective_due_date ASC), '[]'::jsonb)
-        FROM (
-          SELECT
-            di.id,
-            di.due_date::text AS due_date,
-            COALESCE(di.extension_due_date, di.due_date)::text AS effective_due_date,
-            di.status::text AS status,
-            r.form_code,
-            r.title AS rule_title,
-            r.jurisdiction_code
-          FROM deadline_instances di
-          INNER JOIN entities e2 ON e2.id = di.entity_id
-          INNER JOIN deadline_rules r ON r.id = di.rule_id
-          WHERE e2.client_id = c.id
-            AND e2.archived_at IS NULL
-            AND di.status IN ('pending', 'in_progress', 'extended')
-            -- Match on jurisdiction OR federal — federal items affect every
-            -- federal-form deadline regardless of client state.
-            AND (
-              (${affectedJsonb}::jsonb) ? r.jurisdiction_code
-              OR r.jurisdiction_code = 'federal'
-            )
-        ) d
-      ) AS open_deadlines,
+        SELECT COUNT(*)::int
+        FROM deadline_instances di
+        INNER JOIN entities e2 ON e2.id = di.entity_id
+        WHERE e2.client_id = c.id
+          AND e2.archived_at IS NULL
+          AND di.status IN ('pending', 'in_progress', 'extended')
+      ) AS open_deadline_count,
       EXISTS (
         SELECT 1 FROM announcement_client_acks ack
         WHERE ack.announcement_id = ${announcementId}
@@ -506,15 +480,7 @@ export async function getAnnouncementReview(
       clientName: r.client_name,
       primaryContactEmail: r.primary_contact_email,
       matchedStates: r.matched_states ?? [],
-      openDeadlines: (r.open_deadlines ?? []).map((d) => ({
-        id: d.id,
-        dueDate: d.due_date,
-        effectiveDueDate: d.effective_due_date,
-        status: d.status,
-        formCode: d.form_code,
-        ruleTitle: d.rule_title,
-        jurisdictionCode: d.jurisdiction_code,
-      })),
+      openDeadlineCount: Number(r.open_deadline_count ?? 0),
       acked: Boolean(r.acked),
     })),
   };
