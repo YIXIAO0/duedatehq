@@ -69,22 +69,38 @@ export type ScrapeResult = {
 };
 
 // ---------------------------------------------------------------------------
-// Step 1 — fetch the RSS feed
+// Step 1 — fetch the IRS Newsroom listing
+//
+// IRS killed their public RSS feed circa 2022 (every "feed" / "rss"
+// candidate URL returns 404 today). Their current "machine-readable
+// surface" for press releases is the HTML at
+//   https://www.irs.gov/newsroom/news-releases-for-current-month
+// which lists every IR-YYYY-NN release for the month with a stable
+// slug, abstract text, and IR number we can use as our dedupe key.
+//
+// We accept the trade-off (HTML scrape vs RSS) because:
+//   - IR numbers are CANONICAL — they don't change once issued
+//   - the IRS doesn't monetize the page, very low risk of breakage
+//   - we only need to keep up with a daily trickle
 // ---------------------------------------------------------------------------
 
-async function fetchIrsNewsroomRss(): Promise<string> {
+const IRS_NEWSROOM_URL =
+  "https://www.irs.gov/newsroom/news-releases-for-current-month";
+
+async function fetchIrsNewsroomHtml(): Promise<string> {
   "use step";
-  console.log("[scrape] step=fetchRss start url=irs.gov/newsroom/feed");
+  console.log(`[scrape] step=fetchHtml start url=${IRS_NEWSROOM_URL}`);
   const t0 = Date.now();
 
   let res: Response;
   try {
-    res = await fetch("https://www.irs.gov/newsroom/feed", {
+    res = await fetch(IRS_NEWSROOM_URL, {
       headers: {
-        // Polite UA so IRS knows who's hitting them.
+        // Polite UA so IRS sees who's hitting them.
         "user-agent": "DueDateHQ/1.0 (+https://duedatehq.com)",
-        accept: "application/rss+xml, application/xml;q=0.9",
+        accept: "text/html,application/xhtml+xml",
       },
+      redirect: "follow",
     });
   } catch (e) {
     // Network blip → retry. Workflow runtime backs off automatically.
@@ -95,61 +111,93 @@ async function fetchIrsNewsroomRss(): Promise<string> {
 
   // 5xx → retry. 4xx → permanent (most likely a URL change we need to fix).
   if (res.status >= 500) {
-    throw new RetryableError(`IRS RSS ${res.status}`, { retryAfter: "5m" });
+    throw new RetryableError(`IRS Newsroom ${res.status}`, {
+      retryAfter: "5m",
+    });
   }
   if (res.status >= 400) {
-    throw new FatalError(`IRS RSS ${res.status} — feed URL likely changed`);
+    throw new FatalError(
+      `IRS Newsroom ${res.status} — page URL likely changed`,
+    );
   }
-  const xml = await res.text();
+  const html = await res.text();
   console.log(
-    `[scrape] step=fetchRss ok bytes=${xml.length} ms=${Date.now() - t0}`,
+    `[scrape] step=fetchHtml ok bytes=${html.length} ms=${Date.now() - t0}`,
   );
-  return xml;
+  return html;
 }
 
 // ---------------------------------------------------------------------------
-// Step 2 — parse RSS into items (regex-based; the IRS feed is plain RSS 2.0)
+// Step 2 — parse the newsroom HTML into items
+//
+// We anchor on each `<div class="field_pup_media_document_teaser">` block.
+// Inside each block:
+//   - <h2><a href="/newsroom/SLUG"><span>TITLE</span></a></h2>   → title + link
+//   - <div class="...field-pup-description-abstract...">
+//       IR-YYYY-NN, Month D, YYYY — DESCRIPTION
+//     </div>                                                     → IR # + date + body
+//
+// The IR number is our externalId — it's canonical, never changes once
+// issued, and the IRS doesn't recycle them. If the IRS restructures the
+// page we get zero parsed items and `dedupeAndStore` is a no-op
+// (nothing to insert), so a layout change can't corrupt our DB.
 // ---------------------------------------------------------------------------
 
-async function parseRss(xml: string): Promise<ParsedItem[]> {
+async function parseNewsroomHtml(html: string): Promise<ParsedItem[]> {
   "use step";
-  console.log("[scrape] step=parseRss start");
+  console.log(
+    `[scrape] step=parseHtml start bytes=${html.length}`,
+  );
 
   const items: ParsedItem[] = [];
-  const itemRegex = /<item>([\s\S]*?)<\/item>/g;
-  const tag = (s: string, name: string) => {
-    // Allow CDATA wrapping
-    const re = new RegExp(
-      `<${name}(?:\\s[^>]*)?>(?:<!\\[CDATA\\[)?([\\s\\S]*?)(?:\\]\\]>)?<\\/${name}>`,
-    );
-    const m = s.match(re);
-    return m ? m[1].trim() : "";
-  };
+  const blockRegex =
+    /<div class="field_pup_media_document_teaser">([\s\S]*?)<\/p>\s*<\/div>/g;
 
   let m: RegExpExecArray | null;
-  while ((m = itemRegex.exec(xml)) !== null) {
+  while ((m = blockRegex.exec(html)) !== null) {
     const block = m[1];
-    const title = tag(block, "title");
-    const link = tag(block, "link");
-    const pubDateRaw = tag(block, "pubDate");
-    const guid = tag(block, "guid") || link;
-    const description = tag(block, "description");
 
-    if (!title || !link || !guid) continue; // skip malformed
-    const pubDate = pubDateRaw
-      ? new Date(pubDateRaw).toISOString()
-      : new Date().toISOString();
+    // Title + link from the <h2><a> with rel="bookmark"
+    const linkMatch = block.match(
+      /<a\s+href="(\/newsroom\/[^"]+)"[^>]*rel="bookmark"[^>]*>\s*<span>([\s\S]*?)<\/span>/,
+    );
+    if (!linkMatch) continue;
+    const link = `https://www.irs.gov${linkMatch[1]}`;
+    const title = decodeEntities(stripHtml(linkMatch[2])).trim();
+
+    // Abstract has the form "IR-2026-57, April 24, 2026 — body…"
+    const absMatch = block.match(
+      /class="[^"]*field-pup-description-abstract[^"]*field--item">([\s\S]*?)<\/div>/,
+    );
+    if (!absMatch) continue;
+    const absText = decodeEntities(stripHtml(absMatch[1])).trim();
+
+    // Pull IR number + date from the abstract preface.
+    const headMatch = absText.match(
+      /^(IR-\d{4}-\d{1,4}),\s*([A-Z][a-z]+\s+\d{1,2},\s+\d{4})\s*[—-]\s*([\s\S]*)$/,
+    );
+    if (!headMatch) continue;
+    const irNumber = headMatch[1];
+    const pubDateRaw = headMatch[2];
+    const description = headMatch[3].trim();
+
+    const pubDateDate = new Date(pubDateRaw);
+    const pubDate = isNaN(pubDateDate.getTime())
+      ? new Date().toISOString()
+      : pubDateDate.toISOString();
 
     items.push({
-      externalId: guid,
-      title: decodeEntities(title),
+      externalId: irNumber,
+      title,
       link,
       pubDate,
-      description: decodeEntities(stripHtml(description)).slice(0, 1500),
+      description: description.slice(0, 1500),
     });
   }
 
-  console.log(`[scrape] step=parseRss extracted=${items.length}`);
+  console.log(
+    `[scrape] step=parseHtml extracted=${items.length} sample=${items[0]?.externalId ?? "none"}`,
+  );
   return items;
 }
 
@@ -279,8 +327,8 @@ export async function scrapeAnnouncementsWorkflow(): Promise<ScrapeResult> {
   "use workflow";
   console.log("[scrape] workflow start");
 
-  const xml = await fetchIrsNewsroomRss();
-  const items = await parseRss(xml);
+  const html = await fetchIrsNewsroomHtml();
+  const items = await parseNewsroomHtml(html);
   const newItems = await filterNewItems(items);
 
   let classified = 0;
