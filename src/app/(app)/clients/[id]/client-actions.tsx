@@ -31,7 +31,13 @@ import {
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { MoreHorizontal, Pencil, Archive, Loader2 } from "lucide-react";
+import {
+  MoreHorizontal,
+  Pencil,
+  Archive,
+  Loader2,
+  FileText,
+} from "lucide-react";
 import { updateClientAction, archiveClientAction } from "./edit-actions";
 
 export function ClientActions({
@@ -59,6 +65,17 @@ export function ClientActions({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
+          <DropdownMenuItem asChild>
+            {/* Calendar PDF lives in here now — it's a 1-2x/year action
+                (engagement-letter time), doesn't deserve its own button
+                competing with the page title. */}
+            <a
+              href={`/api/export/clients/${client.id}/calendar.pdf?taxYear=${new Date().getFullYear()}`}
+              download
+            >
+              <FileText className="mr-2 h-4 w-4" /> Download calendar PDF
+            </a>
+          </DropdownMenuItem>
           <DropdownMenuItem onClick={() => setEditOpen(true)}>
             <Pencil className="mr-2 h-4 w-4" /> Edit client
           </DropdownMenuItem>

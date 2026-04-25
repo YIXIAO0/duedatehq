@@ -15,7 +15,6 @@ import {
   ArrowLeft,
   Building2,
   User as UserIcon,
-  FileText,
   CheckCircle2,
   AlertTriangle,
   Calendar,
@@ -106,22 +105,9 @@ async function ClientDetail({ params }: { params: Params }) {
             </p>
           ) : null}
         </div>
-        <div className="flex items-start gap-2">
-          {/* The headline action on this page: hand the client a calendar
-              they can save, print, or pin to the fridge. Default to the
-              current calendar year — same shape CPAs use when they mail
-              engagement letters. */}
-          <Button asChild variant="outline" size="sm">
-            <a
-              href={`/api/export/clients/${client.id}/calendar.pdf?taxYear=${new Date().getFullYear()}`}
-              download
-            >
-              <FileText className="mr-2 h-4 w-4" />
-              Client calendar PDF
-            </a>
-          </Button>
-          <ClientActions client={client} />
-        </div>
+        {/* Single ⋯ menu — Edit / Calendar PDF / Archive all live in there.
+            Cleaner header now that deadlines are the prominent section. */}
+        <ClientActions client={client} />
       </div>
 
       {/* Deadlines — the headline section. Sits above entities because
@@ -268,7 +254,9 @@ function DeadlineRow({
       href={`/deadlines/${d.id}`}
       className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-muted/40"
     >
-      <div className="w-20 shrink-0">
+      {/* w-28 (112px) is just enough for "Jun 15, 2026" on a single line.
+          w-20 was clipping it onto two lines and breaking visual rhythm. */}
+      <div className="w-28 shrink-0">
         <div className={`text-sm font-semibold ${dateColor}`}>
           {formatShortDate(d.effectiveDueDate)}
         </div>

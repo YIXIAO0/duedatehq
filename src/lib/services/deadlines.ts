@@ -349,6 +349,12 @@ export type DeadlineDetail = NonNullable<
 // the dashboard. Returns open + extended (NOT completed/missed); the
 // caller can opt-in to completed via includeFiled if we add that toggle.
 // Sorted by effective due date so the next thing to do is at the top.
+//
+// Window: by default we cap at +365 days into the future. The deadline
+// engine generates two tax years' worth of instances on entity creation,
+// so without a cap the list shows things 500+ days out — pure noise for
+// a CPA whose working horizon is the next filing season + estimates.
+// Overdue (past) items always show because they're real outstanding work.
 // ---------------------------------------------------------------------------
 
 export type ClientDeadlineRow = {
@@ -372,13 +378,24 @@ export async function listDeadlinesForClient(args: {
   clientId: string;
   /** Default false — only show work-still-to-do. Set true for full history. */
   includeFiled?: boolean;
+  /** Default 365 — cap how far into the future we show. Overdue always shown. */
+  withinDays?: number;
 }): Promise<ClientDeadlineRow[]> {
   const db = getDb();
   const includeFiled = args.includeFiled ?? false;
+  const withinDays = args.withinDays ?? 365;
 
   const statusFilter = includeFiled
     ? sql``
     : sql`AND di.status IN ('pending', 'in_progress', 'extended')`;
+
+  // future-window cap. Past items pass through unconditionally (overdue
+  // work is real work), only future deadlines get the +N days lid.
+  const windowFilter = sql`AND (
+    COALESCE(di.extension_due_date, di.due_date) <= CURRENT_DATE
+    OR COALESCE(di.extension_due_date, di.due_date)
+       <= (CURRENT_DATE + (${withinDays}::int * INTERVAL '1 day'))
+  )`;
 
   const rows = await db.execute<{
     id: string;
@@ -417,6 +434,7 @@ export async function listDeadlinesForClient(args: {
       AND c.org_id = ${args.orgId}
       AND e.archived_at IS NULL
       ${statusFilter}
+      ${windowFilter}
     ORDER BY effective_due_date ASC, e.name ASC, r.form_code ASC
   `);
 
