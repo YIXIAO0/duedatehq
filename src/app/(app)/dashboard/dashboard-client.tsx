@@ -540,79 +540,125 @@ export function DashboardClient({
 
             {isOpen ? (
               <div className="divide-y divide-border border-t border-border">
-                {groupByClient(b.deadlines).map((group) => {
-                  // Single-deadline client: flatten — shows as a normal row
-                  if (group.deadlines.length === 1) {
-                    const d = group.deadlines[0];
-                    return (
-                      <DeadlineRow
-                        key={d.id}
-                        d={d}
-                        selected={selected.has(d.id)}
-                        onToggle={() => toggleOne(d.id)}
-                        hideClientName={false}
-                      />
-                    );
+                {/* Render walk: client-grouping is preserved (Round 6a) for
+                    multi-deadline clients, but consecutive flat rows that
+                    share the same effective_due_date now sit under one
+                    quiet date subheader, and those rows drop their date
+                    column. Pre-compose the items array so date streaks
+                    are easy to reason about. */}
+                {(() => {
+                  type RenderItem =
+                    | { kind: "dateHeader"; date: string; count: number }
+                    | { kind: "flat"; d: DashboardDeadline }
+                    | {
+                        kind: "multiGroup";
+                        group: ReturnType<typeof groupByClient>[number];
+                      };
+
+                  const groups = groupByClient(b.deadlines);
+                  const items: RenderItem[] = [];
+                  let i = 0;
+                  while (i < groups.length) {
+                    const g = groups[i];
+                    if (g.deadlines.length > 1) {
+                      // Multi-client group breaks any date streak.
+                      items.push({ kind: "multiGroup", group: g });
+                      i++;
+                      continue;
+                    }
+                    // Streak of consecutive flat groups sharing a date.
+                    const date = g.deadlines[0].effective_due_date;
+                    let j = i;
+                    while (
+                      j < groups.length &&
+                      groups[j].deadlines.length === 1 &&
+                      groups[j].deadlines[0].effective_due_date === date
+                    ) {
+                      j++;
+                    }
+                    items.push({ kind: "dateHeader", date, count: j - i });
+                    for (let k = i; k < j; k++) {
+                      items.push({ kind: "flat", d: groups[k].deadlines[0] });
+                    }
+                    i = j;
                   }
-                  // Multi-deadline client: a thin parent header (NOT a heavy
-                  // gray bar — that was the source of the "uncoordinated" feel
-                  // when sat next to flat single-deadline rows). The header
-                  // uses the same column geometry as a row, with date/title/
-                  // jurisdiction slots empty so the eye reads it as a quiet
-                  // separator. Children get a thin left border accent (no
-                  // extra indent) — that's the only visual marker of grouping.
-                  const ids = group.deadlines.map((d) => d.id);
-                  const allSelected = ids.every((id) => selected.has(id));
-                  const someSelected = ids.some((id) => selected.has(id));
-                  const hasIrrevocable = group.deadlines.some((d) => d.irrevocable);
-                  return (
-                    <div key={group.clientId}>
-                      {/* Parent label row — tri-state select for bulk action.
-                          Same vertical rhythm as a deadline row. */}
-                      <div className="flex items-center gap-3 px-4 py-2">
-                        <Checkbox
-                          checked={
-                            allSelected
-                              ? true
-                              : someSelected
-                              ? "indeterminate"
-                              : false
-                          }
-                          onCheckedChange={(v) =>
-                            toggleClientSelection(group.deadlines, v === true)
-                          }
-                          aria-label={`Select all deadlines for ${group.clientName}`}
+
+                  return items.map((item, idx) => {
+                    if (item.kind === "dateHeader") {
+                      return (
+                        <DateSubheader
+                          key={`d-${idx}-${item.date}`}
+                          date={item.date}
+                          count={item.count}
                         />
-                        <div className="min-w-0 flex-1 text-xs">
-                          <span className="font-medium text-foreground">
-                            {group.clientName}
-                          </span>
-                          <span className="ml-2 text-muted-foreground">
-                            {group.deadlines.length} deadlines
-                          </span>
-                          {hasIrrevocable ? (
-                            <span className="ml-2 text-[var(--color-priority-urgent)]">
-                              · includes irrevocable
+                      );
+                    }
+                    if (item.kind === "flat") {
+                      const d = item.d;
+                      return (
+                        <DeadlineRow
+                          key={d.id}
+                          d={d}
+                          selected={selected.has(d.id)}
+                          onToggle={() => toggleOne(d.id)}
+                          hideClientName={false}
+                          hideDate
+                        />
+                      );
+                    }
+                    // multiGroup
+                    const g = item.group;
+                    const ids = g.deadlines.map((d) => d.id);
+                    const allSelected = ids.every((id) => selected.has(id));
+                    const someSelected = ids.some((id) => selected.has(id));
+                    const hasIrrevocable = g.deadlines.some(
+                      (d) => d.irrevocable,
+                    );
+                    return (
+                      <div key={g.clientId}>
+                        <div className="flex items-center gap-3 px-4 py-2">
+                          <Checkbox
+                            checked={
+                              allSelected
+                                ? true
+                                : someSelected
+                                ? "indeterminate"
+                                : false
+                            }
+                            onCheckedChange={(v) =>
+                              toggleClientSelection(g.deadlines, v === true)
+                            }
+                            aria-label={`Select all deadlines for ${g.clientName}`}
+                          />
+                          <div className="min-w-0 flex-1 text-xs">
+                            <span className="font-medium text-foreground">
+                              {g.clientName}
                             </span>
-                          ) : null}
+                            <span className="ml-2 text-muted-foreground">
+                              {g.deadlines.length} deadlines
+                            </span>
+                            {hasIrrevocable ? (
+                              <span className="ml-2 text-[var(--color-priority-urgent)]">
+                                · includes irrevocable
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                        <div className="border-l-2 border-primary/20">
+                          {g.deadlines.map((d) => (
+                            <DeadlineRow
+                              key={d.id}
+                              d={d}
+                              selected={selected.has(d.id)}
+                              onToggle={() => toggleOne(d.id)}
+                              hideClientName={true}
+                            />
+                          ))}
                         </div>
                       </div>
-                      {/* Children — thin left border anchors them to the
-                          parent label without changing the row layout. */}
-                      <div className="border-l-2 border-primary/20">
-                        {group.deadlines.map((d) => (
-                          <DeadlineRow
-                            key={d.id}
-                            d={d}
-                            selected={selected.has(d.id)}
-                            onToggle={() => toggleOne(d.id)}
-                            hideClientName={true}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  });
+                })()}
               </div>
             ) : null}
           </div>
@@ -682,17 +728,66 @@ export function DashboardClient({
   );
 }
 
+// Date subheader rendered above a streak of flat rows sharing one
+// effective due date. Carries the urgency color (overdue → red, ≤3d
+// urgent, ≤14d high, etc.) so the eye still gets the time-pressure
+// signal even though the rows themselves no longer repeat the date.
+function DateSubheader({ date, count }: { date: string; count: number }) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const due = new Date(date + "T00:00:00");
+  const days = Math.round(
+    (due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
+  );
+  const accent =
+    days < 0 || days <= 3
+      ? "text-[var(--color-priority-urgent)]"
+      : days <= 14
+      ? "text-[var(--color-priority-high)]"
+      : days <= 30
+      ? "text-[var(--color-priority-medium)]"
+      : "text-muted-foreground";
+
+  const relLabel =
+    days < 0
+      ? `${Math.abs(days)}d overdue`
+      : days === 0
+      ? "Today"
+      : days === 1
+      ? "Tomorrow"
+      : `in ${days}d`;
+
+  return (
+    <div className="flex items-center gap-2 bg-muted/20 px-4 py-1.5">
+      <span className="text-xs font-semibold uppercase tracking-wider">
+        {due.toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+        })}
+      </span>
+      <span className={`text-[11px] ${accent}`}>{relLabel}</span>
+      <span className="ml-auto text-[11px] text-muted-foreground">
+        {count} {count === 1 ? "deadline" : "deadlines"}
+      </span>
+    </div>
+  );
+}
+
 function DeadlineRow({
   d,
   selected,
   onToggle,
   hideClientName = false,
+  hideDate = false,
 }: {
   d: DashboardDeadline;
   selected: boolean;
   onToggle: () => void;
   /** Inside a client-group block, parent shows the client name once — don't repeat per row. */
   hideClientName?: boolean;
+  /** Inside a date-subheader block (consecutive flat rows on same date),
+      the subheader carries the date — don't repeat per row. */
+  hideDate?: boolean;
 }) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -743,15 +838,17 @@ function DeadlineRow({
         href={`/deadlines/${d.id}`}
         className="flex min-w-0 flex-1 items-center gap-4"
       >
-        <div className="w-20 shrink-0 text-sm">
-          <div className="font-medium">
-            {due.toLocaleDateString("en-US", {
-              month: "short",
-              day: "numeric",
-            })}
+        {hideDate ? null : (
+          <div className="w-20 shrink-0 text-sm">
+            <div className="font-medium">
+              {due.toLocaleDateString("en-US", {
+                month: "short",
+                day: "numeric",
+              })}
+            </div>
+            <div className={`text-xs ${urgencyColor}`}>{daysLabel}</div>
           </div>
-          <div className={`text-xs ${urgencyColor}`}>{daysLabel}</div>
-        </div>
+        )}
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium">{d.rule_title}</div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
