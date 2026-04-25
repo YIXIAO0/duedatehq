@@ -12,9 +12,13 @@
 
 import "server-only";
 import { z } from "zod";
-import { and, desc, gte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { getDb } from "@/lib/db";
-import { announcements, type Announcement } from "@/lib/db/schema";
+import {
+  announcements,
+  announcementDismissals,
+  type Announcement,
+} from "@/lib/db/schema";
 
 export const ListAnnouncementsInputSchema = z.object({
   /** Only items published in the last N days. 0 = no time floor. */
@@ -26,6 +30,13 @@ export const ListAnnouncementsInputSchema = z.object({
   /** Minimum relevance score (1–5). */
   minScore: z.number().int().min(1).max(5).default(1),
   limit: z.number().int().positive().max(100).default(50),
+  /**
+   * If a userId is passed, items dismissed by that user are filtered out
+   * unless `showDismissed` flips the polarity to "dismissed-only" (used
+   * for the "Show dismissed" toggle on /announcements).
+   */
+  userId: z.string().optional(),
+  showDismissed: z.boolean().default(false),
 });
 export type ListAnnouncementsInput = z.input<typeof ListAnnouncementsInputSchema>;
 
@@ -45,6 +56,22 @@ export async function listAnnouncements(
   }
   if (parsed.category) {
     conditions.push(sql`${announcements.category} = ${parsed.category}`);
+  }
+  // Per-user dismiss filter — see comment on the WithImpact variant.
+  if (parsed.userId) {
+    if (parsed.showDismissed) {
+      conditions.push(sql`EXISTS (
+        SELECT 1 FROM announcement_dismissals d
+        WHERE d.announcement_id = ${announcements.id}
+          AND d.user_id = ${parsed.userId}
+      )`);
+    } else {
+      conditions.push(sql`NOT EXISTS (
+        SELECT 1 FROM announcement_dismissals d
+        WHERE d.announcement_id = ${announcements.id}
+          AND d.user_id = ${parsed.userId}
+      )`);
+    }
   }
 
   return db
@@ -100,6 +127,23 @@ export async function listAnnouncementsWithImpact(
     ? sql`AND a.category = ${parsed.category}`
     : sql``;
 
+  // Per-user dismiss filter. When a userId is supplied:
+  //   - default: hide items this user has dismissed (the common case)
+  //   - showDismissed=true: invert — show only dismissed items, used by
+  //     the "Show dismissed" toggle on /announcements as a recovery path
+  // When no userId, no filter applies (the cron / agent contexts).
+  const dismissFilter = parsed.userId
+    ? parsed.showDismissed
+      ? sql`AND EXISTS (
+          SELECT 1 FROM announcement_dismissals d
+          WHERE d.announcement_id = a.id AND d.user_id = ${parsed.userId}
+        )`
+      : sql`AND NOT EXISTS (
+          SELECT 1 FROM announcement_dismissals d
+          WHERE d.announcement_id = a.id AND d.user_id = ${parsed.userId}
+        )`
+    : sql``;
+
   const rows = await db.execute<{
     id: string;
     source: string;
@@ -139,6 +183,7 @@ export async function listAnnouncementsWithImpact(
     WHERE a.relevance_score >= ${parsed.minScore}
       ${sinceFilter}
       ${categoryFilter}
+      ${dismissFilter}
     ORDER BY a.relevance_score DESC, a.published_at DESC
     LIMIT ${parsed.limit}
   `);
@@ -170,10 +215,27 @@ export type DashboardAnnouncementSummary = {
 };
 
 /**
- * One-shot summary for the dashboard banner. Single round-trip.
+ * One-shot summary for the header badge. Single round-trip.
+ *
+ * Respects per-user dismissals when a userId is provided so the badge
+ * count drops to zero once the CPA has dismissed everything they care
+ * about. Without a userId we count globally (used in older callers).
  */
-export async function getAnnouncementsSummary(): Promise<DashboardAnnouncementSummary> {
+export async function getAnnouncementsSummary(
+  userId?: string,
+): Promise<DashboardAnnouncementSummary> {
   const db = getDb();
+
+  // When userId is set, exclude this user's dismissed items from BOTH
+  // the high-7d and total-30d counts so the header badge can return
+  // to zero. Implemented as a NOT EXISTS subquery in the FILTER clause.
+  const dismissFilter = userId
+    ? sql`AND NOT EXISTS (
+        SELECT 1 FROM announcement_dismissals d
+        WHERE d.announcement_id = announcements.id
+          AND d.user_id = ${userId}
+      )`
+    : sql``;
 
   const stats = await db.execute<{
     high_7d: number;
@@ -183,9 +245,11 @@ export async function getAnnouncementsSummary(): Promise<DashboardAnnouncementSu
       COUNT(*) FILTER (
         WHERE relevance_score >= 4
           AND published_at >= NOW() - INTERVAL '7 days'
+          ${dismissFilter}
       )::int AS high_7d,
       COUNT(*) FILTER (
         WHERE published_at >= NOW() - INTERVAL '30 days'
+          ${dismissFilter}
       )::int AS total_30d
     FROM announcements
   `);
@@ -195,22 +259,76 @@ export async function getAnnouncementsSummary(): Promise<DashboardAnnouncementSu
 
   let topRecent: Announcement | null = null;
   if (highRelevance7d > 0) {
+    const conditions = [
+      gte(announcements.relevanceScore, 4),
+      gte(
+        announcements.publishedAt,
+        new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+      ),
+    ];
+    if (userId) {
+      conditions.push(sql`NOT EXISTS (
+        SELECT 1 FROM announcement_dismissals d
+        WHERE d.announcement_id = ${announcements.id}
+          AND d.user_id = ${userId}
+      )`);
+    }
     const rows = await db
       .select()
       .from(announcements)
-      .where(
-        and(
-          gte(announcements.relevanceScore, 4),
-          gte(
-            announcements.publishedAt,
-            new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
-          ),
-        ),
-      )
+      .where(and(...conditions))
       .orderBy(desc(announcements.publishedAt))
       .limit(1);
     topRecent = rows[0] ?? null;
   }
 
   return { highRelevance7d, total30d, topRecent };
+}
+
+// ---------------------------------------------------------------------------
+// Dismiss / un-dismiss
+//
+// Pure ON CONFLICT DO NOTHING / DELETE — no validation of relevance score
+// or category. The user gets to choose what's noise, even if our rubric
+// disagrees. The unique index on (user_id, announcement_id) makes both
+// operations safely idempotent.
+// ---------------------------------------------------------------------------
+
+export async function dismissAnnouncement(
+  userId: string,
+  announcementId: string,
+): Promise<void> {
+  const db = getDb();
+  await db
+    .insert(announcementDismissals)
+    .values({ userId, announcementId })
+    .onConflictDoNothing();
+}
+
+export async function undismissAnnouncement(
+  userId: string,
+  announcementId: string,
+): Promise<void> {
+  const db = getDb();
+  await db
+    .delete(announcementDismissals)
+    .where(
+      and(
+        eq(announcementDismissals.userId, userId),
+        eq(announcementDismissals.announcementId, announcementId),
+      ),
+    );
+}
+
+/** Count of items this user has dismissed (used for "Show dismissed" toggle). */
+export async function countDismissedAnnouncements(
+  userId: string,
+): Promise<number> {
+  const db = getDb();
+  const r = await db.execute<{ n: number }>(sql`
+    SELECT COUNT(*)::int AS n
+    FROM announcement_dismissals
+    WHERE user_id = ${userId}
+  `);
+  return Number(r.rows[0]?.n ?? 0);
 }

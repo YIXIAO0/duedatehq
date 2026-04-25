@@ -19,15 +19,23 @@ import {
 } from "lucide-react";
 import { getCurrentContext } from "@/lib/auth/current-org";
 import {
+  countDismissedAnnouncements,
   listAnnouncementsWithImpact,
   type AnnouncementWithImpact,
 } from "@/lib/services/announcements";
+import { AnnouncementDismissButton } from "@/components/announcement-dismiss-button";
 
 export const metadata = {
   title: "IRS Updates · DueDateHQ",
 };
 
-export default function AnnouncementsPage() {
+type SearchParams = Promise<{ view?: string }>;
+
+export default function AnnouncementsPage({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
   return (
     <div className="mx-auto w-full max-w-4xl px-6 py-8">
       <Button asChild variant="ghost" size="sm" className="mb-4 -ml-3">
@@ -57,18 +65,21 @@ export default function AnnouncementsPage() {
           </div>
         }
       >
-        <Feed />
+        <Feed searchParams={searchParams} />
       </Suspense>
     </div>
   );
 }
 
-async function Feed() {
+async function Feed({ searchParams }: { searchParams: SearchParams }) {
   // getCurrentContext() reads auth headers, which marks this page as
   // dynamic — required by Cache Components before we touch `new Date()`
   // inside the listing call. Also serves as the auth gate (redirects
   // anon users to sign-in) and gives us the org id for client matching.
   const ctx = await getCurrentContext();
+  const { view } = await searchParams;
+  const showDismissed = view === "dismissed";
+
   // minScore: 3 — hide pure PR (1) and "vaguely tax-adjacent" (2) so
   // the page is useful signal, not IRS newsroom mirror. Deadline moves
   // / form changes are 4-5; routine useful reminders are 3.
@@ -77,37 +88,64 @@ async function Feed() {
   const items = await listAnnouncementsWithImpact(ctx.organization.id, {
     sinceDays: 30,
     minScore: 3,
+    userId: ctx.user.id,
+    showDismissed,
   });
+  const dismissedCount = await countDismissedAnnouncements(ctx.user.id);
 
-  if (items.length === 0) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Nothing yet</CardTitle>
-          <CardDescription>
-            The scraper runs daily at 4am ET. New items will appear here when
-            the IRS posts them. If this stays empty for more than 24 hours,
-            something&apos;s wrong with the cron — let us know.
-          </CardDescription>
-        </CardHeader>
-      </Card>
-    );
-  }
-
-  // Sort high-relevance to the top so eyes land on what matters.
+  // Sort high-relevance to the top so eyes land on what matters. Only
+  // applies to the active view; dismissed view shows whatever's there.
   const high = items.filter((i) => i.relevanceScore >= 4);
   const rest = items.filter((i) => i.relevanceScore < 4);
 
   return (
     <div className="space-y-6">
+      {/* View toggle — only renders when there's actually something
+          dismissed to recover. Hiding it on a fresh org keeps the page
+          quiet. */}
+      {dismissedCount > 0 || showDismissed ? (
+        <div className="flex items-center gap-2">
+          <ViewToggleLink
+            href="/announcements"
+            label="Active"
+            active={!showDismissed}
+          />
+          <ViewToggleLink
+            href="/announcements?view=dismissed"
+            label={`Dismissed (${dismissedCount})`}
+            active={showDismissed}
+          />
+        </div>
+      ) : null}
+
+      {items.length === 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              {showDismissed ? "Nothing dismissed" : "Nothing yet"}
+            </CardTitle>
+            <CardDescription>
+              {showDismissed
+                ? "Items you dismiss from the dashboard will show up here so you can restore them."
+                : "The scraper runs daily at 4am ET. New items will appear here when the IRS posts them. If this stays empty for more than 24 hours, something's wrong with the cron — let us know."}
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      ) : null}
+
       {high.length > 0 ? (
         <section>
           <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            High priority — last 30 days
+            {showDismissed ? "Dismissed — high priority" : "High priority — last 30 days"}
           </h2>
           <div className="space-y-2">
             {high.map((a) => (
-              <AnnouncementRow key={a.id} a={a} highlight />
+              <AnnouncementRow
+                key={a.id}
+                a={a}
+                highlight={!showDismissed}
+                showDismissed={showDismissed}
+              />
             ))}
           </div>
         </section>
@@ -116,11 +154,15 @@ async function Feed() {
       {rest.length > 0 ? (
         <section>
           <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Other recent
+            {showDismissed ? "Dismissed — other" : "Other recent"}
           </h2>
           <div className="space-y-2">
             {rest.map((a) => (
-              <AnnouncementRow key={a.id} a={a} />
+              <AnnouncementRow
+                key={a.id}
+                a={a}
+                showDismissed={showDismissed}
+              />
             ))}
           </div>
         </section>
@@ -129,12 +171,38 @@ async function Feed() {
   );
 }
 
+function ViewToggleLink({
+  href,
+  label,
+  active,
+}: {
+  href: string;
+  label: string;
+  active: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+        active
+          ? "bg-foreground text-background"
+          : "border border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+      }`}
+    >
+      {label}
+    </Link>
+  );
+}
+
 function AnnouncementRow({
   a,
   highlight = false,
+  showDismissed = false,
 }: {
   a: AnnouncementWithImpact;
   highlight?: boolean;
+  /** When true, this row IS dismissed — show "Restore" instead of X. */
+  showDismissed?: boolean;
 }) {
   return (
     <article
@@ -192,7 +260,7 @@ function AnnouncementRow({
               </span>
             </div>
           ) : null}
-          <div className="mt-2">
+          <div className="mt-2 flex items-center justify-between gap-3">
             <a
               href={a.url}
               target="_blank"
@@ -201,6 +269,13 @@ function AnnouncementRow({
             >
               Read on IRS.gov <ExternalLink className="h-3 w-3" />
             </a>
+            {/* Dismiss / Restore — left of the read link to balance the row.
+                In active view we show a small X; in dismissed view we show
+                a "Restore" pill so the recovery action is obvious. */}
+            <AnnouncementDismissButton
+              announcementId={a.id}
+              variant={showDismissed ? "undismiss" : "dismiss"}
+            />
           </div>
         </div>
       </div>

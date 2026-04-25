@@ -4,6 +4,7 @@ import { UserButton } from "@clerk/nextjs";
 import { currentUser } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { GlobalSearch } from "@/components/global-search";
+import { getCurrentContext } from "@/lib/auth/current-org";
 import { getAnnouncementsSummary } from "@/lib/services/announcements";
 
 /**
@@ -104,7 +105,11 @@ function NavLink({
 // "what counts as worth your attention". Renders nothing when zero —
 // no badge means no urgent IRS items, which is the default state.
 async function UpdatesNavLink() {
-  const summary = await getAnnouncementsSummary();
+  // Pass user id so dismissed items drop out of the badge count.
+  // Defense-in-depth: redirect happens in HeaderUser via currentUser(),
+  // so by the time this runs, ctx is guaranteed.
+  const ctx = await getCurrentContext();
+  const summary = await getAnnouncementsSummary(ctx.user.id);
   const count = summary.highRelevance7d;
   const badge =
     count > 0 ? (

@@ -362,6 +362,45 @@ export const ANNOUNCEMENT_CATEGORIES = [
 ] as const;
 
 // ---------------------------------------------------------------------------
+// Per-user dismiss state for announcements.
+//
+// Lets a CPA close an announcement they've read so it stops claiming
+// dashboard real estate. Per-USER (not per-org) — for solo persona this
+// is the same thing, and for multi-seat firms it's actually the right
+// primitive (partner A's "I've read this" shouldn't hide it from
+// partner B who hasn't).
+//
+// Source-of-truth announcements stay intact; this is purely a view filter.
+// Reversible — un-dismiss simply deletes the row.
+// ---------------------------------------------------------------------------
+
+export const announcementDismissals = pgTable(
+  "announcement_dismissals",
+  {
+    id: text("id").primaryKey().$defaultFn(() => `dis_${nanoid(12)}`),
+    userId: text("user_id").notNull().references(() => users.id, {
+      onDelete: "cascade",
+    }),
+    announcementId: text("announcement_id").notNull().references(
+      () => announcements.id,
+      { onDelete: "cascade" },
+    ),
+    dismissedAt: timestamp("dismissed_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    // One dismiss per (user, announcement). Repeat clicks are no-ops.
+    uniqueIndex("announcement_dismissals_user_ann_idx").on(
+      t.userId,
+      t.announcementId,
+    ),
+    // Anti-join from announcements list filter.
+    index("announcement_dismissals_user_idx").on(t.userId),
+  ],
+);
+
+// ---------------------------------------------------------------------------
 // Audit log (Day 1 — invisible to users in MVP, visible in V2 small-firm tier)
 // ---------------------------------------------------------------------------
 
@@ -406,3 +445,4 @@ export type DigestSend = typeof digestSends.$inferSelect;
 export type NewDigestSend = typeof digestSends.$inferInsert;
 export type Announcement = typeof announcements.$inferSelect;
 export type NewAnnouncement = typeof announcements.$inferInsert;
+export type AnnouncementDismissal = typeof announcementDismissals.$inferSelect;

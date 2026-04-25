@@ -29,6 +29,7 @@ import {
   listAnnouncementsWithImpact,
   type AnnouncementWithImpact,
 } from "@/lib/services/announcements";
+import { AnnouncementDismissButton } from "@/components/announcement-dismiss-button";
 import {
   DashboardClient,
   type DashboardDeadline,
@@ -100,6 +101,7 @@ async function DashboardAnnouncements() {
     sinceDays: 30,
     minScore: 4,
     limit: 3,
+    userId: ctx.user.id, // exclude this user's dismissed items
   });
   if (items.length === 0) return null;
 
@@ -137,7 +139,7 @@ function DashboardAnnouncementRow({ a }: { a: AnnouncementWithImpact }) {
   // outage day; the row will still appear, just without the summary).
   const matchCount = a.affectedClients.length;
   return (
-    <div className="flex items-start gap-3 px-4 py-3">
+    <div className="group/announcement-row relative flex items-start gap-3 px-4 py-3">
       <CategoryGlyph category={a.category} />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-1.5">
@@ -191,6 +193,11 @@ function DashboardAnnouncementRow({ a }: { a: AnnouncementWithImpact }) {
             Read on IRS.gov <ExternalLink className="h-2.5 w-2.5" />
           </a>
         </div>
+      </div>
+      {/* Dismiss X — top-right of each row. Visible always; hover gives
+          subtle background. After click, the row disappears on revalidate. */}
+      <div className="absolute right-2 top-2">
+        <AnnouncementDismissButton announcementId={a.id} size="sm" />
       </div>
     </div>
   );
