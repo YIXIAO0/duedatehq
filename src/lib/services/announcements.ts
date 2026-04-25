@@ -16,6 +16,7 @@ import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import {
   announcements,
+  announcementClientAcks,
   announcementDismissals,
   type Announcement,
 } from "@/lib/db/schema";
@@ -109,6 +110,12 @@ export type AffectedClient = {
 
 export type AnnouncementWithImpact = Announcement & {
   affectedClients: AffectedClient[];
+  /**
+   * How many of `affectedClients` the calling user has already reviewed.
+   * Only populated when a userId is supplied (otherwise 0). Lets the
+   * dashboard show "2 of 7 reviewed" and surface unfinished items first.
+   */
+  ackedClientCount: number;
 };
 
 export async function listAnnouncementsWithImpact(
@@ -158,6 +165,7 @@ export async function listAnnouncementsWithImpact(
     ai_summary: string | null;
     created_at: Date;
     affected_clients: AffectedClient[] | null;
+    acked_client_count: number;
   }>(sql`
     SELECT
       a.id, a.source, a.external_id, a.title, a.summary, a.url,
@@ -178,7 +186,20 @@ export async function listAnnouncementsWithImpact(
             AND a.affected_jurisdictions ? e.home_state
         ),
         '[]'::jsonb
-      ) AS affected_clients
+      ) AS affected_clients,
+      ${
+        parsed.userId
+          ? sql`(
+              SELECT COUNT(*)::int
+              FROM announcement_client_acks ack
+              INNER JOIN clients c2 ON c2.id = ack.client_id
+              WHERE ack.announcement_id = a.id
+                AND ack.user_id = ${parsed.userId}
+                AND c2.org_id = ${orgId}
+                AND c2.archived_at IS NULL
+            )`
+          : sql`0`
+      } AS acked_client_count
     FROM announcements a
     WHERE a.relevance_score >= ${parsed.minScore}
       ${sinceFilter}
@@ -202,6 +223,7 @@ export async function listAnnouncementsWithImpact(
     aiSummary: r.ai_summary,
     createdAt: new Date(r.created_at),
     affectedClients: r.affected_clients ?? [],
+    ackedClientCount: Number(r.acked_client_count ?? 0),
   }));
 }
 
@@ -331,4 +353,198 @@ export async function countDismissedAnnouncements(
     WHERE user_id = ${userId}
   `);
   return Number(r.rows[0]?.n ?? 0);
+}
+
+// ---------------------------------------------------------------------------
+// Per-announcement client checklist — the deadline-centric view.
+//
+// Given an announcement id + the calling user, returns:
+//   - the announcement itself
+//   - every client in the org whose home_state intersects the announcement's
+//     affected_jurisdictions
+//   - for each client, the open deadlines (pending / in_progress / extended)
+//     that fall in the relevant tax window — these are the ones the CPA
+//     might need to act on
+//   - whether the calling user has already marked this (announcement, client)
+//     pair as reviewed
+//
+// One round-trip via two queries (announcement + client list with embedded
+// deadline list as jsonb), then a join with the ack table.
+// ---------------------------------------------------------------------------
+
+export type ReviewableDeadline = {
+  id: string;
+  dueDate: string;
+  effectiveDueDate: string;
+  status: string;
+  formCode: string;
+  ruleTitle: string;
+  jurisdictionCode: string;
+};
+
+export type ReviewableClient = {
+  clientId: string;
+  clientName: string;
+  primaryContactEmail: string | null;
+  matchedStates: string[]; // which of the client's entity states matched
+  openDeadlines: ReviewableDeadline[];
+  acked: boolean;
+};
+
+export type AnnouncementReview = {
+  announcement: Announcement;
+  clients: ReviewableClient[];
+};
+
+export async function getAnnouncementReview(
+  announcementId: string,
+  orgId: string,
+  userId: string,
+): Promise<AnnouncementReview | null> {
+  const db = getDb();
+
+  // 1. The announcement itself.
+  const annRows = await db
+    .select()
+    .from(announcements)
+    .where(eq(announcements.id, announcementId))
+    .limit(1);
+  const ann = annRows[0];
+  if (!ann) return null;
+
+  // 2. Affected clients with embedded open-deadlines list. The
+  //    LATERAL subquery aggregates each client's deadlines into a jsonb
+  //    array so we don't N+1. Open = pending/in_progress/extended; we
+  //    skip completed/missed because they can't be acted on anymore.
+  //
+  //    We also LEFT JOIN announcement_client_acks for the calling user so
+  //    each row carries its own "acked?" flag.
+  const rows = await db.execute<{
+    client_id: string;
+    client_name: string;
+    primary_contact_email: string | null;
+    matched_states: string[];
+    open_deadlines:
+      | Array<{
+          id: string;
+          due_date: string;
+          effective_due_date: string;
+          status: string;
+          form_code: string;
+          rule_title: string;
+          jurisdiction_code: string;
+        }>
+      | null;
+    acked: boolean;
+  }>(sql`
+    SELECT
+      c.id AS client_id,
+      c.name AS client_name,
+      c.primary_contact_email,
+      ARRAY(
+        SELECT DISTINCT e.home_state
+        FROM entities e
+        WHERE e.client_id = c.id
+          AND e.archived_at IS NULL
+          AND e.home_state IS NOT NULL
+          AND ${ann.affectedJurisdictions} @> jsonb_build_array(e.home_state)
+      ) AS matched_states,
+      (
+        SELECT COALESCE(jsonb_agg(d ORDER BY d.effective_due_date ASC), '[]'::jsonb)
+        FROM (
+          SELECT
+            di.id,
+            di.due_date::text AS due_date,
+            COALESCE(di.extension_due_date, di.due_date)::text AS effective_due_date,
+            di.status::text AS status,
+            r.form_code,
+            r.title AS rule_title,
+            r.jurisdiction_code
+          FROM deadline_instances di
+          INNER JOIN entities e2 ON e2.id = di.entity_id
+          INNER JOIN deadline_rules r ON r.id = di.rule_id
+          WHERE e2.client_id = c.id
+            AND e2.archived_at IS NULL
+            AND di.status IN ('pending', 'in_progress', 'extended')
+            -- Match on jurisdiction OR federal — federal items affect every
+            -- federal-form deadline regardless of client state.
+            AND (
+              r.jurisdiction_code = ANY(
+                SELECT jsonb_array_elements_text(${ann.affectedJurisdictions})
+              )
+              OR r.jurisdiction_code = 'federal'
+            )
+        ) d
+      ) AS open_deadlines,
+      EXISTS (
+        SELECT 1 FROM announcement_client_acks ack
+        WHERE ack.announcement_id = ${announcementId}
+          AND ack.client_id = c.id
+          AND ack.user_id = ${userId}
+      ) AS acked
+    FROM clients c
+    WHERE c.org_id = ${orgId}
+      AND c.archived_at IS NULL
+      AND EXISTS (
+        SELECT 1 FROM entities e
+        WHERE e.client_id = c.id
+          AND e.archived_at IS NULL
+          AND e.home_state IS NOT NULL
+          AND ${ann.affectedJurisdictions} @> jsonb_build_array(e.home_state)
+      )
+    ORDER BY acked ASC, c.name ASC
+  `);
+
+  return {
+    announcement: ann,
+    clients: rows.rows.map((r) => ({
+      clientId: r.client_id,
+      clientName: r.client_name,
+      primaryContactEmail: r.primary_contact_email,
+      matchedStates: r.matched_states ?? [],
+      openDeadlines: (r.open_deadlines ?? []).map((d) => ({
+        id: d.id,
+        dueDate: d.due_date,
+        effectiveDueDate: d.effective_due_date,
+        status: d.status,
+        formCode: d.form_code,
+        ruleTitle: d.rule_title,
+        jurisdictionCode: d.jurisdiction_code,
+      })),
+      acked: Boolean(r.acked),
+    })),
+  };
+}
+
+/**
+ * Mark this (announcement, client) pair as reviewed for the calling user.
+ * Idempotent — repeat clicks ON CONFLICT DO NOTHING.
+ */
+export async function ackClientForAnnouncement(args: {
+  userId: string;
+  announcementId: string;
+  clientId: string;
+}): Promise<void> {
+  const db = getDb();
+  await db
+    .insert(announcementClientAcks)
+    .values(args)
+    .onConflictDoNothing();
+}
+
+export async function unackClientForAnnouncement(args: {
+  userId: string;
+  announcementId: string;
+  clientId: string;
+}): Promise<void> {
+  const db = getDb();
+  await db
+    .delete(announcementClientAcks)
+    .where(
+      and(
+        eq(announcementClientAcks.userId, args.userId),
+        eq(announcementClientAcks.announcementId, args.announcementId),
+        eq(announcementClientAcks.clientId, args.clientId),
+      ),
+    );
 }

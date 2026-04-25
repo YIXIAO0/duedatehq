@@ -90,19 +90,49 @@ async function DashboardAnnouncements() {
   // request data first; the parent page is dynamic via DashboardStats
   // but each Suspense boundary needs to qualify on its own.
   const ctx = await getCurrentContext();
-  // 30-day window — high-impact IRS regs stay relevant for weeks, not
-  // days. The header "IRS updates" badge intentionally uses the tighter
-  // 7-day window so it can return to zero and signal "new this week" —
-  // the card is stable display of "what's worth knowing right now".
-  // listAnnouncementsWithImpact also intersects each item's
-  // affected_jurisdictions with this org's clients' home_state, so we
-  // can render "Affects N of your clients" inline.
-  const items = await listAnnouncementsWithImpact(ctx.organization.id, {
+  const allItems = await listAnnouncementsWithImpact(ctx.organization.id, {
     sinceDays: 30,
     minScore: 4,
-    limit: 3,
+    limit: 10, // pull more so we can filter + still surface 3
     userId: ctx.user.id, // exclude this user's dismissed items
   });
+
+  // Reframe per coworker feedback: this product is about deadlines, not
+  // an IRS news feed. Only surface items that imply real client work:
+  //   - has at least one of our clients in the affected jurisdictions, OR
+  //   - is a deadline-shifting category (disaster_relief / form_change)
+  //     even if federal-only — those move every CPA's calendar.
+  // Procedural / general items live on /announcements only.
+  // ALSO hide items where every affected client has already been
+  // reviewed — the work is done, get it off the dashboard.
+  const deadlineRelevant = allItems.filter((a) => {
+    const isDeadlineRelevant =
+      a.affectedClients.length > 0 ||
+      a.category === "disaster_relief" ||
+      a.category === "form_change";
+    if (!isDeadlineRelevant) return false;
+    // Hide when fully reviewed (nothing left to do).
+    const fullyReviewed =
+      a.affectedClients.length > 0 &&
+      a.ackedClientCount >= a.affectedClients.length;
+    return !fullyReviewed;
+  });
+
+  // Sort: items affecting your clients first (most actionable), then by
+  // unfinished review progress (more pending → higher priority), then by
+  // recency. The CPA's eye lands on "I have 5 unreviewed clients" first.
+  const items = deadlineRelevant
+    .sort((a, b) => {
+      const aHas = a.affectedClients.length > 0 ? 1 : 0;
+      const bHas = b.affectedClients.length > 0 ? 1 : 0;
+      if (aHas !== bHas) return bHas - aHas;
+      const aPending = a.affectedClients.length - a.ackedClientCount;
+      const bPending = b.affectedClients.length - b.ackedClientCount;
+      if (aPending !== bPending) return bPending - aPending;
+      return b.publishedAt.getTime() - a.publishedAt.getTime();
+    })
+    .slice(0, 3);
+
   if (items.length === 0) return null;
 
   return (
@@ -111,17 +141,14 @@ async function DashboardAnnouncements() {
         <div className="flex items-center gap-2">
           <AlertTriangle className="h-4 w-4 text-[var(--color-priority-urgent)]" />
           <span className="text-sm font-semibold text-[var(--color-priority-urgent)]">
-            IRS updates worth reviewing
-          </span>
-          <span className="text-xs text-muted-foreground">
-            · last 30 days
+            Heads up — these may affect your deadlines
           </span>
         </div>
         <Link
           href="/announcements"
           className="text-xs font-medium text-[var(--color-priority-urgent)] hover:underline"
         >
-          View all →
+          See all IRS updates →
         </Link>
       </div>
       <div className="divide-y divide-[var(--color-priority-urgent)]/15">
@@ -138,8 +165,14 @@ function DashboardAnnouncementRow({ a }: { a: AnnouncementWithImpact }) {
   // Fall back to title only when AI hasn't run yet (e.g. AI Gateway
   // outage day; the row will still appear, just without the summary).
   const matchCount = a.affectedClients.length;
+  const ackedCount = a.ackedClientCount;
+  const pendingCount = matchCount - ackedCount;
+  const allReviewed = matchCount > 0 && pendingCount === 0;
   return (
-    <div className="group/announcement-row relative flex items-start gap-3 px-4 py-3">
+    // pr-10 reserves space for the absolute-positioned X so the date in the
+    // meta row doesn't slide under it. Without this the date wraps or gets
+    // visually overlapped by the dismiss button.
+    <div className="group/announcement-row relative flex items-start gap-3 px-4 py-3 pr-10">
       <CategoryGlyph category={a.category} />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-1.5">
@@ -164,31 +197,52 @@ function DashboardAnnouncementRow({ a }: { a: AnnouncementWithImpact }) {
             {a.aiSummary}
           </div>
         ) : null}
-        {/* Client-impact line — the moat-deepening surface. Only renders
-            for state-specific items that actually intersect the user's
-            client base. Shows up to 4 names then "+N more". Federal-only
-            items naturally produce no matches and skip this line. */}
+        {/* Primary CTA — review affected clients one by one. This is the
+            deadline-centric reframe: the announcement is just the trigger;
+            the work is "go through these N clients and check their
+            deadlines". When the user has acked all N, the block flips to
+            an "All reviewed" state. */}
         {matchCount > 0 ? (
-          <div className="mt-1.5 flex flex-wrap items-center gap-1.5 rounded-md border border-[var(--color-priority-urgent)]/40 bg-background/60 px-2 py-1.5">
-            <span className="text-[11px] font-semibold text-[var(--color-priority-urgent)]">
-              Affects {matchCount}{" "}
-              {matchCount === 1 ? "of your clients" : "of your clients"}
-            </span>
-            <span className="text-[11px] text-foreground/70">
-              {a.affectedClients
-                .slice(0, 4)
-                .map((c) => c.name)
-                .join(" · ")}
-              {matchCount > 4 ? ` · +${matchCount - 4} more` : ""}
-            </span>
-          </div>
+          <Link
+            href={`/announcements/${a.id}`}
+            className={`mt-2 flex items-center gap-3 rounded-md border px-3 py-2 transition-colors ${
+              allReviewed
+                ? "border-[var(--color-priority-done)]/40 bg-[var(--color-priority-done-bg)]/40 hover:bg-[var(--color-priority-done-bg)]/70"
+                : "border-[var(--color-priority-urgent)]/40 bg-background/60 hover:bg-[var(--color-priority-urgent-bg)]/50"
+            }`}
+          >
+            <div className="min-w-0 flex-1">
+              <div
+                className={`text-[12px] font-semibold ${
+                  allReviewed
+                    ? "text-[var(--color-priority-done)]"
+                    : "text-[var(--color-priority-urgent)]"
+                }`}
+              >
+                {allReviewed
+                  ? `All ${matchCount} clients reviewed`
+                  : `Review ${pendingCount} of ${matchCount} affected ${
+                      matchCount === 1 ? "client" : "clients"
+                    }`}
+              </div>
+              <div className="mt-0.5 truncate text-[11px] text-foreground/65">
+                {a.affectedClients
+                  .slice(0, 4)
+                  .map((c) => c.name)
+                  .join(" · ")}
+                {matchCount > 4 ? ` · +${matchCount - 4} more` : ""}
+              </div>
+            </div>
+            <span className="text-sm font-semibold">→</span>
+          </Link>
         ) : null}
+        {/* Source link — secondary now, not the headline action */}
         <div className="mt-1.5">
           <a
             href={a.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-[11px] font-medium text-[var(--color-priority-urgent)] hover:underline"
+            className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground hover:underline"
           >
             Read on IRS.gov <ExternalLink className="h-2.5 w-2.5" />
           </a>

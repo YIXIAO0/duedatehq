@@ -3,7 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentContext } from "@/lib/auth/current-org";
 import {
+  ackClientForAnnouncement,
   dismissAnnouncement,
+  unackClientForAnnouncement,
   undismissAnnouncement,
 } from "@/lib/services/announcements";
 
@@ -32,4 +34,29 @@ export async function undismissAnnouncementAction(announcementId: string) {
   revalidatePath("/dashboard");
   revalidatePath("/announcements");
   revalidatePath("/", "layout");
+}
+
+// Per-client review checkbox on /announcements/[id]. Toggle-style:
+// pass `acked` to indicate the desired post-state. Idempotent.
+export async function setClientReviewedAction(args: {
+  announcementId: string;
+  clientId: string;
+  acked: boolean;
+}) {
+  const ctx = await getCurrentContext();
+  if (args.acked) {
+    await ackClientForAnnouncement({
+      userId: ctx.user.id,
+      announcementId: args.announcementId,
+      clientId: args.clientId,
+    });
+  } else {
+    await unackClientForAnnouncement({
+      userId: ctx.user.id,
+      announcementId: args.announcementId,
+      clientId: args.clientId,
+    });
+  }
+  revalidatePath(`/announcements/${args.announcementId}`);
+  revalidatePath("/dashboard");
 }

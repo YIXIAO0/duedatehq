@@ -374,6 +374,48 @@ export const ANNOUNCEMENT_CATEGORIES = [
 // Reversible — un-dismiss simply deletes the row.
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Per-client review state for an announcement.
+//
+// When a deadline-affecting IRS announcement ("FL hurricane disaster
+// relief, deadline postponed") matches some of the org's clients, the
+// CPA's actual workflow is: walk through each affected client one by
+// one, decide what to do. This table tracks "I've reviewed Anderson
+// for this announcement" so the CPA can come back tomorrow and pick
+// up where they left off.
+//
+// Per-USER (not per-org). Per-ORG would mean partner A acking
+// "reviewed" hides it from partner B who hasn't looked. Wrong primitive.
+// ---------------------------------------------------------------------------
+
+export const announcementClientAcks = pgTable(
+  "announcement_client_acks",
+  {
+    id: text("id").primaryKey().$defaultFn(() => `ack_${nanoid(12)}`),
+    userId: text("user_id").notNull().references(() => users.id, {
+      onDelete: "cascade",
+    }),
+    announcementId: text("announcement_id").notNull().references(
+      () => announcements.id,
+      { onDelete: "cascade" },
+    ),
+    clientId: text("client_id").notNull().references(() => clients.id, {
+      onDelete: "cascade",
+    }),
+    ackedAt: timestamp("acked_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("ann_client_ack_user_ann_client_idx").on(
+      t.userId,
+      t.announcementId,
+      t.clientId,
+    ),
+    index("ann_client_ack_ann_user_idx").on(t.announcementId, t.userId),
+  ],
+);
+
 export const announcementDismissals = pgTable(
   "announcement_dismissals",
   {
@@ -446,3 +488,4 @@ export type NewDigestSend = typeof digestSends.$inferInsert;
 export type Announcement = typeof announcements.$inferSelect;
 export type NewAnnouncement = typeof announcements.$inferInsert;
 export type AnnouncementDismissal = typeof announcementDismissals.$inferSelect;
+export type AnnouncementClientAck = typeof announcementClientAcks.$inferSelect;
