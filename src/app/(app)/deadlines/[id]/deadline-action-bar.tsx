@@ -32,13 +32,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  CheckCircle2,
-  Calendar,
-  CalendarPlus,
-  RotateCcw,
-  Loader2,
-} from "lucide-react";
+import { CheckCircle2, Calendar, Download, RotateCcw, Loader2 } from "lucide-react";
 import {
   markCompleteAction,
   reopenAction,
@@ -287,22 +281,21 @@ export function DeadlineActionBar({
         </DialogContent>
       </Dialog>
 
-      {/* Add to calendar — single .ics download. Using onClick rather
-          than `<Button asChild><a download/></Button>` because the
-          anchor variant rendered visibly taller than the sibling
-          buttons (the Slot pattern + native <a> default styles caused
-          a vertical-rhythm wobble). The server response's
-          `Content-Disposition: attachment` header makes the browser
-          download the file regardless of how we trigger navigation. */}
+      {/* Add to calendar — downloads a single .ics. Using `Download`
+          icon rather than `CalendarPlus` because the latter's extra
+          "+" glyph gave it more ink-weight than the Calendar icon on
+          File extension, making the button read as visibly taller
+          even though the box-model height was identical. Download
+          also more accurately describes what happens — the browser
+          gets a file. */}
       <Button
-        type="button"
         variant="outline"
         disabled={pending}
         onClick={() => {
           window.location.assign(`/api/deadlines/${deadlineId}/ics`);
         }}
       >
-        <CalendarPlus className="mr-2 h-4 w-4" /> Add to calendar
+        <Download className="mr-2 h-4 w-4" /> Add to calendar
       </Button>
       </div>
 
