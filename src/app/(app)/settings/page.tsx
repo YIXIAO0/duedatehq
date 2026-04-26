@@ -101,8 +101,7 @@ async function CalendarSyncSection() {
       <CardHeader>
         <CardTitle className="text-base">Calendar sync</CardTitle>
         <CardDescription>
-          Subscribe to your DueDateHQ deadlines from Google Calendar,
-          Outlook, or Apple Calendar.
+          Add deadlines to Google Calendar, Outlook, or Apple Calendar.
         </CardDescription>
       </CardHeader>
       <CardContent>

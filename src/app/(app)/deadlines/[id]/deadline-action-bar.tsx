@@ -287,14 +287,22 @@ export function DeadlineActionBar({
         </DialogContent>
       </Dialog>
 
-      {/* Add to calendar — single .ics download. Plain anchor with a
-          download attribute so the browser hands the file to the OS
-          calendar association without a JS round-trip. Sits next to
-          File extension because both are "calendar-shaped" actions. */}
-      <Button asChild variant="outline">
-        <a href={`/api/deadlines/${deadlineId}/ics`} download>
-          <CalendarPlus className="mr-2 h-4 w-4" /> Add to calendar
-        </a>
+      {/* Add to calendar — single .ics download. Using onClick rather
+          than `<Button asChild><a download/></Button>` because the
+          anchor variant rendered visibly taller than the sibling
+          buttons (the Slot pattern + native <a> default styles caused
+          a vertical-rhythm wobble). The server response's
+          `Content-Disposition: attachment` header makes the browser
+          download the file regardless of how we trigger navigation. */}
+      <Button
+        type="button"
+        variant="outline"
+        disabled={pending}
+        onClick={() => {
+          window.location.assign(`/api/deadlines/${deadlineId}/ics`);
+        }}
+      >
+        <CalendarPlus className="mr-2 h-4 w-4" /> Add to calendar
       </Button>
       </div>
 

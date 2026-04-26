@@ -79,38 +79,26 @@ export function CalendarSyncCard({
 
   if (!subscriptionUrl) {
     return (
-      <div className="space-y-3">
-        <p className="text-sm text-muted-foreground">
-          Subscribe in Google Calendar / Outlook / Apple Calendar so every
-          open deadline lands in the same calendar you already check daily.
-          Updates pull automatically every hour or so — no plug-in to
-          install.
-        </p>
-        <Button onClick={handleEnable} disabled={pending}>
-          {pending ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Generating…
-            </>
-          ) : (
-            <>
-              <Calendar className="mr-2 h-4 w-4" /> Enable calendar sync
-            </>
-          )}
-        </Button>
-      </div>
+      <Button onClick={handleEnable} disabled={pending}>
+        {pending ? (
+          <>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Generating…
+          </>
+        ) : (
+          <>
+            <Calendar className="mr-2 h-4 w-4" /> Enable calendar sync
+          </>
+        )}
+      </Button>
     );
   }
 
   return (
-    <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">
-        Paste this URL into your calendar app as a new subscription
-        (instructions below). Anyone with this URL can read your
-        deadlines — keep it private.
-      </p>
-
-      {/* URL display + copy button. We use a readonly input rather than
-          a code block so users can triple-click to select on desktop. */}
+    <div className="space-y-3">
+      {/* URL display + copy button. Readonly input (not a code block) so
+          users can triple-click to select on desktop. The privacy note
+          sits below it as a small caption rather than a full paragraph
+          — the URL is the focal point, not the prose around it. */}
       <div className="flex gap-2">
         <input
           readOnly
@@ -138,6 +126,10 @@ export function CalendarSyncCard({
           )}
         </Button>
       </div>
+
+      <p className="text-xs text-muted-foreground">
+        Anyone with this URL can read your deadlines — keep it private.
+      </p>
 
       {/* Per-app instructions. Each app's flow is just different enough
           to confuse new users; spelling them out beats sending people
