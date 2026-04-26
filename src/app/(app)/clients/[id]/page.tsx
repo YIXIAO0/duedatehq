@@ -289,19 +289,29 @@ function DeadlinesSection({
  * the same for every row beneath it — that's why it's hoisted), and a
  * count when the streak has more than one row.
  *
- * Visual: muted background strip so it reads as a separator between
- * date groups while still feeling part of the same table.
+ * Visual hierarchy notes:
+ *   - bg-muted (full, not /30) so the band reads as a header strip
+ *     rather than "another row that happens to be slightly tinted"
+ *   - colored urgency dot at the start so distant dates still show a
+ *     visible signal — the previous design rendered all >30d as muted
+ *     gray and the urgency layers were invisible
+ *   - uppercase + tracking-wider date so the typography contrasts
+ *     with the title-case form codes in the rows below
  */
 function DateSubheader({ date, count }: { date: string; count: number }) {
-  const { label, color } = relativeTime(date);
+  const { label, text, dot } = relativeTime(date);
   return (
-    <div className="flex items-center gap-2 bg-muted/30 px-4 py-1.5">
-      <span className="text-xs font-semibold tracking-wide">
+    <div className="flex items-center gap-2.5 bg-muted px-4 py-1.5">
+      <span
+        className={`size-1.5 shrink-0 rounded-full ${dot}`}
+        aria-hidden
+      />
+      <span className="text-[11px] font-bold uppercase tracking-wider">
         {formatShortDate(date)}
       </span>
-      <span className={`text-[11px] ${color}`}>{label}</span>
+      <span className={`text-[11px] font-medium ${text}`}>{label}</span>
       {count > 1 ? (
-        <span className="ml-auto text-[11px] text-muted-foreground">
+        <span className="ml-auto text-[10px] uppercase tracking-wider text-muted-foreground">
           {count} deadlines
         </span>
       ) : null}
@@ -356,14 +366,28 @@ function DeadlineRow({
 }
 
 /**
- * Relative-time label for a future or past date.
+ * Relative-time label + urgency colors for a future or past date.
  *
- * For near-term we keep day-precision because tax deadlines are felt
- * in days ("3d overdue", "in 7d"). Beyond a month, days lose meaning
- * — "In 354d" is psychologically heavier than "in 12mo" because the
- * brain has to convert. Switch to weeks past 30 days, months past 90.
+ * Returns three things so callers can pick where they want color to
+ * land: `text` for the relative chip, `dot` for an indicator dot.
+ *
+ * Two tier groups:
+ *   - Urgent zone (≤30d): uses the existing priority tokens — these
+ *     are the ones the CPA reacts to.
+ *   - Calm zone (>30d): emerald → sky → muted as the date drifts
+ *     into the future. The previous palette was muted-gray for
+ *     everything past 30 days, which made urgency layers invisible
+ *     when looking at a long-horizon list (e.g. all of 2027).
+ *
+ * Day-precision is kept for ≤30d because filing crunch is measured
+ * in days. Past that we switch to weeks (31-90), months (91-365),
+ * and years (>365) so "in 12mo" reads naturally instead of "in 354d".
  */
-function relativeTime(iso: string): { label: string; color: string } {
+function relativeTime(iso: string): {
+  label: string;
+  text: string;
+  dot: string;
+} {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const due = new Date(iso + "T00:00:00");
@@ -380,16 +404,31 @@ function relativeTime(iso: string): { label: string; color: string } {
   else if (days <= 365) label = `in ${Math.round(days / 30)}mo`;
   else label = `in ${Math.round(days / 365)}y`;
 
-  const color =
-    days < 0 || days <= 3
-      ? "text-[var(--color-priority-urgent)]"
-      : days <= 14
-      ? "text-[var(--color-priority-high)]"
-      : days <= 30
-      ? "text-[var(--color-priority-medium)]"
-      : "text-muted-foreground";
+  let text: string;
+  let dot: string;
+  if (days <= 3) {
+    text = "text-[var(--color-priority-urgent)]";
+    dot = "bg-[var(--color-priority-urgent)]";
+  } else if (days <= 14) {
+    text = "text-[var(--color-priority-high)]";
+    dot = "bg-[var(--color-priority-high)]";
+  } else if (days <= 30) {
+    text = "text-[var(--color-priority-medium)]";
+    dot = "bg-[var(--color-priority-medium)]";
+  } else if (days <= 90) {
+    // Calm green = "you have runway, don't panic"
+    text = "text-emerald-600 dark:text-emerald-400";
+    dot = "bg-emerald-500";
+  } else if (days <= 180) {
+    // Sky blue = "future planning bucket"
+    text = "text-sky-600 dark:text-sky-400";
+    dot = "bg-sky-500";
+  } else {
+    text = "text-muted-foreground";
+    dot = "bg-muted-foreground/40";
+  }
 
-  return { label, color };
+  return { label, text, dot };
 }
 
 function StatusBadge({
