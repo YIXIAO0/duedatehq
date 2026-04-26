@@ -300,7 +300,12 @@ function ContactDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      {/* max-w-2xl (672px) instead of lg (512px) — at lg the Name/Role
+          columns end up around 220px each and the placeholder
+          "Owner, Bookkeeper, CFO…" truncates. 2xl gives each column
+          ~300px which fits realistic role labels and longer email
+          addresses without horizontal scrolling. */}
+      <DialogContent className="max-w-2xl">
         <form
           action={async (fd) => {
             if (mode === "create") await createContactAction(fd);
