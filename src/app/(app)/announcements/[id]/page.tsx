@@ -53,9 +53,26 @@ async function Detail({ params }: { params: Params }) {
   if (!review) notFound();
 
   const { announcement: a, clients } = review;
-  const total = clients.length;
-  const acked = clients.filter((c) => c.acked).length;
-  const allDone = total > 0 && acked === total;
+
+  // "Done" is now defined per-deadline rather than per-client. A
+  // client is done when every affected deadline has been actioned —
+  // applied, skipped, or already covered by an existing extension
+  // that's at-or-past the relief date. This makes the progress bar
+  // mean something concrete: "I've handled 7 of 12 actual deadlines",
+  // not "I've ticked off 4 of 7 clients without acting on anything".
+  const totalDeadlines = clients.reduce(
+    (sum, c) => sum + c.affectedDeadlines.length,
+    0,
+  );
+  const doneDeadlines = clients.reduce(
+    (sum, c) =>
+      sum +
+      c.affectedDeadlines.filter(
+        (d) => d.appliedAt != null || d.alreadyCovered,
+      ).length,
+    0,
+  );
+  const allDone = totalDeadlines > 0 && doneDeadlines === totalDeadlines;
 
   return (
     <>
@@ -84,51 +101,50 @@ async function Detail({ params }: { params: Params }) {
           </p>
         ) : null}
 
-        {/* AI-extracted scope filters (Round C). When the model
-            extracted form codes or a deadline window, surface them
-            so the CPA understands why we narrowed the affected list
-            — and can spot when the AI got it wrong. Hidden when no
-            structured fields, since the row would be confusing. */}
-        {a.affectedFormCodes.length > 0 ||
-        a.originalDeadlineStart ||
-        a.reliefDeadline ? (
-          <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-border bg-muted/30 px-3 py-2 text-xs">
-            <span className="font-semibold uppercase tracking-wider text-muted-foreground">
-              AI scope
-            </span>
+        {/* One-line scope summary. Replaces the previous AI-scope pill
+            row that had separate "Forms:" / "Postponed window:" /
+            "New deadline:" boxes — visual noise. Inlined into a single
+            sentence the CPA can read in one beat. Only shown when AI
+            actually extracted at least one structured field. */}
+        {(a.affectedFormCodes.length > 0 ||
+          a.originalDeadlineStart ||
+          a.reliefDeadline) && (
+          <p className="mt-2 text-xs text-muted-foreground">
             {a.affectedFormCodes.length > 0 ? (
-              <span className="inline-flex flex-wrap items-center gap-1">
-                <span className="text-muted-foreground">Forms:</span>
-                {a.affectedFormCodes.map((f) => (
-                  <Badge
-                    key={f}
-                    variant="outline"
-                    className="font-mono text-[10px]"
-                  >
-                    {f}
-                  </Badge>
-                ))}
-              </span>
-            ) : null}
-            {a.originalDeadlineStart && a.originalDeadlineEnd ? (
-              <span className="text-muted-foreground">
-                Postponed window:{" "}
+              <>
+                Affects{" "}
                 <span className="font-medium text-foreground/80">
-                  {formatPlainDate(a.originalDeadlineStart)} →{" "}
+                  {a.affectedFormCodes.join(" / ")}
+                </span>
+                {" "}deadlines{" "}
+              </>
+            ) : (
+              "Affects deadlines "
+            )}
+            {a.originalDeadlineStart && a.originalDeadlineEnd ? (
+              <>
+                from{" "}
+                <span className="font-medium text-foreground/80">
+                  {formatPlainDate(a.originalDeadlineStart)}
+                </span>{" "}
+                through{" "}
+                <span className="font-medium text-foreground/80">
                   {formatPlainDate(a.originalDeadlineEnd)}
                 </span>
-              </span>
+                {" "}
+              </>
             ) : null}
             {a.reliefDeadline ? (
-              <span className="text-muted-foreground">
-                New deadline:{" "}
-                <span className="font-medium text-foreground/80">
+              <>
+                — moves to{" "}
+                <span className="font-medium text-foreground">
                   {formatPlainDate(a.reliefDeadline)}
                 </span>
-              </span>
+              </>
             ) : null}
-          </div>
-        ) : null}
+            .
+          </p>
+        )}
 
         <div className="mt-3">
           <a
@@ -143,42 +159,51 @@ async function Detail({ params }: { params: Params }) {
         </div>
       </header>
 
-      {/* Progress strip */}
-      <div
-        className={`mb-4 flex items-center justify-between rounded-lg border px-4 py-3 ${
-          allDone
-            ? "border-[var(--color-priority-done)]/30 bg-[var(--color-priority-done-bg)]/40"
-            : "border-border bg-muted/30"
-        }`}
-      >
-        <div className="flex items-center gap-3">
+      {/* Progress strip — counts deadlines, not clients. The unit of
+          work is the deadline (apply or skip relief), so progress
+          should reflect that. */}
+      {totalDeadlines > 0 ? (
+        <div
+          className={`mb-4 flex items-center gap-3 rounded-lg border px-4 py-3 ${
+            allDone
+              ? "border-[var(--color-priority-done)]/30 bg-[var(--color-priority-done-bg)]/40"
+              : "border-border bg-muted/30"
+          }`}
+        >
           {allDone ? (
-            <CheckCircle2 className="h-5 w-5 text-[var(--color-priority-done)]" />
+            <CheckCircle2 className="h-5 w-5 shrink-0 text-[var(--color-priority-done)]" />
           ) : (
-            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border-2 border-foreground/30 text-[11px] font-semibold">
-              {acked}
+            <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 border-foreground/30 text-[10px] font-semibold tabular-nums">
+              {doneDeadlines}
             </span>
           )}
           <div>
             <div className="text-sm font-semibold">
               {allDone
-                ? "All affected clients reviewed"
-                : `${acked} of ${total} clients reviewed`}
+                ? "All affected deadlines handled"
+                : `${doneDeadlines} of ${totalDeadlines} deadlines handled`}
             </div>
             <div className="text-xs text-muted-foreground">
               {allDone
-                ? "Nothing else to do here. This announcement won't appear on your dashboard anymore."
-                : "These clients are in the affected jurisdictions. Open each one, decide what to do, then tick them off."}
+                ? "Nothing else to do here. This announcement won't reappear on your dashboard."
+                : a.reliefDeadline
+                ? "Apply the relief date or skip per deadline. Already-extended deadlines that cover the relief date are marked automatically."
+                : "Mark each deadline reviewed once you've decided what to do."}
             </div>
           </div>
         </div>
-      </div>
+      ) : null}
 
       {/* The actual checklist */}
       {clients.length === 0 ? (
         <div className="rounded-lg border border-border bg-muted/30 p-6 text-sm text-muted-foreground">
-          No clients in your book are in the affected jurisdictions
-          ({a.affectedJurisdictions.join(", ") || "—"}). Nothing to review.
+          No clients in your book have open deadlines that match this
+          announcement&apos;s scope ({" "}
+          {a.affectedJurisdictions.join(", ") || "—"}
+          {a.affectedFormCodes.length > 0
+            ? ` · ${a.affectedFormCodes.join(", ")}`
+            : ""}
+          ). Nothing to review.
         </div>
       ) : (
         <div className="space-y-3">
@@ -187,6 +212,7 @@ async function Detail({ params }: { params: Params }) {
               key={c.clientId}
               announcementId={a.id}
               client={c}
+              reliefDeadline={a.reliefDeadline}
             />
           ))}
         </div>
