@@ -84,6 +84,13 @@ const ClassificationSchema = z.object({
   originalDeadlineEnd: IsoDateSchema,
   /** ISO date — the new postponed deadline. NULL for non-relief. */
   reliefDeadline: IsoDateSchema,
+  /** Specific counties (or other sub-state areas) named in the IRS
+   *  text as eligible. Disaster relief is FEMA-county-specific, not
+   *  state-wide — a "FL hurricane" announcement might only declare
+   *  6 of 67 counties. Surfacing this list lets CPAs verify each
+   *  client is actually in a declared area before applying relief.
+   *  Free-form strings: ["Hillsborough County, FL", "Manatee County, FL"]. */
+  affectedCounties: z.array(z.string().max(120)).max(80),
 });
 
 export type ScrapeResult = {
@@ -359,20 +366,41 @@ async function classifyAndStoreOne(
         "    or when no form is named.",
         "",
         "originalDeadlineStart / originalDeadlineEnd: ISO YYYY-MM-DD.",
-        "  - For disaster relief: the date range of original deadlines",
-        "    being postponed. If the article says 'deadlines from Aug 5",
-        "    through Feb 3', convert each to ISO YYYY-MM-DD format.",
-        "  - When only a single deadline is postponed, set start = end.",
-        "  - null when not a deadline-postponement item, or when the",
-        "    article doesn't give explicit dates.",
+        "  - The ORIGINAL statutory deadline(s) being postponed. NOT",
+        "    a year-agnostic 'every Apr 15 ever' window — extract the",
+        "    SPECIFIC date(s) named in the article, including the year.",
+        "  - When the article says 'deadlines from Aug 5, 2025 through",
+        "    Feb 3, 2026', convert each to ISO YYYY-MM-DD format.",
+        "  - When only one deadline is postponed (e.g. 'the April 15",
+        "    deadline of the 2026 calendar year'), set start = end to",
+        "    that single ISO date.",
+        "  - null when the article doesn't give explicit dates, or",
+        "    when not a deadline-postponement item.",
         "",
         "reliefDeadline: ISO YYYY-MM-DD.",
         "  - The new postponed deadline. If article says 'all postponed",
         "    to Feb 3, 2026', convert to ISO YYYY-MM-DD format.",
         "  - null when not applicable or unclear.",
         "",
-        "If you're unsure on a date, return null — a wrong date is worse",
-        "than no date because it would silently misclassify clients.",
+        "affectedCounties: array of county/area strings, each like",
+        "'Hillsborough County, FL'.",
+        "  - IRS disaster relief is FEMA-county-specific. The text will",
+        "    typically list the qualifying counties (sometimes 'all 67",
+        "    counties of Florida' = state-wide). Extract the literal",
+        "    list verbatim into individual entries.",
+        "  - Example: 'taxpayers in Hillsborough, Manatee, and Sarasota",
+        "    Counties' → ['Hillsborough County, FL', 'Manatee County, FL',",
+        "    'Sarasota County, FL'].",
+        "  - If the article truly means ALL counties of a state (rare",
+        "    but happens), still list at least the phrase the article",
+        "    used (e.g. ['All counties of FL']) so the UI can surface",
+        "    that to the CPA.",
+        "  - [] for non-disaster announcements, or when no county-",
+        "    level scope is given. Don't invent counties.",
+        "",
+        "If you're unsure on a date or county, return null / [] — a",
+        "wrong value is worse than no value because it would silently",
+        "misclassify clients.",
       ].join("\n"),
       prompt: [
         `Title: ${item.title}`,
@@ -397,6 +425,7 @@ async function classifyAndStoreOne(
       originalDeadlineStart: null,
       originalDeadlineEnd: null,
       reliefDeadline: null,
+      affectedCounties: [],
     };
   }
 
@@ -423,6 +452,7 @@ async function classifyAndStoreOne(
       originalDeadlineStart: cls.originalDeadlineStart,
       originalDeadlineEnd: cls.originalDeadlineEnd,
       reliefDeadline: cls.reliefDeadline,
+      affectedCounties: cls.affectedCounties,
     })
     .onConflictDoNothing({
       target: [announcements.source, announcements.externalId],

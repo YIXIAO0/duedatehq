@@ -450,6 +450,29 @@ export const announcements = pgTable(
     originalDeadlineEnd: text("original_deadline_end"),     // YYYY-MM-DD
     reliefDeadline: text("relief_deadline"),                // YYYY-MM-DD
 
+    /**
+     * The actual FEMA-declared disaster counties named in disaster
+     * relief announcements. State-only matching ("clients in FL")
+     * over-includes — IRS disaster relief is county-level (Hillsborough
+     * County, FL is in scope, Pinellas County, FL might not be), and
+     * a CPA in FL whose clients are nowhere near the disaster zone
+     * shouldn't be told their clients are "affected".
+     *
+     * Format is free-form strings the AI lifts from the IRS text
+     * (e.g. ["Hillsborough County, FL", "Manatee County, FL"]).
+     * We don't try to match against client county data — the
+     * entities table doesn't carry it yet — but we surface the
+     * county list prominently in the UI so the CPA can verify each
+     * client's location before applying relief.
+     *
+     * Empty for non-disaster announcements and when the AI couldn't
+     * extract county scope.
+     */
+    affectedCounties: jsonb("affected_counties")
+      .$type<string[]>()
+      .notNull()
+      .default([]),
+
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

@@ -157,6 +157,49 @@ async function Detail({ params }: { params: Params }) {
           </p>
         )}
 
+        {/* Disaster-relief county banner. The whole point of disaster
+            relief is that it applies to specific FEMA-declared counties,
+            not a whole state. A CPA in FL whose clients are nowhere
+            near the disaster zone shouldn't auto-apply just because
+            "FL" matches. We surface the county list so the CPA can
+            verify per-client before applying — and mirror the same
+            list inside the per-deadline confirmation dialog. */}
+        {a.category === "disaster_relief" && a.affectedCounties.length > 0 ? (
+          <div className="mt-3 rounded-md border border-[var(--color-priority-medium)]/30 bg-[var(--color-priority-medium-bg)]/40 p-3 text-sm">
+            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--color-priority-medium)]">
+              Verify county before applying
+            </p>
+            <p className="mt-1 text-xs text-foreground/80">
+              IRS disaster relief applies only to taxpayers whose
+              residence or principal place of business is in one of
+              these declared counties:
+            </p>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {a.affectedCounties.map((county) => (
+                <Badge
+                  key={county}
+                  variant="outline"
+                  className="bg-background text-[11px]"
+                >
+                  {county}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        ) : a.category === "disaster_relief" ? (
+          // Disaster relief WITHOUT county list — AI couldn't pull it.
+          // Most cautious case: warn loudly so the CPA doesn't assume
+          // we narrowed correctly.
+          <div className="mt-3 rounded-md border border-[var(--color-priority-medium)]/30 bg-[var(--color-priority-medium-bg)]/40 p-3 text-xs text-foreground/80">
+            <span className="font-semibold uppercase tracking-wider text-[var(--color-priority-medium)]">
+              Verify location:
+            </span>{" "}
+            IRS disaster relief is county-specific. The IRS text didn&apos;t
+            list specific counties cleanly enough for us to extract — read
+            the original release before applying relief to any client.
+          </div>
+        ) : null}
+
         <div className="mt-3">
           <a
             href={a.url}
@@ -257,6 +300,13 @@ async function Detail({ params }: { params: Params }) {
               announcementId={a.id}
               client={c}
               reliefDeadline={a.reliefDeadline}
+              // For disaster_relief items, Apply requires the CPA to
+              // explicitly confirm the client is in a declared county
+              // (or that they've verified the geography manually).
+              // Other categories — form_change, procedural — are
+              // jurisdiction-wide and don't need the gate.
+              requiresVerify={a.category === "disaster_relief"}
+              affectedCounties={a.affectedCounties}
             />
           ))}
         </div>

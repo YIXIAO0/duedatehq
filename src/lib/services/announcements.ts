@@ -168,6 +168,7 @@ export async function listAnnouncementsWithImpact(
     original_deadline_start: string | null;
     original_deadline_end: string | null;
     relief_deadline: string | null;
+    affected_counties: string[];
     affected_clients: AffectedClient[] | null;
     acked_client_count: number;
   }>(sql`
@@ -179,6 +180,7 @@ export async function listAnnouncementsWithImpact(
       a.original_deadline_start,
       a.original_deadline_end,
       a.relief_deadline,
+      a.affected_counties,
       -- Affected clients = those whose entities are in a matched
       -- jurisdiction AND who actually have a deadline that matches
       -- the announcement's AI-extracted scope (form codes + date
@@ -272,6 +274,7 @@ export async function listAnnouncementsWithImpact(
     originalDeadlineStart: r.original_deadline_start,
     originalDeadlineEnd: r.original_deadline_end,
     reliefDeadline: r.relief_deadline,
+    affectedCounties: r.affected_counties ?? [],
     affectedClients: r.affected_clients ?? [],
     ackedClientCount: Number(r.acked_client_count ?? 0),
   }));
@@ -432,9 +435,12 @@ export type AffectedDeadline = {
   deadlineId: string;
   formCode: string;
   ruleTitle: string;
-  /** Whatever's currently the operative date — extension when present,
-   *  original due date otherwise. The CPA reads this as "what's on
-   *  my calendar today". */
+  /** Original statutory due date — the underlying deadline that the
+   *  announcement actually addresses ("the Apr 15 deadline"). */
+  originalDueDate: string;
+  /** Currently operative date — extension when present, otherwise
+   *  original. Shown in the UI alongside originalDueDate so the CPA
+   *  sees both "was Apr 15 (extended to Oct 15)" if applicable. */
   currentEffectiveDate: string;
   status: string;
   /** Already acted on for this announcement? Persisted in audit_events
@@ -548,6 +554,7 @@ export async function getAnnouncementReview(
       deadline_id: string;
       form_code: string;
       rule_title: string;
+      original_due_date: string;
       current_effective_date: string;
       status: string;
       applied_at: string | null;
@@ -598,6 +605,7 @@ export async function getAnnouncementReview(
               'rule_title', r.title,
               'current_effective_date',
                 COALESCE(di.extension_due_date, di.due_date)::text,
+              'original_due_date', di.due_date::text,
               'status', di.status::text,
               'applied_at', applied.acted_at,
               'already_covered',
@@ -608,7 +616,7 @@ export async function getAnnouncementReview(
                     : sql`false`
                 }
             )
-            ORDER BY COALESCE(di.extension_due_date, di.due_date) ASC, r.form_code ASC
+            ORDER BY di.due_date ASC, r.form_code ASC
           )
           FROM deadline_instances di
           INNER JOIN entities e3 ON e3.id = di.entity_id
@@ -630,16 +638,19 @@ export async function getAnnouncementReview(
               jsonb_array_length((${formCodesJsonb}::jsonb)) = 0
               OR (${formCodesJsonb}::jsonb) ? r.form_code
             )
-            -- Date filter: prefer the AI-stated original-deadline
-            -- window when present (most authoritative). When only
-            -- form codes were extracted, cap by publication date
-            -- ± a sane horizon — an April 2026 announcement isn't
-            -- about a 2027 deadline.
+            -- Date filter on di.due_date (the ORIGINAL statutory date)
+            -- — not the effective date. The announcement says "the
+            -- April 15 deadline" referring to the underlying statutory
+            -- obligation; a 1040 originally due Apr 15 still counts
+            -- even if the CPA already extended it to Oct 15 via Form
+            -- 4868. And a 1040 due Apr 15, 2027 is a different
+            -- deadline than Apr 15, 2026 — matching only by year-
+            -- agnostic "form code" would over-include future years.
             ${
               dateRangeStart && dateRangeEnd
-                ? sql`AND COALESCE(di.extension_due_date, di.due_date)
+                ? sql`AND di.due_date
                         BETWEEN ${dateRangeStart}::date AND ${dateRangeEnd}::date`
-                : sql`AND COALESCE(di.extension_due_date, di.due_date)
+                : sql`AND di.due_date
                         BETWEEN (${publishedAt}::date - INTERVAL '30 days')
                         AND     (${publishedAt}::date + INTERVAL '180 days')`
             }
@@ -683,6 +694,7 @@ export async function getAnnouncementReview(
         deadlineId: d.deadline_id,
         formCode: d.form_code,
         ruleTitle: d.rule_title,
+        originalDueDate: d.original_due_date,
         currentEffectiveDate: d.current_effective_date,
         status: d.status,
         appliedAt: d.applied_at,

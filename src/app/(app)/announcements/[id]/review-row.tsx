@@ -11,9 +11,21 @@ import {
   CalendarDays,
   ShieldCheck,
   X,
+  AlertTriangle,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import {
   applyAnnouncementReliefAction,
   skipAnnouncementForDeadlineAction,
@@ -40,11 +52,18 @@ export function ReviewRow({
   announcementId,
   client,
   reliefDeadline,
+  requiresVerify,
+  affectedCounties,
 }: {
   announcementId: string;
   client: ReviewableClient;
   /** Used by Apply buttons to surface "Apply Feb 3" instead of generic. */
   reliefDeadline: string | null;
+  /** When true (disaster_relief), Apply opens a confirmation dialog
+   *  asking the CPA to verify the client's county is in scope. */
+  requiresVerify: boolean;
+  /** County list shown inside the verify dialog. */
+  affectedCounties: string[];
 }) {
   // Mode flips on whether the service was able to scope to specific
   // deadlines. When affectedDeadlines is empty, we don't pretend.
@@ -124,8 +143,11 @@ export function ReviewRow({
           <DeadlineRow
             key={d.deadlineId}
             announcementId={announcementId}
+            clientName={client.clientName}
             deadline={d}
             reliefDeadline={reliefDeadline}
+            requiresVerify={requiresVerify}
+            affectedCounties={affectedCounties}
           />
         ))}
       </ul>
@@ -235,12 +257,18 @@ function ClientLevelRow({
 
 function DeadlineRow({
   announcementId,
+  clientName,
   deadline,
   reliefDeadline,
+  requiresVerify,
+  affectedCounties,
 }: {
   announcementId: string;
+  clientName: string;
   deadline: AffectedDeadline;
   reliefDeadline: string | null;
+  requiresVerify: boolean;
+  affectedCounties: string[];
 }) {
   const [pending, start] = useTransition();
   // Optimistic: flip immediately so the row dims while the server
@@ -316,21 +344,119 @@ function DeadlineRow({
           </span>
         ) : reliefDeadline ? (
           <>
-            <Button
-              type="button"
-              size="sm"
-              onClick={apply}
-              disabled={pending}
-            >
-              {pending ? (
-                <>
-                  <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
-                  Applying…
-                </>
-              ) : (
-                <>Apply {humanShort(reliefDeadline)}</>
-              )}
-            </Button>
+            {requiresVerify ? (
+              // Disaster relief: confirmation dialog ensures the CPA
+              // has actually checked the client's geography against
+              // the FEMA-declared county list. One-click extension
+              // would risk wrongly extending deadlines for clients
+              // who happen to live in the right state but not the
+              // right county.
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button type="button" size="sm" disabled={pending}>
+                    {pending ? (
+                      <>
+                        <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+                        Applying…
+                      </>
+                    ) : (
+                      <>Apply {humanShort(reliefDeadline)}</>
+                    )}
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>
+                      Verify {clientName} qualifies for relief
+                    </AlertDialogTitle>
+                    <AlertDialogDescription asChild>
+                      <div className="space-y-3 text-sm">
+                        <div>
+                          You&apos;re about to extend{" "}
+                          <span className="font-mono font-semibold text-foreground">
+                            {deadline.formCode}
+                          </span>{" "}
+                          for{" "}
+                          <span className="font-semibold text-foreground">
+                            {clientName}
+                          </span>{" "}
+                          from{" "}
+                          <span className="font-medium text-foreground">
+                            {humanDate(deadline.currentEffectiveDate)}
+                          </span>{" "}
+                          to{" "}
+                          <span className="font-medium text-foreground">
+                            {humanDate(reliefDeadline)}
+                          </span>
+                          .
+                        </div>
+                        {affectedCounties.length > 0 ? (
+                          <div className="rounded-md border border-[var(--color-priority-medium)]/30 bg-[var(--color-priority-medium-bg)]/30 p-2.5 text-xs">
+                            <div className="flex items-center gap-1.5 font-semibold text-[var(--color-priority-medium)]">
+                              <AlertTriangle className="h-3.5 w-3.5" />
+                              Relief is county-specific
+                            </div>
+                            <p className="mt-1 text-foreground/80">
+                              IRS relief applies only to taxpayers in
+                              these declared counties:
+                            </p>
+                            <div className="mt-1.5 flex flex-wrap gap-1">
+                              {affectedCounties.map((c) => (
+                                <Badge
+                                  key={c}
+                                  variant="outline"
+                                  className="bg-background text-[10px]"
+                                >
+                                  {c}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="rounded-md border border-[var(--color-priority-medium)]/30 bg-[var(--color-priority-medium-bg)]/30 p-2.5 text-xs">
+                            <div className="flex items-center gap-1.5 font-semibold text-[var(--color-priority-medium)]">
+                              <AlertTriangle className="h-3.5 w-3.5" />
+                              Relief is county-specific
+                            </div>
+                            <p className="mt-1 text-foreground/80">
+                              We couldn&apos;t extract specific counties
+                              from the IRS text. Verify against the
+                              official release before applying.
+                            </p>
+                          </div>
+                        )}
+                        <p className="text-xs text-muted-foreground">
+                          Confirm only if {clientName} is located in a
+                          declared county.
+                        </p>
+                      </div>
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={apply}>
+                      Confirmed — apply
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            ) : (
+              <Button
+                type="button"
+                size="sm"
+                onClick={apply}
+                disabled={pending}
+              >
+                {pending ? (
+                  <>
+                    <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+                    Applying…
+                  </>
+                ) : (
+                  <>Apply {humanShort(reliefDeadline)}</>
+                )}
+              </Button>
+            )}
             <Button
               type="button"
               size="sm"
