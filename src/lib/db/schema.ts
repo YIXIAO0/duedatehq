@@ -120,11 +120,28 @@ export const memberships = pgTable(
     userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
     orgId: text("org_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
     role: membershipRoleEnum("role").notNull().default("owner"),
+    /**
+     * Per-membership iCal subscription token. Embedded in the public
+     * URL the user pastes into Google Cal / Outlook / Apple Cal:
+     *   https://duedate.hq/api/ical/<token>.ics
+     *
+     * NULL = subscription disabled. Generate by writing a 24-byte
+     * base64url random; revoke by setting back to NULL; rotate by
+     * overwriting with a new value (which immediately invalidates
+     * the old URL — the next refresh from any subscribed client
+     * will return 404 until they paste the new URL).
+     *
+     * UNIQUE-indexed so the unauthenticated GET endpoint can do a
+     * single indexed read to resolve token → membership → org.
+     * Postgres UNIQUE allows multiple NULLs, which is what we want.
+     */
+    icalToken: text("ical_token"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     uniqueIndex("memberships_user_org_idx").on(t.userId, t.orgId),
     index("memberships_org_idx").on(t.orgId),
+    uniqueIndex("memberships_ical_token_idx").on(t.icalToken),
   ],
 );
 

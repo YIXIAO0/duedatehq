@@ -301,9 +301,14 @@ function DeadlinesSection({
 function DateSubheader({ date, count }: { date: string; count: number }) {
   const { label, text, dot } = relativeTime(date);
   return (
-    <div className="flex items-center gap-2.5 bg-muted px-4 py-1.5">
+    // `relative` + absolutely-positioned dot is intentional: keeping the
+    // dot inline (with gap-x) shifts the date text ~18px to the right,
+    // so JUN 15, 2026 in the subheader no longer aligns with the form
+    // codes in the rows below. Pulling the dot into the left padding
+    // zone restores a clean vertical column down the table.
+    <div className="relative flex items-center gap-2 bg-muted px-4 py-1.5">
       <span
-        className={`size-1.5 shrink-0 rounded-full ${dot}`}
+        className={`absolute left-1.5 top-1/2 size-1.5 -translate-y-1/2 rounded-full ${dot}`}
         aria-hidden
       />
       <span className="text-[11px] font-bold uppercase tracking-wider">
