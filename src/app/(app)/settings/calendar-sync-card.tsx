@@ -131,68 +131,28 @@ export function CalendarSyncCard({
         Anyone with this URL can read your deadlines — keep it private.
       </p>
 
-      {/* Per-app instructions. Each app's flow is just different enough
-          to confuse new users; spelling them out beats sending people
-          to FAQ pages. */}
-      <details className="rounded-md border border-border bg-muted/20 px-3 py-2 text-sm">
+      {/* Per-app instructions. One terse line per app — calendar
+          subscription flows are well-known by now, no need to walk
+          users through every menu click. */}
+      <details className="rounded-md border border-border bg-muted/20 px-3 py-2">
         <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          How to subscribe (Google / Outlook / Apple)
+          How to subscribe
         </summary>
-        <div className="mt-3 space-y-3 text-sm">
-          <div>
-            <p className="font-medium">Google Calendar (web)</p>
-            <ol className="ml-5 list-decimal text-muted-foreground">
-              <li>
-                Open{" "}
-                <a
-                  href="https://calendar.google.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="underline"
-                >
-                  calendar.google.com
-                </a>
-                . On the left, click the <strong>+</strong> next to
-                &ldquo;Other calendars&rdquo;.
-              </li>
-              <li>
-                Choose <strong>From URL</strong>, paste the URL above, click{" "}
-                <strong>Add calendar</strong>.
-              </li>
-              <li>
-                Refresh interval is fixed at ~24 hours by Google — events
-                update within that window.
-              </li>
-            </ol>
-          </div>
-          <div>
-            <p className="font-medium">Outlook (web)</p>
-            <ol className="ml-5 list-decimal text-muted-foreground">
-              <li>
-                Calendar &gt; <strong>Add calendar</strong> &gt;{" "}
-                <strong>Subscribe from web</strong>.
-              </li>
-              <li>Paste the URL, give the calendar a name, save.</li>
-            </ol>
-          </div>
-          <div>
-            <p className="font-medium">Apple Calendar (Mac/iPhone)</p>
-            <ol className="ml-5 list-decimal text-muted-foreground">
-              <li>
-                Mac: <strong>File &gt; New Calendar Subscription</strong>,
-                paste URL.
-              </li>
-              <li>
-                iPhone: <strong>Settings &gt; Calendar &gt; Accounts &gt;
-                Add Account &gt; Other &gt; Add Subscribed Calendar</strong>.
-              </li>
-              <li>
-                Set auto-refresh to &ldquo;Every hour&rdquo; for the
-                snappiest updates.
-              </li>
-            </ol>
-          </div>
-        </div>
+        <ul className="mt-3 space-y-1.5 text-sm text-muted-foreground">
+          <li>
+            <span className="font-medium text-foreground">Google Calendar:</span>{" "}
+            sidebar &gt; <strong>+</strong> Other calendars &gt; From URL.
+          </li>
+          <li>
+            <span className="font-medium text-foreground">Outlook:</span>{" "}
+            Add calendar &gt; Subscribe from web.
+          </li>
+          <li>
+            <span className="font-medium text-foreground">Apple Calendar:</span>{" "}
+            File &gt; New Calendar Subscription (Mac), or Settings &gt;
+            Calendar &gt; Add Account &gt; Other (iPhone).
+          </li>
+        </ul>
       </details>
 
       {/* Rotate + revoke actions. Both are destructive enough (existing

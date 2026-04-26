@@ -360,8 +360,22 @@ function DeadlineRow({
           </span>
         </div>
         {showEntityCol ? (
-          <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
-            {d.entityName} · {entityTypeLabel(d.entityType)}
+          // Entity sub-line with a tiny icon — CPA can tell at a glance
+          // "this 1040 is for Acme Corp, not the spouse's individual
+          // 1040". Building2 vs UserIcon mirrors the entity card icons
+          // upstream so the visual language is consistent.
+          <div className="mt-0.5 flex items-center gap-1 truncate text-[11px] text-muted-foreground">
+            {d.entityType === "individual" ? (
+              <UserIcon className="h-3 w-3 shrink-0" />
+            ) : (
+              <Building2 className="h-3 w-3 shrink-0" />
+            )}
+            <span className="truncate">
+              <span className="font-medium text-foreground/80">
+                {d.entityName}
+              </span>
+              <span className="ml-1">{entityTypeLabel(d.entityType)}</span>
+            </span>
           </div>
         ) : null}
       </div>
