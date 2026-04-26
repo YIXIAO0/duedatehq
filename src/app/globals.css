@@ -168,12 +168,13 @@
   html {
     @apply font-sans;
   }
-  /* Larger click targets for older users — scoped to actual action buttons
-     ONLY. We can't use the generic `button` selector because Radix primitives
-     (Checkbox, Switch, Select trigger, Dropdown trigger, etc.) all render as
-     <button> and would get stretched to 36px, breaking the compact list UX.
-     shadcn's <Button> is tagged with data-slot="button". */
-  [data-slot="button"], a[role="button"] {
-    min-height: 2.25rem;
-  }
+  /* Note: previously had a global `[data-slot="button"] { min-height: 2.25rem }`
+     rule meant to give older CPAs a larger click target. It silently caused
+     visible wobble in action rows because Radix Slot (the engine behind
+     `<DialogTrigger asChild>`, etc.) OVERWRITES the child Button's
+     data-slot="button" with the trigger's own slot — so a bare Button got
+     36px while the same Button wrapped in a trigger stayed at the variant's
+     h-8 (32px). All button sizing now lives in `buttonVariants` (h-7 sm,
+     h-8 default, h-9 lg). Use `size="lg"` if you specifically need a
+     larger tap target. */
 }
