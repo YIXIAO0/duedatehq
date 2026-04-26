@@ -32,7 +32,13 @@ import {
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { CheckCircle2, Calendar, RotateCcw, Loader2 } from "lucide-react";
+import {
+  CheckCircle2,
+  Calendar,
+  CalendarPlus,
+  RotateCcw,
+  Loader2,
+} from "lucide-react";
 import {
   markCompleteAction,
   reopenAction,
@@ -196,6 +202,7 @@ export function DeadlineActionBar({
             <Calendar className="mr-2 h-4 w-4" /> File extension
           </Button>
         </DialogTrigger>
+
         <DialogContent>
           <form
             action={async (fd) => {
@@ -279,6 +286,16 @@ export function DeadlineActionBar({
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Add to calendar — single .ics download. Plain anchor with a
+          download attribute so the browser hands the file to the OS
+          calendar association without a JS round-trip. Sits next to
+          File extension because both are "calendar-shaped" actions. */}
+      <Button asChild variant="outline">
+        <a href={`/api/deadlines/${deadlineId}/ics`} download>
+          <CalendarPlus className="mr-2 h-4 w-4" /> Add to calendar
+        </a>
+      </Button>
       </div>
 
       {/* Caption: explains what the currently-selected workflow status

@@ -1,0 +1,266 @@
+"use client";
+
+/**
+ * Calendar Sync settings card.
+ *
+ * Why this is a Client Component: copy-to-clipboard needs `navigator`,
+ * the rotate / revoke confirmations want optimistic UI, and the URL
+ * preview should react to enable/disable without a full page round
+ * trip. Server fetches the initial token (via the parent server
+ * component) and passes it in — we only mutate from here.
+ */
+
+import { useState, useTransition } from "react";
+import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
+  Calendar,
+  Copy,
+  Check,
+  RefreshCw,
+  Trash2,
+  Loader2,
+} from "lucide-react";
+import {
+  rotateIcalTokenAction,
+  revokeIcalTokenAction,
+} from "./actions";
+
+export function CalendarSyncCard({
+  initialToken,
+  appUrl,
+}: {
+  initialToken: string | null;
+  appUrl: string;
+}) {
+  const [token, setToken] = useState<string | null>(initialToken);
+  const [pending, startTransition] = useTransition();
+  const [copied, setCopied] = useState(false);
+
+  const subscriptionUrl = token ? `${appUrl}/api/ical/${token}.ics` : null;
+
+  const handleEnable = () => {
+    startTransition(async () => {
+      const { token: newToken } = await rotateIcalTokenAction();
+      setToken(newToken);
+    });
+  };
+
+  const handleRotate = () => {
+    startTransition(async () => {
+      const { token: newToken } = await rotateIcalTokenAction();
+      setToken(newToken);
+    });
+  };
+
+  const handleRevoke = () => {
+    startTransition(async () => {
+      await revokeIcalTokenAction();
+      setToken(null);
+    });
+  };
+
+  const handleCopy = async () => {
+    if (!subscriptionUrl) return;
+    await navigator.clipboard.writeText(subscriptionUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1800);
+  };
+
+  if (!subscriptionUrl) {
+    return (
+      <div className="space-y-3">
+        <p className="text-sm text-muted-foreground">
+          Subscribe in Google Calendar / Outlook / Apple Calendar so every
+          open deadline lands in the same calendar you already check daily.
+          Updates pull automatically every hour or so — no plug-in to
+          install.
+        </p>
+        <Button onClick={handleEnable} disabled={pending}>
+          {pending ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Generating…
+            </>
+          ) : (
+            <>
+              <Calendar className="mr-2 h-4 w-4" /> Enable calendar sync
+            </>
+          )}
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">
+        Paste this URL into your calendar app as a new subscription
+        (instructions below). Anyone with this URL can read your
+        deadlines — keep it private.
+      </p>
+
+      {/* URL display + copy button. We use a readonly input rather than
+          a code block so users can triple-click to select on desktop. */}
+      <div className="flex gap-2">
+        <input
+          readOnly
+          value={subscriptionUrl}
+          onClick={(e) => e.currentTarget.select()}
+          className="flex-1 truncate rounded-md border border-input bg-muted/40 px-3 py-2 font-mono text-xs"
+          aria-label="Calendar subscription URL"
+        />
+        <Button
+          type="button"
+          variant="outline"
+          onClick={handleCopy}
+          disabled={pending}
+          aria-label="Copy URL"
+        >
+          {copied ? (
+            <>
+              <Check className="mr-2 h-4 w-4 text-[var(--color-priority-done)]" />{" "}
+              Copied
+            </>
+          ) : (
+            <>
+              <Copy className="mr-2 h-4 w-4" /> Copy
+            </>
+          )}
+        </Button>
+      </div>
+
+      {/* Per-app instructions. Each app's flow is just different enough
+          to confuse new users; spelling them out beats sending people
+          to FAQ pages. */}
+      <details className="rounded-md border border-border bg-muted/20 px-3 py-2 text-sm">
+        <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          How to subscribe (Google / Outlook / Apple)
+        </summary>
+        <div className="mt-3 space-y-3 text-sm">
+          <div>
+            <p className="font-medium">Google Calendar (web)</p>
+            <ol className="ml-5 list-decimal text-muted-foreground">
+              <li>
+                Open{" "}
+                <a
+                  href="https://calendar.google.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline"
+                >
+                  calendar.google.com
+                </a>
+                . On the left, click the <strong>+</strong> next to
+                &ldquo;Other calendars&rdquo;.
+              </li>
+              <li>
+                Choose <strong>From URL</strong>, paste the URL above, click{" "}
+                <strong>Add calendar</strong>.
+              </li>
+              <li>
+                Refresh interval is fixed at ~24 hours by Google — events
+                update within that window.
+              </li>
+            </ol>
+          </div>
+          <div>
+            <p className="font-medium">Outlook (web)</p>
+            <ol className="ml-5 list-decimal text-muted-foreground">
+              <li>
+                Calendar &gt; <strong>Add calendar</strong> &gt;{" "}
+                <strong>Subscribe from web</strong>.
+              </li>
+              <li>Paste the URL, give the calendar a name, save.</li>
+            </ol>
+          </div>
+          <div>
+            <p className="font-medium">Apple Calendar (Mac/iPhone)</p>
+            <ol className="ml-5 list-decimal text-muted-foreground">
+              <li>
+                Mac: <strong>File &gt; New Calendar Subscription</strong>,
+                paste URL.
+              </li>
+              <li>
+                iPhone: <strong>Settings &gt; Calendar &gt; Accounts &gt;
+                Add Account &gt; Other &gt; Add Subscribed Calendar</strong>.
+              </li>
+              <li>
+                Set auto-refresh to &ldquo;Every hour&rdquo; for the
+                snappiest updates.
+              </li>
+            </ol>
+          </div>
+        </div>
+      </details>
+
+      {/* Rotate + revoke actions. Both are destructive enough (existing
+          subscriptions break) to warrant confirmation. */}
+      <div className="flex flex-wrap gap-2 pt-2">
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button variant="outline" size="sm" disabled={pending}>
+              <RefreshCw className="mr-2 h-3.5 w-3.5" /> Rotate URL
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Rotate the subscription URL?</AlertDialogTitle>
+              <AlertDialogDescription>
+                The current URL will stop working immediately. You&apos;ll
+                need to update the subscription in every calendar app where
+                you pasted it. Use this if you think the URL was shared by
+                accident.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={handleRotate}>
+                Rotate
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={pending}
+              className="text-[var(--color-priority-urgent)] hover:text-[var(--color-priority-urgent)]"
+            >
+              <Trash2 className="mr-2 h-3.5 w-3.5" /> Disable
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Disable calendar sync?</AlertDialogTitle>
+              <AlertDialogDescription>
+                The subscription URL stops working. Calendar apps will keep
+                showing the most recent fetch but will fail on the next
+                refresh. You can re-enable any time — a new URL will be
+                generated.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={handleRevoke}>
+                Disable
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
+    </div>
+  );
+}

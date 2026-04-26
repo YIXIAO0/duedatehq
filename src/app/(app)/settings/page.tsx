@@ -8,8 +8,10 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { getCurrentContext } from "@/lib/auth/current-org";
+import { getIcalToken } from "@/lib/services/ical-tokens";
 import { OrgSettingsForm } from "./org-settings-form";
 import { DigestPreviewCard } from "./digest-preview-card";
+import { CalendarSyncCard } from "./calendar-sync-card";
 import { Badge } from "@/components/ui/badge";
 
 export default function SettingsPage() {
@@ -37,6 +39,14 @@ export default function SettingsPage() {
           }
         >
           <DigestSection />
+        </Suspense>
+
+        <Suspense
+          fallback={
+            <div className="h-40 animate-pulse rounded-lg border border-border bg-muted/40" />
+          }
+        >
+          <CalendarSyncSection />
         </Suspense>
 
         <ProfileSection />
@@ -69,6 +79,34 @@ async function OrgSettingsSection() {
           orgName={ctx.organization.name}
           plan={ctx.organization.plan}
         />
+      </CardContent>
+    </Card>
+  );
+}
+
+async function CalendarSyncSection() {
+  const ctx = await getCurrentContext();
+  const token = await getIcalToken({
+    userId: ctx.user.id,
+    orgId: ctx.organization.id,
+  });
+  // App URL is read server-side because the client component should not
+  // hard-code it (preview deploys, custom domains). Falls back to the
+  // request origin in dev.
+  const appUrl =
+    process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Calendar sync</CardTitle>
+        <CardDescription>
+          Subscribe to your DueDateHQ deadlines from Google Calendar,
+          Outlook, or Apple Calendar.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <CalendarSyncCard initialToken={token} appUrl={appUrl} />
       </CardContent>
     </Card>
   );

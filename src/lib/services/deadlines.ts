@@ -635,6 +635,91 @@ export async function listDeadlinesForClient(args: {
 }
 
 // ---------------------------------------------------------------------------
+// Org-wide deadline feed for the iCal subscription endpoint.
+//
+// Window: past 14 days (so a recently-overdue item still appears in the
+// CPA's calendar so they don't lose track) + future 365 days. Includes
+// "completed" items in the past 7 days (handy "I just filed Acme's 1040
+// last Tuesday" recall on the calendar). Skips not_applicable and
+// missed.
+//
+// One flat list because iCal is a flat list of VEVENTs anyway. Ordering
+// doesn't matter for the calendar client (it sorts by DTSTART itself).
+// ---------------------------------------------------------------------------
+
+export type OrgIcalDeadlineRow = {
+  id: string;
+  effectiveDueDate: string;
+  status: string;
+  notes: string | null;
+  formCode: string;
+  ruleTitle: string;
+  jurisdictionCode: string;
+  clientName: string;
+  entityName: string;
+  updatedAt: Date;
+};
+
+export async function listDeadlinesForOrgIcal(args: {
+  orgId: string;
+}): Promise<OrgIcalDeadlineRow[]> {
+  const db = getDb();
+  const rows = await db.execute<{
+    id: string;
+    effective_due_date: string;
+    status: string;
+    notes: string | null;
+    form_code: string;
+    rule_title: string;
+    jurisdiction_code: string;
+    client_name: string;
+    entity_name: string;
+    updated_at: Date;
+  }>(sql`
+    SELECT
+      di.id,
+      COALESCE(di.extension_due_date, di.due_date)::text AS effective_due_date,
+      di.status::text AS status,
+      di.notes,
+      r.form_code,
+      r.title AS rule_title,
+      r.jurisdiction_code,
+      c.name AS client_name,
+      e.name AS entity_name,
+      di.updated_at
+    FROM deadline_instances di
+    INNER JOIN deadline_rules r ON r.id = di.rule_id
+    INNER JOIN entities e ON e.id = di.entity_id
+    INNER JOIN clients c ON c.id = e.client_id
+    WHERE di.org_id = ${args.orgId}
+      AND e.archived_at IS NULL
+      AND c.archived_at IS NULL
+      AND di.status NOT IN ('not_applicable', 'missed')
+      AND COALESCE(di.extension_due_date, di.due_date)
+          BETWEEN (CURRENT_DATE - INTERVAL '14 days')
+          AND     (CURRENT_DATE + INTERVAL '365 days')
+      AND (
+        di.status <> 'completed'
+        OR di.completed_at >= NOW() - INTERVAL '7 days'
+      )
+    ORDER BY effective_due_date ASC
+  `);
+
+  return rows.rows.map((r) => ({
+    id: r.id,
+    effectiveDueDate: r.effective_due_date,
+    status: r.status,
+    notes: r.notes,
+    formCode: r.form_code,
+    ruleTitle: r.rule_title,
+    jurisdictionCode: r.jurisdiction_code,
+    clientName: r.client_name,
+    entityName: r.entity_name,
+    updatedAt: r.updated_at,
+  }));
+}
+
+// ---------------------------------------------------------------------------
 // Deadline history — reads audit_events for one deadline and joins the
 // actor (user) so we can render "Sarah filed extension on Apr 25".
 //

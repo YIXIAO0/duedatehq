@@ -15,6 +15,13 @@
       "when": 1777219778717,
       "tag": "0001_noisy_lockjaw",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1777223112905,
+      "tag": "0002_sturdy_runaways",
+      "breakpoints": true
     }
   ]
 }

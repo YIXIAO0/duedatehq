@@ -11,6 +11,10 @@ import {
   generateAndSendWeeklyDigest,
   type GenerateDigestResult,
 } from "@/lib/services/digest";
+import {
+  rotateIcalToken,
+  revokeIcalToken,
+} from "@/lib/services/ical-tokens";
 
 const UpdateOrgFormSchema = z.object({
   id: z.string().min(1),
@@ -74,4 +78,33 @@ export async function sendDigestPreviewAction(): Promise<GenerateDigestResult> {
     orgName: ctx.organization.name,
     force: true,
   });
+}
+
+// ---------------------------------------------------------------------------
+// iCal subscription management
+//
+// Three actions: enable (first-time), rotate (replace existing), and
+// revoke. Both enable and rotate go through `rotateIcalToken` since the
+// flow is identical — write a fresh token. The UI presents them as
+// separate buttons because the user-facing intent differs ("turn this
+// on" vs "I lost the URL, give me a new one").
+// ---------------------------------------------------------------------------
+
+export async function rotateIcalTokenAction(): Promise<{ token: string }> {
+  const ctx = await getCurrentContext();
+  const token = await rotateIcalToken({
+    userId: ctx.user.id,
+    orgId: ctx.organization.id,
+  });
+  revalidatePath("/settings");
+  return { token };
+}
+
+export async function revokeIcalTokenAction(): Promise<void> {
+  const ctx = await getCurrentContext();
+  await revokeIcalToken({
+    userId: ctx.user.id,
+    orgId: ctx.organization.id,
+  });
+  revalidatePath("/settings");
 }
