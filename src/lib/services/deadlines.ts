@@ -16,6 +16,7 @@ import { and, asc, eq, gte, lte, ne, sql } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { deadlineInstances } from "@/lib/db/schema";
 import { recordAudit } from "./audit";
+import { nextBusinessDay } from "@/lib/dates/business-days";
 
 // ---------------------------------------------------------------------------
 // Zod schemas (MCP-reusable)
@@ -177,12 +178,20 @@ export async function fileExtension(input: FileExtensionInput) {
     );
   }
 
+  // Auto-shift the user-entered extension date if it lands on a
+  // weekend or DC legal holiday. The IRS would shift it anyway —
+  // better we get it right at write time than have the calendar
+  // display the wrong date and the CPA discover the gap later.
+  // The shift is captured in the audit payload so it's traceable.
+  const shift = nextBusinessDay(parsed.newDueDate);
+  const finalDueDate = shift.date;
+
   const [row] = await db
     .update(deadlineInstances)
     .set({
       status: "extended",
       extensionFiledAt: new Date(),
-      extensionDueDate: parsed.newDueDate,
+      extensionDueDate: finalDueDate,
       notes: parsed.notes,
       updatedAt: new Date(),
     })
@@ -211,7 +220,12 @@ export async function fileExtension(input: FileExtensionInput) {
       originalDueDate: row.dueDate,
       previousExtensionDueDate: pre.extensionDueDate, // null on first extension
       previousStatus: pre.status, // "pending" first time, "extended" if stacking
-      newDueDate: parsed.newDueDate,
+      // newDueDate captures what's actually stored. requestedDueDate
+      // is what the CPA typed — when they differ, businessDayShift
+      // tells the timeline the IRS-rule shift kicked in.
+      newDueDate: finalDueDate,
+      requestedDueDate: parsed.newDueDate,
+      businessDayShift: shift.shifted ? shift.reason : null,
       extensionFiledAt: row.extensionFiledAt?.toISOString(),
       isReExtension: pre.status === "extended",
     },

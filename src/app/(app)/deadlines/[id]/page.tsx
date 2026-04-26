@@ -331,17 +331,31 @@ function describeHistory(entry: DeadlineHistoryEntry): {
       const prevExt = (p.previousExtensionDueDate ?? null) as string | null;
       const orig = (p.originalDueDate ?? null) as string | null;
       const newDate = (p.newDueDate ?? null) as string | null;
+      const requested = (p.requestedDueDate ?? null) as string | null;
+      const shift = (p.businessDayShift ?? null) as
+        | "weekend"
+        | "holiday"
+        | null;
       // For re-extensions, show "From the prior extension date → new"
       // so a CPA reading the timeline can reconstruct the chain:
       // Apr 15 → Oct 15 (1st extension), Oct 15 → Jan 15 (disaster).
       const fromDate = isReExtension && prevExt ? prevExt : orig;
+      // Annotate when the IRS business-day shift kicked in (e.g. CPA
+      // typed Oct 15 but it was Sat → moved to Mon Oct 17). Keeps
+      // the timeline truthful — the displayed final date isn't quite
+      // what the human entered.
+      const shiftNote =
+        shift && requested && requested !== newDate
+          ? ` (auto-shifted from ${humanDate(requested)} — fell on a ${shift})`
+          : "";
       return {
         label: isReExtension
           ? "Extension re-filed (replaces prior extension)"
           : "Extension filed",
-        body: fromDate && newDate
-          ? `from ${humanDate(fromDate)} → ${humanDate(newDate)}`
-          : "",
+        body:
+          fromDate && newDate
+            ? `from ${humanDate(fromDate)} → ${humanDate(newDate)}${shiftNote}`
+            : "",
         accent: "bg-[var(--color-priority-high)]",
       };
     }

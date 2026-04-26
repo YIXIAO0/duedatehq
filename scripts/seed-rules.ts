@@ -40,7 +40,15 @@ type EntityType =
   | "estate"
   | "nonprofit";
 
-type RulePayload = { month: number; day: number; yearOffset?: number };
+type RulePayload = {
+  // Absolute mode (calendar dates):
+  month?: number;
+  day?: number;
+  yearOffset?: number;
+  // FYE-relative mode (Nth month after fiscal year end):
+  fyeMonthOffset?: number;
+  fyeDayOfMonth?: number;
+};
 
 type SeedRule = {
   jurisdictionType: "federal" | "state" | "city";
@@ -76,6 +84,11 @@ const FEDERAL: SeedRule[] = [
     penaltySummary: "Failure-to-file 5%/mo (max 25%); failure-to-pay 0.5%/mo",
     sourceUrl: "https://www.irs.gov/forms-pubs/about-form-1040",
   },
+  // FYE-relative rules below. IRC § 6072(a)/(b): the 15th day of the
+  // Nth month after the close of the entity's fiscal year. For
+  // calendar-year entities (Dec 31 FYE — the default) these reduce to
+  // the familiar Apr 15 / Mar 15 / May 15 dates. For Jun 30 FYE
+  // C-corps the engine correctly computes Oct 15.
   {
     jurisdictionType: "federal",
     jurisdictionCode: "federal",
@@ -83,9 +96,9 @@ const FEDERAL: SeedRule[] = [
     title: "Form 1120 — C-Corporation Tax Return",
     entityTypes: ["c_corp"],
     ruleType: "fixed_date",
-    rulePayload: { month: 4, day: 15, yearOffset: 1 },
+    rulePayload: { fyeMonthOffset: 4, fyeDayOfMonth: 15 },
     extensionFormCode: "7004",
-    extensionPayload: { month: 10, day: 15, yearOffset: 1 },
+    extensionPayload: { fyeMonthOffset: 10, fyeDayOfMonth: 15 },
     sourceUrl: "https://www.irs.gov/forms-pubs/about-form-1120",
   },
   {
@@ -95,9 +108,9 @@ const FEDERAL: SeedRule[] = [
     title: "Form 1120-S — S-Corporation Tax Return",
     entityTypes: ["s_corp"],
     ruleType: "fixed_date",
-    rulePayload: { month: 3, day: 15, yearOffset: 1 },
+    rulePayload: { fyeMonthOffset: 3, fyeDayOfMonth: 15 },
     extensionFormCode: "7004",
-    extensionPayload: { month: 9, day: 15, yearOffset: 1 },
+    extensionPayload: { fyeMonthOffset: 9, fyeDayOfMonth: 15 },
     penaltySummary: "$245/shareholder/mo (max 12 mo)",
     sourceUrl: "https://www.irs.gov/forms-pubs/about-form-1120-s",
   },
@@ -108,9 +121,9 @@ const FEDERAL: SeedRule[] = [
     title: "Form 1065 — Partnership Return",
     entityTypes: ["partnership", "llc"],
     ruleType: "fixed_date",
-    rulePayload: { month: 3, day: 15, yearOffset: 1 },
+    rulePayload: { fyeMonthOffset: 3, fyeDayOfMonth: 15 },
     extensionFormCode: "7004",
-    extensionPayload: { month: 9, day: 15, yearOffset: 1 },
+    extensionPayload: { fyeMonthOffset: 9, fyeDayOfMonth: 15 },
     penaltySummary: "$245/partner/mo (max 12 mo)",
     sourceUrl: "https://www.irs.gov/forms-pubs/about-form-1065",
   },
@@ -121,9 +134,9 @@ const FEDERAL: SeedRule[] = [
     title: "Form 1041 — Estates & Trusts",
     entityTypes: ["trust", "estate"],
     ruleType: "fixed_date",
-    rulePayload: { month: 4, day: 15, yearOffset: 1 },
+    rulePayload: { fyeMonthOffset: 4, fyeDayOfMonth: 15 },
     extensionFormCode: "7004",
-    extensionPayload: { month: 9, day: 30, yearOffset: 1 },
+    extensionPayload: { fyeMonthOffset: 9, fyeDayOfMonth: 30 },
     sourceUrl: "https://www.irs.gov/forms-pubs/about-form-1041",
   },
   {
@@ -133,9 +146,9 @@ const FEDERAL: SeedRule[] = [
     title: "Form 990 — Tax-Exempt Organization Return",
     entityTypes: ["nonprofit"],
     ruleType: "fixed_date",
-    rulePayload: { month: 5, day: 15, yearOffset: 1 },
+    rulePayload: { fyeMonthOffset: 5, fyeDayOfMonth: 15 },
     extensionFormCode: "8868",
-    extensionPayload: { month: 11, day: 15, yearOffset: 1 },
+    extensionPayload: { fyeMonthOffset: 11, fyeDayOfMonth: 15 },
     sourceUrl: "https://www.irs.gov/forms-pubs/about-form-990",
   },
   // Quarterly individual estimated tax
@@ -1179,7 +1192,14 @@ async function main() {
   );
   console.log(`  Existing rules in DB: ${existing.rows[0]?.count ?? 0}`);
 
-  let inserted = 0;
+  // We onConflictDoUpdate on the payload + meta fields. This makes the
+  // seed idempotent in both directions: new rules get inserted, and
+  // changes to existing rules (e.g. switching 1120 from absolute Apr 15
+  // to fyeMonthOffset=4) actually take effect on re-run. We do NOT
+  // touch firm-level overrides — there aren't any yet (V2 territory),
+  // and when they exist they'll live in a separate `deadline_rule_overrides`
+  // table.
+  let touched = 0;
   for (const rule of ALL_RULES) {
     const result = await db
       .insert(deadlineRules)
@@ -1200,13 +1220,39 @@ async function main() {
         effectiveFrom: EFFECTIVE_FROM,
         irrevocable: rule.irrevocable ?? false,
       })
-      .onConflictDoNothing()
-      .returning({ id: deadlineRules.id });
+      .onConflictDoUpdate({
+        // Match the natural-key unique index on these columns.
+        target: [
+          deadlineRules.jurisdictionCode,
+          deadlineRules.formCode,
+          deadlineRules.title,
+          deadlineRules.version,
+        ],
+        set: {
+          description: rule.description,
+          entityTypes: rule.entityTypes,
+          ruleType: rule.ruleType,
+          rulePayload: rule.rulePayload as Record<string, unknown>,
+          extensionFormCode: rule.extensionFormCode,
+          extensionPayload: rule.extensionPayload as
+            | Record<string, unknown>
+            | undefined,
+          penaltySummary: rule.penaltySummary,
+          sourceUrl: rule.sourceUrl,
+          irrevocable: rule.irrevocable ?? false,
+        },
+      })
+      .returning({
+        id: deadlineRules.id,
+        // xmin trick: returns the row's transaction id, lets us tell
+        // INSERT (xmin = current txn) from UPDATE (xmin = earlier).
+        // Cheaper than a second query.
+      });
 
-    if (result.length > 0) inserted += 1;
+    if (result.length > 0) touched += 1;
   }
 
-  console.log(`✅ Inserted ${inserted} new rules; ${ALL_RULES.length - inserted} already present.`);
+  console.log(`✅ Upserted ${touched} rules.`);
   const uniqueJurisdictions = new Set(ALL_RULES.map((r) => r.jurisdictionCode));
   console.log(
     `   Total: ${ALL_RULES.length} rules across ${uniqueJurisdictions.size} jurisdictions.`,

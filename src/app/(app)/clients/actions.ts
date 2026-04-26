@@ -68,6 +68,14 @@ const CreateEntityFormSchema = z.object({
     .or(z.literal("")),
   operatingStates: z.string().optional(), // comma-separated
   ein: z.string().max(20).optional(),
+  // MM-DD format. Defaults to "12-31" (calendar year) at the service
+  // layer if absent. We accept the empty string from forms that don't
+  // submit the field at all (older code paths).
+  fiscalYearEnd: z
+    .string()
+    .regex(/^\d{2}-\d{2}$/)
+    .optional()
+    .or(z.literal("")),
 });
 
 export async function createEntityAction(formData: FormData) {
@@ -80,6 +88,7 @@ export async function createEntityAction(formData: FormData) {
     homeState: (formData.get("homeState") || "").toString().toUpperCase(),
     operatingStates: formData.get("operatingStates") || "",
     ein: formData.get("ein") || undefined,
+    fiscalYearEnd: formData.get("fiscalYearEnd") || "",
   });
 
   if (!parsed.success) {
@@ -99,6 +108,7 @@ export async function createEntityAction(formData: FormData) {
     homeState: parsed.data.homeState || undefined,
     operatingStates,
     ein: parsed.data.ein || undefined,
+    fiscalYearEnd: parsed.data.fiscalYearEnd || undefined,
     actorType: "user",
     actorId: ctx.user.id,
   });

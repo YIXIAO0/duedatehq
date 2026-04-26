@@ -138,6 +138,14 @@ export const UpdateEntityInputSchema = z.object({
   homeState: US_STATE.optional().or(z.literal("")),
   operatingStates: z.array(US_STATE).default([]),
   ein: z.string().max(20).optional(),
+  // MM-DD format. Optional on edit — when omitted, the existing value
+  // is preserved (we don't blast it back to "12-31"). Used to switch
+  // an entity to a fiscal year mid-life when the CPA realizes their
+  // C-corp client elected a Jun 30 FYE.
+  fiscalYearEnd: z
+    .string()
+    .regex(/^\d{2}-\d{2}$/)
+    .optional(),
   actorType: z.enum(["user", "agent", "cron", "system"]).default("user"),
   actorId: z.string().nullable().default(null),
 });
@@ -163,6 +171,11 @@ export async function updateEntity(input: UpdateEntityInput) {
       homeState: parsed.homeState || null,
       operatingStates,
       ein: parsed.ein || null,
+      // Conditional spread — only override fiscalYearEnd when the
+      // caller actually supplied one. Forms that don't render the
+      // FYE picker (older edit dialogs) won't accidentally reset
+      // the value to default.
+      ...(parsed.fiscalYearEnd ? { fiscalYearEnd: parsed.fiscalYearEnd } : {}),
       updatedAt: new Date(),
     })
     .where(and(eq(entities.id, parsed.id), eq(entities.orgId, parsed.orgId)))

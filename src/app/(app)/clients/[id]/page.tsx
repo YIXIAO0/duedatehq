@@ -521,6 +521,19 @@ function formatShortDate(iso: string): string {
   });
 }
 
+// "06-30" → "Jun 30". Simple month-day formatter for the FYE badge.
+// We construct the date in a non-leap year (2025) to avoid Feb 29
+// edge cases — FYEs of Feb 29 are unheard of anyway.
+function formatFyeShort(mmdd: string): string {
+  const [m, d] = mmdd.split("-").map((s) => parseInt(s, 10));
+  if (!m || !d) return mmdd;
+  return new Date(Date.UTC(2025, m - 1, d)).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
+
 async function EntityCard({
   entity,
   orgId,
@@ -556,7 +569,7 @@ async function EntityCard({
           </div>
           <div className="min-w-0 flex-1">
             <CardTitle className="text-base">{entity.name}</CardTitle>
-            <div className="mt-1 flex items-center gap-2">
+            <div className="mt-1 flex flex-wrap items-center gap-2">
               <Badge variant="secondary" className="font-mono text-xs">
                 {entityTypeLabel(entity.entityType)}
               </Badge>
@@ -570,6 +583,15 @@ async function EntityCard({
                   +{entity.operatingStates.length - 1} states
                 </Badge>
               ) : null}
+              {/* Surface non-default FYE so the CPA can spot at a glance
+                  why this entity's 1120 / 1120-S / 1065 etc. dates differ
+                  from the calendar-year norm. Calendar year (Dec 31)
+                  stays unmarked — that's the boring default. */}
+              {entity.fiscalYearEnd && entity.fiscalYearEnd !== "12-31" ? (
+                <Badge variant="outline" className="text-xs">
+                  FYE {formatFyeShort(entity.fiscalYearEnd)}
+                </Badge>
+              ) : null}
             </div>
           </div>
           <EntityActions
@@ -580,6 +602,7 @@ async function EntityCard({
               homeState: entity.homeState,
               operatingStates: entity.operatingStates ?? [],
               ein: entity.ein,
+              fiscalYearEnd: entity.fiscalYearEnd,
             }}
           />
         </div>

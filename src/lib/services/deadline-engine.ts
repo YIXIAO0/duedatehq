@@ -26,6 +26,7 @@ import {
   type Entity,
 } from "@/lib/db/schema";
 import { recordAudit } from "./audit";
+import { nextBusinessDay } from "@/lib/dates/business-days";
 
 export const GenerateDeadlinesInputSchema = z.object({
   orgId: z.string(),
@@ -43,30 +44,96 @@ export const GenerateDeadlinesInputSchema = z.object({
 });
 export type GenerateDeadlinesInput = z.input<typeof GenerateDeadlinesInputSchema>;
 
+/**
+ * Two flavors of date logic share this payload type:
+ *
+ *   ABSOLUTE — fixed calendar date, optionally offset by N years.
+ *     { month: 4, day: 15, yearOffset: 1 }  // Apr 15 of taxYear+1
+ *   Used for individual returns (1040), quarterly estimates, payroll
+ *   forms, and anything else tied to the calendar year regardless of
+ *   the entity's fiscal year.
+ *
+ *   FYE-RELATIVE — Nth month after the entity's fiscal year end.
+ *     { fyeMonthOffset: 4, fyeDayOfMonth: 15 }  // 15th day of 4th
+ *                                                 month after FYE end
+ *   Used for corporate / partnership / trust / nonprofit returns.
+ *   For a Dec 31 FYE entity this matches the calendar-year deadlines
+ *   (1120 → Apr 15); for a Jun 30 FYE entity it correctly computes
+ *   Oct 15. fyeDayOfMonth = -1 means "last day of that month" (used
+ *   for Form 5500's "last day of 7th month" rule).
+ *
+ * Discriminator: presence of `fyeMonthOffset` means FYE-relative.
+ * Using a flag rather than a tagged union so JSON-parsing seed data
+ * stays simple.
+ */
 type RulePayload = {
-  month: number;
-  day: number;
+  // Absolute mode
+  month?: number;
+  day?: number;
   yearOffset?: number; // 0 (same as taxYear), 1 (filing year, default), 2 (next filing year for Q4 estimates)
+  // FYE-relative mode
+  fyeMonthOffset?: number;
+  fyeDayOfMonth?: number;
 };
 
 /**
  * Compute the actual due date for a rule in a given tax year.
- * Weekend shift: Saturday → Monday (+2 days), Sunday → Monday (+1 day).
+ *
+ * Applies the IRS business-day shift: weekends and DC-observed legal
+ * holidays push the date to the next business day. The Emancipation
+ * Day (Apr 16, DC) rule is what frequently makes Tax Day land on
+ * Apr 17 or 18 — handled here by `nextBusinessDay`.
+ *
+ * For FYE-relative rules, the entity's fiscalYearEnd (MM-DD) drives
+ * the math. Without an entity (e.g. legacy callers), we fall back to
+ * Dec 31 — matches calendar-year behavior so existing tests still
+ * pass.
  */
 export function computeDueDate(
   rulePayload: RulePayload,
   taxYear: number,
+  entity?: Pick<Entity, "fiscalYearEnd">,
 ): string {
+  // FYE-relative branch.
+  if (rulePayload.fyeMonthOffset !== undefined) {
+    const fyeStr = entity?.fiscalYearEnd ?? "12-31";
+    const [fyeMonthStr, fyeDayStr] = fyeStr.split("-");
+    const fyeMonth = parseInt(fyeMonthStr, 10); // 1-12
+    const fyeDay = parseInt(fyeDayStr, 10); // 1-31
+
+    // The FYE that closes within `taxYear` is the one whose return
+    // is filed for tax year N. For Dec 31 FYE: FYE end = Dec 31, N.
+    // For Jun 30 FYE: FYE end = Jun 30, N.
+    const fyeEnd = new Date(Date.UTC(taxYear, fyeMonth - 1, fyeDay));
+
+    // Add monthOffset months. UTCMonth handles wrap-around (e.g.
+    // Dec + 4 = next April).
+    const dueMonth = fyeEnd.getUTCMonth() + rulePayload.fyeMonthOffset;
+    const dueYear = fyeEnd.getUTCFullYear() + Math.floor(dueMonth / 12);
+    const dueMonthMod = ((dueMonth % 12) + 12) % 12;
+
+    let dueDay: number;
+    if (rulePayload.fyeDayOfMonth === -1) {
+      // Last day of that month. Use day=0 of the next month.
+      dueDay = new Date(Date.UTC(dueYear, dueMonthMod + 1, 0)).getUTCDate();
+    } else {
+      dueDay = rulePayload.fyeDayOfMonth ?? 15;
+    }
+
+    const iso = new Date(Date.UTC(dueYear, dueMonthMod, dueDay))
+      .toISOString()
+      .slice(0, 10);
+    return nextBusinessDay(iso).date;
+  }
+
+  // Absolute branch (existing behavior).
   const offset = rulePayload.yearOffset ?? 1;
   const year = taxYear + offset;
-  const month0 = rulePayload.month - 1; // JS months are 0-indexed
+  const month0 = (rulePayload.month ?? 1) - 1; // JS months are 0-indexed
+  const day = rulePayload.day ?? 1;
 
-  const date = new Date(Date.UTC(year, month0, rulePayload.day));
-  const dow = date.getUTCDay();
-  if (dow === 6) date.setUTCDate(date.getUTCDate() + 2); // Saturday → Monday
-  if (dow === 0) date.setUTCDate(date.getUTCDate() + 1); // Sunday → Monday
-
-  return date.toISOString().slice(0, 10); // YYYY-MM-DD
+  const iso = new Date(Date.UTC(year, month0, day)).toISOString().slice(0, 10);
+  return nextBusinessDay(iso).date;
 }
 
 /**
@@ -130,7 +197,10 @@ export async function generateDeadlinesForEntity(
   const values = rules
     .map((rule) => {
       const payload = rule.rulePayload as unknown as RulePayload;
-      const dueDate = computeDueDate(payload, parsed.taxYear);
+      // Pass entity so FYE-relative rules use the entity's actual
+      // fiscal year end. Calendar-year entities (Dec 31 default)
+      // fall through to the same dates as before.
+      const dueDate = computeDueDate(payload, parsed.taxYear, entity);
       const isPast = dueDate < today;
 
       if (isPast && !includeHistorical) return null;

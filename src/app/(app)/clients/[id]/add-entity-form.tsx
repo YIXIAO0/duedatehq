@@ -35,6 +35,21 @@ const SUPPORTED_STATES = [
   { value: "NJ", label: "New Jersey" },
 ];
 
+// Common FYE choices. The seven options cover ~99% of US entities —
+// most are calendar year (Dec 31), and "natural business years" of
+// Jun 30 / Sep 30 / Mar 31 cover the rest. Free-form would let CPAs
+// pick weird dates but we'd have to handle Feb 29 + last-day-of-month
+// math more carefully. Stick with the standard choices.
+const FYE_OPTIONS = [
+  { value: "12-31", label: "Dec 31 — Calendar year (most common)" },
+  { value: "06-30", label: "Jun 30 — Common for C-corps" },
+  { value: "03-31", label: "Mar 31" },
+  { value: "09-30", label: "Sep 30" },
+  { value: "01-31", label: "Jan 31" },
+  { value: "10-31", label: "Oct 31" },
+  { value: "11-30", label: "Nov 30" },
+];
+
 export function AddEntityForm({ clientId }: { clientId: string }) {
   return (
     <form action={createEntityAction}>
@@ -103,17 +118,39 @@ export function AddEntityForm({ clientId }: { clientId: string }) {
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="ein">EIN / SSN (optional)</Label>
-            <Input
-              id="ein"
-              name="ein"
-              placeholder="XX-XXXXXXX"
-              maxLength={20}
-            />
-            <p className="text-xs text-muted-foreground">
-              Not required — used only for your reference.
-            </p>
+          <div className="grid gap-5 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="ein">EIN / SSN (optional)</Label>
+              <Input
+                id="ein"
+                name="ein"
+                placeholder="XX-XXXXXXX"
+                maxLength={20}
+              />
+              <p className="text-xs text-muted-foreground">
+                Not required — used only for your reference.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="fiscalYearEnd">Fiscal year end</Label>
+              <Select name="fiscalYearEnd" defaultValue="12-31">
+                <SelectTrigger id="fiscalYearEnd">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {FYE_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Drives 1120 / 1120-S / 1065 / 1041 / 990 due dates. Most
+                entities are calendar year — change only if this client
+                explicitly elected otherwise.
+              </p>
+            </div>
           </div>
         </CardContent>
         <CardFooter className="justify-end">

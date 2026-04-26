@@ -77,6 +77,11 @@ const UpdateEntityFormSchema = z.object({
     .or(z.literal("")),
   operatingStates: z.string().optional(),
   ein: z.string().max(20).optional(),
+  fiscalYearEnd: z
+    .string()
+    .regex(/^\d{2}-\d{2}$/)
+    .optional()
+    .or(z.literal("")),
 });
 
 export async function updateEntityAction(formData: FormData) {
@@ -89,6 +94,7 @@ export async function updateEntityAction(formData: FormData) {
     homeState: ((formData.get("homeState") as string) || "").toUpperCase(),
     operatingStates: (formData.get("operatingStates") as string) || "",
     ein: (formData.get("ein") as string) || undefined,
+    fiscalYearEnd: (formData.get("fiscalYearEnd") as string) || "",
   });
 
   if (!parsed.success) {
@@ -108,6 +114,7 @@ export async function updateEntityAction(formData: FormData) {
     homeState: parsed.data.homeState || undefined,
     operatingStates,
     ein: parsed.data.ein || undefined,
+    fiscalYearEnd: parsed.data.fiscalYearEnd || undefined,
     actorType: "user",
     actorId: ctx.user.id,
   });

@@ -62,6 +62,7 @@ export function EntityActions({
     homeState: string | null;
     operatingStates: string[];
     ein: string | null;
+    fiscalYearEnd: string;
   };
 }) {
   const [editOpen, setEditOpen] = useState(false);
@@ -170,14 +171,36 @@ export function EntityActions({
                   />
                 </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="ein">EIN / SSN</Label>
-                <Input
-                  id="ein"
-                  name="ein"
-                  defaultValue={entity.ein ?? ""}
-                  maxLength={20}
-                />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="ein">EIN / SSN</Label>
+                  <Input
+                    id="ein"
+                    name="ein"
+                    defaultValue={entity.ein ?? ""}
+                    maxLength={20}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="fiscalYearEnd">Fiscal year end</Label>
+                  <Select
+                    name="fiscalYearEnd"
+                    defaultValue={entity.fiscalYearEnd || "12-31"}
+                  >
+                    <SelectTrigger id="fiscalYearEnd">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="12-31">Dec 31 — Calendar year</SelectItem>
+                      <SelectItem value="06-30">Jun 30</SelectItem>
+                      <SelectItem value="03-31">Mar 31</SelectItem>
+                      <SelectItem value="09-30">Sep 30</SelectItem>
+                      <SelectItem value="01-31">Jan 31</SelectItem>
+                      <SelectItem value="10-31">Oct 31</SelectItem>
+                      <SelectItem value="11-30">Nov 30</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
 
