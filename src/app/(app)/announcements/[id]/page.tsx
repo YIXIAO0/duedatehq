@@ -54,12 +54,19 @@ async function Detail({ params }: { params: Params }) {
 
   const { announcement: a, clients } = review;
 
-  // "Done" is now defined per-deadline rather than per-client. A
-  // client is done when every affected deadline has been actioned —
-  // applied, skipped, or already covered by an existing extension
-  // that's at-or-past the relief date. This makes the progress bar
-  // mean something concrete: "I've handled 7 of 12 actual deadlines",
-  // not "I've ticked off 4 of 7 clients without acting on anything".
+  // Two epistemic modes drive the page (see service-layer comment):
+  //
+  //   "deadline" — AI extracted enough scope to point at specific
+  //     deadlines (form codes or a date window). Progress counts
+  //     deadlines actioned, not clients ticked.
+  //
+  //   "client" — AI couldn't extract scope. Per-client checkboxes,
+  //     and the page makes that uncertainty explicit so the CPA
+  //     knows to drill into each client manually.
+  const hasAiScope =
+    a.affectedFormCodes.length > 0 ||
+    (a.originalDeadlineStart != null && a.originalDeadlineEnd != null);
+
   const totalDeadlines = clients.reduce(
     (sum, c) => sum + c.affectedDeadlines.length,
     0,
@@ -72,7 +79,11 @@ async function Detail({ params }: { params: Params }) {
       ).length,
     0,
   );
-  const allDone = totalDeadlines > 0 && doneDeadlines === totalDeadlines;
+  const totalClients = clients.length;
+  const ackedClients = clients.filter((c) => c.acked).length;
+  const allDone = hasAiScope
+    ? totalDeadlines > 0 && doneDeadlines === totalDeadlines
+    : totalClients > 0 && ackedClients === totalClients;
 
   return (
     <>
@@ -159,39 +170,72 @@ async function Detail({ params }: { params: Params }) {
         </div>
       </header>
 
-      {/* Progress strip — counts deadlines, not clients. The unit of
-          work is the deadline (apply or skip relief), so progress
-          should reflect that. */}
-      {totalDeadlines > 0 ? (
-        <div
-          className={`mb-4 flex items-center gap-3 rounded-lg border px-4 py-3 ${
-            allDone
-              ? "border-[var(--color-priority-done)]/30 bg-[var(--color-priority-done-bg)]/40"
-              : "border-border bg-muted/30"
-          }`}
-        >
-          {allDone ? (
-            <CheckCircle2 className="h-5 w-5 shrink-0 text-[var(--color-priority-done)]" />
-          ) : (
-            <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 border-foreground/30 text-[10px] font-semibold tabular-nums">
-              {doneDeadlines}
-            </span>
-          )}
-          <div>
-            <div className="text-sm font-semibold">
-              {allDone
-                ? "All affected deadlines handled"
-                : `${doneDeadlines} of ${totalDeadlines} deadlines handled`}
-            </div>
-            <div className="text-xs text-muted-foreground">
-              {allDone
-                ? "Nothing else to do here. This announcement won't reappear on your dashboard."
-                : a.reliefDeadline
-                ? "Apply the relief date or skip per deadline. Already-extended deadlines that cover the relief date are marked automatically."
-                : "Mark each deadline reviewed once you've decided what to do."}
+      {/* Progress strip — counts deadlines (when scoped) or clients
+          (when not). The framing follows what the user actually has
+          to action. */}
+      {clients.length > 0 ? (
+        hasAiScope ? (
+          <div
+            className={`mb-4 flex items-center gap-3 rounded-lg border px-4 py-3 ${
+              allDone
+                ? "border-[var(--color-priority-done)]/30 bg-[var(--color-priority-done-bg)]/40"
+                : "border-border bg-muted/30"
+            }`}
+          >
+            {allDone ? (
+              <CheckCircle2 className="h-5 w-5 shrink-0 text-[var(--color-priority-done)]" />
+            ) : (
+              <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 border-foreground/30 text-[10px] font-semibold tabular-nums">
+                {doneDeadlines}
+              </span>
+            )}
+            <div>
+              <div className="text-sm font-semibold">
+                {allDone
+                  ? "All affected deadlines handled"
+                  : `${doneDeadlines} of ${totalDeadlines} deadlines handled`}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {allDone
+                  ? "Nothing else to do here. This announcement won't reappear on your dashboard."
+                  : a.reliefDeadline
+                  ? "Apply the relief date or skip per deadline. Already-extended deadlines covering the relief date are marked automatically."
+                  : "Mark each deadline reviewed once you've decided what to do."}
+              </div>
             </div>
           </div>
-        </div>
+        ) : (
+          // Unscoped path: per-client review, with a clear explanation
+          // that the AI didn't manage to narrow the announcement and
+          // each client needs manual attention.
+          <div
+            className={`mb-4 flex items-center gap-3 rounded-lg border px-4 py-3 ${
+              allDone
+                ? "border-[var(--color-priority-done)]/30 bg-[var(--color-priority-done-bg)]/40"
+                : "border-[var(--color-priority-medium)]/30 bg-[var(--color-priority-medium-bg)]/40"
+            }`}
+          >
+            {allDone ? (
+              <CheckCircle2 className="h-5 w-5 shrink-0 text-[var(--color-priority-done)]" />
+            ) : (
+              <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 border-foreground/30 text-[10px] font-semibold tabular-nums">
+                {ackedClients}
+              </span>
+            )}
+            <div>
+              <div className="text-sm font-semibold">
+                {allDone
+                  ? "All clients reviewed"
+                  : `${ackedClients} of ${totalClients} clients reviewed`}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                We couldn&apos;t pin down which specific deadlines this
+                announcement affects from the IRS text. Open each
+                client and decide what to do, then tick them off.
+              </div>
+            </div>
+          </div>
+        )
       ) : null}
 
       {/* The actual checklist */}

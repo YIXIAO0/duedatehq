@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import {
   CheckCircle2,
+  Circle,
   Loader2,
   Mail,
   ArrowRight,
@@ -16,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import {
   applyAnnouncementReliefAction,
   skipAnnouncementForDeadlineAction,
+  setClientReviewedAction,
 } from "../actions";
 import type {
   ReviewableClient,
@@ -23,17 +25,16 @@ import type {
 } from "@/lib/services/announcements";
 
 /**
- * Per-client review block. The previous version was per-client with a
- * "X affected · Y total" stat and a click-through to the client page,
- * which forced the CPA to leave the review flow to actually do
- * anything. This version drills into the actual affected deadlines
- * inline, with a one-click "Apply relief" button that files an
- * extension to the announcement's relief date — the meat of the
- * announcement workflow happens here, not somewhere else.
+ * Per-client review block. Two display modes:
  *
- * Acked state is computed from the deadlines: when every affected
- * deadline has been actioned (applied or skipped) or already covered
- * by a longer extension, the client is "done" for this announcement.
+ *   "deadline" — AI extracted enough scope to point at specific
+ *     deadlines. Render the client header + per-deadline rows with
+ *     Apply/Skip buttons.
+ *
+ *   "client" — AI couldn't extract scope. We show the client + open
+ *     deadline count + a per-client "Mark reviewed" checkbox. The
+ *     CPA opens the client page to figure out which deadlines apply.
+ *     We don't fake a deadline list we don't have.
  */
 export function ReviewRow({
   announcementId,
@@ -45,11 +46,25 @@ export function ReviewRow({
   /** Used by Apply buttons to surface "Apply Feb 3" instead of generic. */
   reliefDeadline: string | null;
 }) {
+  // Mode flips on whether the service was able to scope to specific
+  // deadlines. When affectedDeadlines is empty, we don't pretend.
+  const mode: "deadline" | "client" =
+    client.affectedDeadlines.length > 0 ? "deadline" : "client";
+
+  if (mode === "client") {
+    return (
+      <ClientLevelRow
+        announcementId={announcementId}
+        client={client}
+      />
+    );
+  }
+
   const total = client.affectedDeadlines.length;
   const actioned = client.affectedDeadlines.filter(
     (d) => d.appliedAt != null || d.alreadyCovered,
   ).length;
-  const allDone = total > 0 && actioned === total;
+  const allDone = actioned === total;
 
   return (
     <div
@@ -104,21 +119,116 @@ export function ReviewRow({
         </Link>
       </div>
 
-      {/* One row per affected deadline. This is where the actual work
-          happens — the CPA can apply or skip per deadline without
-          leaving the page. */}
-      {client.affectedDeadlines.length > 0 ? (
-        <ul className="divide-y divide-border border-t border-border">
-          {client.affectedDeadlines.map((d) => (
-            <DeadlineRow
-              key={d.deadlineId}
-              announcementId={announcementId}
-              deadline={d}
-              reliefDeadline={reliefDeadline}
-            />
+      <ul className="divide-y divide-border border-t border-border">
+        {client.affectedDeadlines.map((d) => (
+          <DeadlineRow
+            key={d.deadlineId}
+            announcementId={announcementId}
+            deadline={d}
+            reliefDeadline={reliefDeadline}
+          />
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/**
+ * Fallback row when AI couldn't scope to specific deadlines. We can't
+ * honestly say "X deadlines affected" so we don't — just show the
+ * client, their open-deadline count for context, and a per-client
+ * "Mark reviewed" checkbox using the legacy ack mechanism. Same
+ * compact shape as the original (pre-Round-C) review row.
+ */
+function ClientLevelRow({
+  announcementId,
+  client,
+}: {
+  announcementId: string;
+  client: ReviewableClient;
+}) {
+  const [optimisticAcked, setOptimisticAcked] = useState(client.acked);
+  const [pending, start] = useTransition();
+
+  const toggle = () => {
+    const next = !optimisticAcked;
+    setOptimisticAcked(next);
+    start(async () => {
+      await setClientReviewedAction({
+        announcementId,
+        clientId: client.clientId,
+        acked: next,
+      });
+    });
+  };
+
+  return (
+    <div
+      className={`flex items-center gap-3 rounded-lg border p-3 transition-colors ${
+        optimisticAcked
+          ? "border-[var(--color-priority-done)]/30 bg-[var(--color-priority-done-bg)]/20"
+          : "border-border bg-card hover:bg-muted/30"
+      }`}
+    >
+      <button
+        type="button"
+        onClick={toggle}
+        disabled={pending}
+        aria-label={
+          optimisticAcked ? "Mark as not reviewed" : "Mark as reviewed"
+        }
+        className="shrink-0 cursor-pointer disabled:cursor-not-allowed"
+      >
+        {pending ? (
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        ) : optimisticAcked ? (
+          <CheckCircle2 className="h-5 w-5 text-[var(--color-priority-done)]" />
+        ) : (
+          <Circle className="h-5 w-5 text-muted-foreground/60 hover:text-foreground" />
+        )}
+      </button>
+
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href={`/clients/${client.clientId}?fromAnnouncement=${announcementId}`}
+            className={`text-sm font-semibold hover:underline ${
+              optimisticAcked ? "text-foreground/70" : ""
+            }`}
+          >
+            {client.clientName}
+          </Link>
+          {client.matchedStates.map((s) => (
+            <Badge key={s} variant="outline" className="text-[10px]">
+              {s}
+            </Badge>
           ))}
-        </ul>
-      ) : null}
+        </div>
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+          <span>
+            {client.openDeadlineCount}{" "}
+            {client.openDeadlineCount === 1
+              ? "open deadline"
+              : "open deadlines"}
+          </span>
+          {client.primaryContactEmail ? (
+            <a
+              href={`mailto:${client.primaryContactEmail}`}
+              className="inline-flex items-center gap-1 hover:text-foreground hover:underline"
+            >
+              <Mail className="h-3 w-3" />
+              {client.primaryContactEmail}
+            </a>
+          ) : null}
+        </div>
+      </div>
+
+      <Link
+        href={`/clients/${client.clientId}?fromAnnouncement=${announcementId}`}
+        className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border bg-background px-2.5 py-1 text-xs font-medium text-foreground/80 transition-colors hover:bg-muted hover:text-foreground"
+      >
+        Open client <ArrowRight className="h-3 w-3" />
+      </Link>
     </div>
   );
 }

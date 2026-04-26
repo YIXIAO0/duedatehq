@@ -500,13 +500,37 @@ export async function getAnnouncementReview(
   //    `::jsonb` cast on a JSON-string literal is the reliable shape.
   const affectedJsonb = JSON.stringify(ann.affectedJurisdictions ?? []);
   const formCodesJsonb = JSON.stringify(ann.affectedFormCodes ?? []);
-  // The form-code filter is "AND if there are any specified codes,
-  // require the rule to match one of them". When the array is empty,
-  // we want the filter to be a no-op (match all forms) — the SQL
-  // `(jsonb_array_length(x) = 0 OR ... ? form_code)` short-circuits
-  // exactly that.
   const dateRangeStart = ann.originalDeadlineStart;
   const dateRangeEnd = ann.originalDeadlineEnd;
+
+  // Two epistemic states matter here:
+  //
+  //   1. AI extracted SOMETHING — at least form codes or a date range.
+  //      We're confident enough to drill into specific deadlines.
+  //
+  //   2. AI extracted NOTHING — form codes empty AND no date range.
+  //      We're not confident. Returning the union of all open
+  //      deadlines for the state-matched clients (the previous
+  //      behavior) is misleading: a "112 deadlines affected" header
+  //      for an Apr 15 announcement is not honest. Don't pretend.
+  //
+  //      In this case we still surface the affected clients (state
+  //      match), but the per-client deadline list comes back empty
+  //      and the UI falls through to a client-level checklist.
+  const hasNarrowingFilter =
+    (ann.affectedFormCodes ?? []).length > 0 ||
+    (dateRangeStart != null && dateRangeEnd != null);
+
+  // Even when AI extracted form codes but missed the date range,
+  // unbounded form-only matching pulls in 2027/2028 deadlines which
+  // can't possibly relate to a 2026-published announcement. Cap to
+  // a sane horizon: 30 days before publish (recently overdue) to
+  // 180 days after (the immediate filing window). When AI gave us
+  // an explicit date range we use that instead — the AI-stated
+  // window is more authoritative than our heuristic.
+  const publishedAt = ann.publishedAt
+    ? new Date(ann.publishedAt).toISOString().slice(0, 10)
+    : new Date().toISOString().slice(0, 10);
 
   // Pull rows + the JSONB-aggregated affected-deadlines list so we can
   // render specific work units in the UI. Returning the deadlines
@@ -558,11 +582,14 @@ export async function getAnnouncementReview(
                <= (CURRENT_DATE + INTERVAL '365 days')
           )
       ) AS open_deadline_count,
-      -- Affected deadlines: the rows that match this announcement's
-      -- scope. We attach already-applied state from audit_events so
-      -- the UI shows whether the relief was applied for this exact
-      -- (announcement, deadline) pair.
-      COALESCE(
+      -- Affected deadlines list. Only populated when AI narrowed the
+      -- scope — without a form-code filter or a date range we don't
+      -- know what's actually affected, and listing every open deadline
+      -- is misleading. The UI falls back to a client-level checklist
+      -- in that case.
+      ${
+        hasNarrowingFilter
+          ? sql`COALESCE(
         (
           SELECT jsonb_agg(
             jsonb_build_object(
@@ -573,9 +600,6 @@ export async function getAnnouncementReview(
                 COALESCE(di.extension_due_date, di.due_date)::text,
               'status', di.status::text,
               'applied_at', applied.acted_at,
-              -- Already covered if a prior extension already pushed
-              -- the deadline to or past the relief date — saves the
-              -- CPA from re-applying something that's already there.
               'already_covered',
                 ${
                   ann.reliefDeadline
@@ -590,8 +614,6 @@ export async function getAnnouncementReview(
           INNER JOIN entities e3 ON e3.id = di.entity_id
           INNER JOIN deadline_rules r ON r.id = di.rule_id
           LEFT JOIN LATERAL (
-            -- Most recent apply/skip action for THIS user on THIS
-            -- (announcement, deadline) pair, if any.
             SELECT ae.occurred_at::text AS acted_at
             FROM audit_events ae
             WHERE ae.action = 'announcement.relief_applied'
@@ -608,15 +630,24 @@ export async function getAnnouncementReview(
               jsonb_array_length((${formCodesJsonb}::jsonb)) = 0
               OR (${formCodesJsonb}::jsonb) ? r.form_code
             )
+            -- Date filter: prefer the AI-stated original-deadline
+            -- window when present (most authoritative). When only
+            -- form codes were extracted, cap by publication date
+            -- ± a sane horizon — an April 2026 announcement isn't
+            -- about a 2027 deadline.
             ${
               dateRangeStart && dateRangeEnd
                 ? sql`AND COALESCE(di.extension_due_date, di.due_date)
                         BETWEEN ${dateRangeStart}::date AND ${dateRangeEnd}::date`
-                : sql``
+                : sql`AND COALESCE(di.extension_due_date, di.due_date)
+                        BETWEEN (${publishedAt}::date - INTERVAL '30 days')
+                        AND     (${publishedAt}::date + INTERVAL '180 days')`
             }
         ),
         '[]'::jsonb
-      ) AS affected_deadlines,
+      )`
+          : sql`'[]'::jsonb`
+      } AS affected_deadlines,
       EXISTS (
         SELECT 1 FROM announcement_client_acks ack
         WHERE ack.announcement_id = ${announcementId}
@@ -636,14 +667,11 @@ export async function getAnnouncementReview(
     ORDER BY acked ASC, c.name ASC
   `);
 
-  // Filter out clients where the structured filters narrow it to zero
-  // affected deadlines — but ONLY when there are actual filters to
-  // narrow with. Keep the coarse state-match behavior for older /
-  // unenriched announcements (no form codes AND no date range).
-  const hasNarrowingFilter =
-    (ann.affectedFormCodes ?? []).length > 0 ||
-    (ann.originalDeadlineStart != null && ann.originalDeadlineEnd != null);
-
+  // hasNarrowingFilter is computed up top — reuse it here. When AI
+  // narrowed the scope and a client's affectedDeadlines came back
+  // empty, drop them: they're in the affected state but have nothing
+  // actually in scope. When AI didn't narrow, keep all coarse-matched
+  // clients (we have nothing better to filter by).
   const clients = rows.rows
     .map((r) => ({
       clientId: r.client_id,
