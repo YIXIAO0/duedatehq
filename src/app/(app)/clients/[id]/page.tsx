@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Suspense } from "react";
+import { Fragment, Suspense } from "react";
 import { notFound } from "next/navigation";
 import { and, eq } from "drizzle-orm";
 import { Button } from "@/components/ui/button";
@@ -234,6 +234,19 @@ function DeadlinesSection({
   // next?" the date axis must dominate. When the client has multiple
   // entities, we show a small entity column so the row still answers
   // "for which sub-business?".
+  //
+  // Date streaks: deadlines that share the same effective_due_date
+  // (very common when state + federal forms collide on Apr 15) are
+  // hoisted under a single date subheader. The rows below drop their
+  // date column entirely so the form-code + title gets the visual
+  // weight, instead of a wall of repeating dates.
+  const streaks: { date: string; rows: ClientDeadlineRow[] }[] = [];
+  for (const d of deadlines) {
+    const last = streaks[streaks.length - 1];
+    if (last && last.date === d.effectiveDueDate) last.rows.push(d);
+    else streaks.push({ date: d.effectiveDueDate, rows: [d] });
+  }
+
   return (
     <section>
       <div className="mb-4 flex items-baseline justify-between">
@@ -249,16 +262,50 @@ function DeadlinesSection({
       </div>
       <div className="overflow-hidden rounded-lg border border-border">
         <div className="divide-y divide-border">
-          {deadlines.map((d) => (
-            <DeadlineRow
-              key={d.id}
-              d={d}
-              showEntityCol={showEntityCol}
-            />
+          {streaks.map((streak) => (
+            <Fragment key={streak.date}>
+              <DateSubheader
+                date={streak.date}
+                count={streak.rows.length}
+              />
+              {streak.rows.map((d) => (
+                <DeadlineRow
+                  key={d.id}
+                  d={d}
+                  showEntityCol={showEntityCol}
+                />
+              ))}
+            </Fragment>
           ))}
         </div>
       </div>
     </section>
+  );
+}
+
+/**
+ * Subheader rendered once per unique effective_due_date in the open
+ * deadlines list. Carries the date, the relative-time chip (which is
+ * the same for every row beneath it — that's why it's hoisted), and a
+ * count when the streak has more than one row.
+ *
+ * Visual: muted background strip so it reads as a separator between
+ * date groups while still feeling part of the same table.
+ */
+function DateSubheader({ date, count }: { date: string; count: number }) {
+  const { label, color } = relativeTime(date);
+  return (
+    <div className="flex items-center gap-2 bg-muted/30 px-4 py-1.5">
+      <span className="text-xs font-semibold tracking-wide">
+        {formatShortDate(date)}
+      </span>
+      <span className={`text-[11px] ${color}`}>{label}</span>
+      {count > 1 ? (
+        <span className="ml-auto text-[11px] text-muted-foreground">
+          {count} deadlines
+        </span>
+      ) : null}
+    </div>
   );
 }
 
@@ -276,34 +323,14 @@ function DeadlineRow({
     (due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
   );
   const isOverdue = days < 0;
-  const isUrgent = days >= 0 && days <= 7;
-  const dateColor = isOverdue
-    ? "text-[var(--color-priority-urgent)]"
-    : isUrgent
-    ? "text-[var(--color-priority-high)]"
-    : "text-foreground";
 
-  const relLabel = isOverdue
-    ? `${Math.abs(days)}d overdue`
-    : days === 0
-    ? "Today"
-    : days === 1
-    ? "Tomorrow"
-    : `In ${days}d`;
-
+  // No more dedicated date column — the DateSubheader carries it. Row
+  // just shows form code, title, optional entity sub-line, and status.
   return (
     <Link
       href={`/deadlines/${d.id}`}
-      className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-muted/40"
+      className="flex items-center gap-3 px-4 py-2 transition-colors hover:bg-muted/40"
     >
-      {/* w-28 (112px) is just enough for "Jun 15, 2026" on a single line.
-          w-20 was clipping it onto two lines and breaking visual rhythm. */}
-      <div className="w-28 shrink-0">
-        <div className={`text-sm font-semibold ${dateColor}`}>
-          {formatShortDate(d.effectiveDueDate)}
-        </div>
-        <div className="text-[11px] text-muted-foreground">{relLabel}</div>
-      </div>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
           <span className="font-mono text-sm font-semibold">{d.formCode}</span>
@@ -326,6 +353,43 @@ function DeadlineRow({
       <StatusBadge status={d.status} isOverdue={isOverdue} />
     </Link>
   );
+}
+
+/**
+ * Relative-time label for a future or past date.
+ *
+ * For near-term we keep day-precision because tax deadlines are felt
+ * in days ("3d overdue", "in 7d"). Beyond a month, days lose meaning
+ * — "In 354d" is psychologically heavier than "in 12mo" because the
+ * brain has to convert. Switch to weeks past 30 days, months past 90.
+ */
+function relativeTime(iso: string): { label: string; color: string } {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const due = new Date(iso + "T00:00:00");
+  const days = Math.round(
+    (due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
+  );
+
+  let label: string;
+  if (days < 0) label = `${Math.abs(days)}d overdue`;
+  else if (days === 0) label = "Today";
+  else if (days === 1) label = "Tomorrow";
+  else if (days <= 30) label = `in ${days}d`;
+  else if (days <= 90) label = `in ${Math.round(days / 7)}w`;
+  else if (days <= 365) label = `in ${Math.round(days / 30)}mo`;
+  else label = `in ${Math.round(days / 365)}y`;
+
+  const color =
+    days < 0 || days <= 3
+      ? "text-[var(--color-priority-urgent)]"
+      : days <= 14
+      ? "text-[var(--color-priority-high)]"
+      : days <= 30
+      ? "text-[var(--color-priority-medium)]"
+      : "text-muted-foreground";
+
+  return { label, color };
 }
 
 function StatusBadge({
