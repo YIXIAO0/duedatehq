@@ -158,7 +158,7 @@ async function gatherDigestStats(orgId: string): Promise<DigestStats> {
     INNER JOIN entities e ON e.id = di.entity_id
     INNER JOIN clients c ON c.id = e.client_id
     WHERE di.org_id = ${orgId}
-      AND di.status IN ('pending', 'in_progress', 'extended')
+      AND di.status IN ('pending', 'waiting_on_client', 'in_progress', 'ready_to_file', 'extended')
       AND COALESCE(di.extension_due_date, di.due_date) BETWEEN ${todayIso}::date
         AND (${todayIso}::date + INTERVAL '14 days')
     ORDER BY effective_due_date ASC, r.irrevocable DESC
@@ -182,7 +182,7 @@ async function gatherDigestStats(orgId: string): Promise<DigestStats> {
     INNER JOIN entities e ON e.id = di.entity_id
     INNER JOIN clients c ON c.id = e.client_id
     WHERE di.org_id = ${orgId}
-      AND di.status IN ('pending', 'in_progress', 'extended')
+      AND di.status IN ('pending', 'waiting_on_client', 'in_progress', 'ready_to_file', 'extended')
       AND COALESCE(di.extension_due_date, di.due_date) < ${todayIso}::date
     ORDER BY effective_due_date ASC
     LIMIT 20

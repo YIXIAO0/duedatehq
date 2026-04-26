@@ -228,7 +228,7 @@ export async function listDashboardDeadlines(input: ListDashboardInput) {
   const statusWhere =
     parsed.status === "extended_only"
       ? sql`di.status = 'extended'`
-      : sql`di.status IN ('pending', 'in_progress', 'extended')`;
+      : sql`di.status IN ('pending', 'waiting_on_client', 'in_progress', 'ready_to_file', 'extended')`;
 
   const urgencyWhere =
     parsed.urgency === "urgent"
@@ -317,15 +317,15 @@ export async function getDashboardStats(orgId: string) {
     SELECT
       COUNT(*) FILTER (
         WHERE COALESCE(extension_due_date, due_date) BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '7 days'
-        AND status IN ('pending', 'in_progress', 'extended')
+        AND status IN ('pending', 'waiting_on_client', 'in_progress', 'ready_to_file', 'extended')
       ) AS this_week,
       COUNT(*) FILTER (
         WHERE COALESCE(extension_due_date, due_date) BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '30 days'
-        AND status IN ('pending', 'in_progress', 'extended')
+        AND status IN ('pending', 'waiting_on_client', 'in_progress', 'ready_to_file', 'extended')
       ) AS this_month,
       COUNT(*) FILTER (
         WHERE COALESCE(extension_due_date, due_date) < CURRENT_DATE
-        AND status IN ('pending', 'in_progress', 'extended')
+        AND status IN ('pending', 'waiting_on_client', 'in_progress', 'ready_to_file', 'extended')
       ) AS overdue,
       COUNT(*) FILTER (
         WHERE status = 'completed'

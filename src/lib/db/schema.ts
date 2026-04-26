@@ -48,7 +48,14 @@ export const entityTypeEnum = pgEnum("entity_type", [
 
 export const deadlineStatusEnum = pgEnum("deadline_status", [
   "pending",
+  // 🆕 "I'm blocked on the client sending me docs". Most common blocked
+  // state, was hidden under in_progress before. Splitting it out lets
+  // the dashboard answer "what am I blocked on?" vs "what am I working on?".
+  "waiting_on_client",
   "in_progress",
+  // 🆕 "I'm done my prep work, just need signature / e-file ack".
+  // Stops the "I thought we filed it" gap.
+  "ready_to_file",
   "completed",
   "extended",
   "missed",
@@ -141,6 +148,67 @@ export const clients = pgTable(
   (t) => [
     index("clients_org_idx").on(t.orgId),
     index("clients_org_archived_idx").on(t.orgId, t.archivedAt),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Multiple contacts per client.
+//
+// CPAs send reminders / docs to more than one person at the client
+// (CFO + bookkeeper + spouse + assistant). Modeling a single
+// `primary_contact_email` on `clients` was sufficient for MVP-day-1 but
+// punishingly thin once email cron started reaching real recipients.
+//
+// Design notes:
+//   - `priority` is the sort key; priority=0 is the primary. We don't
+//     enforce "exactly one primary" in the DB — service layer demotes
+//     the previous primary when one is promoted. Race-window tradeoff:
+//     a brief moment of two priority=0 rows is fine for read paths
+//     (we display whichever sorts first by createdAt as the de facto
+//     primary).
+//   - Either `email` or `phone` must be present — checked in the
+//     service layer; no DB CHECK because future channels (Slack, IM)
+//     may ride on this table too.
+//   - `receives_reminders` is the toggle that the email cron will
+//     consult once Round B wires in real sending. Default true.
+//   - `clients.primary_contact_email/phone` stay as a denormalized
+//     cache so existing search / CSV / dashboard queries keep working
+//     without rewrite. Service layer keeps them in sync.
+// ---------------------------------------------------------------------------
+
+export const clientContacts = pgTable(
+  "client_contacts",
+  {
+    id: text("id").primaryKey().$defaultFn(() => `con_${nanoid(12)}`),
+    clientId: text("client_id").notNull().references(() => clients.id, {
+      onDelete: "cascade",
+    }),
+    orgId: text("org_id").notNull().references(() => organizations.id, {
+      onDelete: "cascade",
+    }),
+    name: text("name"),
+    email: text("email"),
+    phone: text("phone"),
+    /** Free text for now — "owner", "cfo", "bookkeeper", "spouse",
+        "assistant", "controller", "advisor", whatever. UI surfaces a
+        suggestions list but doesn't lock down the value. */
+    role: text("role"),
+    /** 0 = primary contact. 1+ = secondary, in display order. */
+    priority: integer("priority").notNull().default(100),
+    /** Will the per-deadline reminder cron email this contact? */
+    receivesReminders: boolean("receives_reminders").notNull().default(true),
+    notes: text("notes"),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("client_contacts_client_idx").on(t.clientId),
+    index("client_contacts_client_priority_idx").on(t.clientId, t.priority),
   ],
 );
 
@@ -489,3 +557,5 @@ export type Announcement = typeof announcements.$inferSelect;
 export type NewAnnouncement = typeof announcements.$inferInsert;
 export type AnnouncementDismissal = typeof announcementDismissals.$inferSelect;
 export type AnnouncementClientAck = typeof announcementClientAcks.$inferSelect;
+export type ClientContact = typeof clientContacts.$inferSelect;
+export type NewClientContact = typeof clientContacts.$inferInsert;

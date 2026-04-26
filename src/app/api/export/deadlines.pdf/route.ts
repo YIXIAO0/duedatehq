@@ -89,7 +89,7 @@ export async function GET(req: Request) {
       AND e.archived_at IS NULL
       AND c.archived_at IS NULL
       AND (
-        di.status IN ('pending', 'in_progress', 'extended')
+        di.status IN ('pending', 'waiting_on_client', 'in_progress', 'ready_to_file', 'extended')
         OR di.completed_at >= NOW() - INTERVAL '7 days'
       )
       AND COALESCE(di.extension_due_date, di.due_date)

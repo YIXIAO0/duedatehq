@@ -22,6 +22,13 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -30,7 +37,32 @@ import {
   markCompleteAction,
   reopenAction,
   fileExtensionAction,
+  setStatusAction,
+  type WorkflowStatus,
 } from "./actions";
+
+// Display labels for the four workflow states. Order matters — this is
+// the typical CPA progression: nothing started → blocked on client →
+// actively working → handoff to client. Keep them short; they sit in
+// a narrow dropdown trigger.
+const WORKFLOW_OPTIONS: { value: WorkflowStatus; label: string; hint: string }[] = [
+  { value: "pending", label: "Pending", hint: "Not started" },
+  {
+    value: "waiting_on_client",
+    label: "Waiting on client",
+    hint: "Blocked on docs / signature",
+  },
+  { value: "in_progress", label: "In progress", hint: "Actively working" },
+  {
+    value: "ready_to_file",
+    label: "Ready to file",
+    hint: "Done — awaiting e-file ack",
+  },
+];
+
+function isWorkflowStatus(s: string): s is WorkflowStatus {
+  return WORKFLOW_OPTIONS.some((o) => o.value === s);
+}
 
 export function DeadlineActionBar({
   deadlineId,
@@ -83,8 +115,42 @@ export function DeadlineActionBar({
     );
   }
 
+  // Workflow status dropdown only makes sense for non-terminal states.
+  // For "extended" we still allow the CPA to move through pending →
+  // waiting_on_client → ... so we render it; we just exclude completed
+  // (which already early-returned above).
+  const currentWorkflow: WorkflowStatus | null = isWorkflowStatus(status)
+    ? status
+    : null;
+
   return (
     <div className="flex flex-wrap items-center gap-2">
+      {/* Workflow status — quick-toggle stage without committing to filed */}
+      {currentWorkflow ? (
+        <Select
+          value={currentWorkflow}
+          disabled={pending}
+          onValueChange={(v) => {
+            if (!isWorkflowStatus(v) || v === currentWorkflow) return;
+            startTransition(() => setStatusAction(deadlineId, v));
+          }}
+        >
+          <SelectTrigger className="h-9 w-[180px]" aria-label="Workflow status">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {WORKFLOW_OPTIONS.map((o) => (
+              <SelectItem key={o.value} value={o.value}>
+                <div className="flex flex-col">
+                  <span>{o.label}</span>
+                  <span className="text-xs text-muted-foreground">{o.hint}</span>
+                </div>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      ) : null}
+
       {/* Mark complete */}
       <AlertDialog>
         <AlertDialogTrigger asChild>

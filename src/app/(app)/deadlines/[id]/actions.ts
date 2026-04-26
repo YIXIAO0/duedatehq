@@ -8,9 +8,21 @@ import {
   fileExtension,
   updateDeadlineNotes,
   reopenDeadline,
+  setDeadlineStatus,
 } from "@/lib/services/deadlines";
 
 const IdSchema = z.string().min(1);
+
+// Mirror of WORKFLOW_STATUSES from the service. Kept in lock-step manually
+// rather than imported because server-action arg types must be plain
+// JSON-friendly literals to make Next.js's RPC encoding happy.
+const WorkflowStatusSchema = z.enum([
+  "pending",
+  "waiting_on_client",
+  "in_progress",
+  "ready_to_file",
+]);
+export type WorkflowStatus = z.infer<typeof WorkflowStatusSchema>;
 
 export async function markCompleteAction(
   deadlineId: string,
@@ -33,6 +45,22 @@ export async function reopenAction(deadlineId: string) {
   await reopenDeadline({
     deadlineInstanceId: IdSchema.parse(deadlineId),
     orgId: ctx.organization.id,
+    actorType: "user",
+    actorId: ctx.user.id,
+  });
+  revalidatePath("/dashboard");
+  revalidatePath(`/deadlines/${deadlineId}`);
+}
+
+export async function setStatusAction(
+  deadlineId: string,
+  newStatus: WorkflowStatus,
+) {
+  const ctx = await getCurrentContext();
+  await setDeadlineStatus({
+    deadlineInstanceId: IdSchema.parse(deadlineId),
+    orgId: ctx.organization.id,
+    status: WorkflowStatusSchema.parse(newStatus),
     actorType: "user",
     actorId: ctx.user.id,
   });

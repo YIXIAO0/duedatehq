@@ -376,6 +376,28 @@ function describeHistory(entry: DeadlineHistoryEntry): {
         accent: "bg-muted-foreground",
       };
     }
+    case "deadline.status_changed": {
+      // Workflow-stage transitions: pending → waiting_on_client →
+      // in_progress → ready_to_file (in any direction). Show the human
+      // labels so the timeline reads "Status: Waiting on client → In
+      // progress" rather than raw enum values.
+      const prev = (p.previousStatus ?? null) as string | null;
+      const next = (p.newStatus ?? null) as string | null;
+      const fmt = (s: string | null) => (s ? statusLabel(s) : "—");
+      // Color the dot to match the destination state so a quick scan of
+      // the timeline communicates progress visually.
+      const accent =
+        next === "ready_to_file"
+          ? "bg-[var(--color-priority-done)]"
+          : next === "waiting_on_client"
+          ? "bg-[var(--color-priority-high)]"
+          : "bg-muted-foreground";
+      return {
+        label: "Status changed",
+        body: prev && next ? `${fmt(prev)} → ${fmt(next)}` : fmt(next),
+        accent,
+      };
+    }
     default:
       // Unknown action — surface raw to be safe rather than hide.
       return {
@@ -393,6 +415,23 @@ function humanDate(iso: string): string {
     day: "numeric",
     year: "numeric",
   });
+}
+
+// Map raw enum values from audit_events.payload to the same display
+// strings the dropdown trigger uses. Kept in this file (not the action
+// bar) because the timeline reads from history server-side.
+function statusLabel(s: string): string {
+  const map: Record<string, string> = {
+    pending: "Pending",
+    waiting_on_client: "Waiting on client",
+    in_progress: "In progress",
+    ready_to_file: "Ready to file",
+    completed: "Filed",
+    extended: "Extended",
+    missed: "Missed",
+    not_applicable: "N/A",
+  };
+  return map[s] ?? s;
 }
 
 function StatusBadge({
@@ -416,10 +455,34 @@ function StatusBadge({
       </Badge>
     );
   }
+  // Surface workflow states explicitly so the CPA can scan the page
+  // header and know "where in the process" each deadline is. Overdue
+  // still wins visually (urgent red) — being late beats stage info.
   if (isOverdue) {
     return (
       <Badge className="bg-[var(--color-priority-urgent-bg)] text-[var(--color-priority-urgent)] hover:bg-[var(--color-priority-urgent-bg)]">
         <AlertTriangle className="mr-1 h-3 w-3" /> Overdue
+      </Badge>
+    );
+  }
+  if (status === "waiting_on_client") {
+    return (
+      <Badge variant="outline" className="text-[var(--color-priority-high)]">
+        <Clock className="mr-1 h-3 w-3" /> Waiting on client
+      </Badge>
+    );
+  }
+  if (status === "in_progress") {
+    return (
+      <Badge variant="outline">
+        <Clock className="mr-1 h-3 w-3" /> In progress
+      </Badge>
+    );
+  }
+  if (status === "ready_to_file") {
+    return (
+      <Badge variant="outline" className="text-[var(--color-priority-done)]">
+        <CheckCircle2 className="mr-1 h-3 w-3" /> Ready to file
       </Badge>
     );
   }

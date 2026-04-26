@@ -133,7 +133,7 @@ export async function globalSearch(input: SearchInput): Promise<SearchHit[]> {
     INNER JOIN entities e ON e.id = di.entity_id
     INNER JOIN clients c ON c.id = e.client_id
     WHERE di.org_id = ${parsed.orgId}
-      AND di.status IN ('pending', 'in_progress', 'extended')
+      AND di.status IN ('pending', 'waiting_on_client', 'in_progress', 'ready_to_file', 'extended')
       AND (
         LOWER(r.title) LIKE LOWER(${like})
         OR LOWER(r.form_code) LIKE LOWER(${like})

@@ -28,8 +28,10 @@ import {
   listDeadlinesForClient,
   type ClientDeadlineRow,
 } from "@/lib/services/deadlines";
+import { listContactsForClient } from "@/lib/services/client-contacts";
 import { AddEntityForm } from "./add-entity-form";
 import { ClientActions } from "./client-actions";
+import { ContactsSection } from "./contacts-section";
 import { EntityActions } from "./entity-actions";
 
 type Params = Promise<{ id: string }>;
@@ -106,6 +108,12 @@ async function ClientDetail({
     clientId: id,
   });
 
+  // Active contacts for this client, primary first.
+  const contacts = await listContactsForClient({
+    orgId: ctx.organization.id,
+    clientId: id,
+  });
+
   return (
     <div className="space-y-8">
       <Button asChild variant="ghost" size="sm" className="-ml-3">
@@ -148,6 +156,12 @@ async function ClientDetail({
           showEntityCol={entityRows.length > 1}
         />
       ) : null}
+
+      {/* Contacts — below deadlines because deadlines are primary work,
+          contacts are "who do I email when working on those deadlines".
+          The Round-B email cron will only reach contacts with
+          receivesReminders=true. */}
+      <ContactsSection clientId={id} contacts={contacts} />
 
       {/* Entities */}
       <section>
@@ -328,10 +342,30 @@ function StatusBadge({
       </Badge>
     );
   }
+  if (status === "waiting_on_client") {
+    return (
+      <Badge
+        variant="outline"
+        className="shrink-0 text-[10px] text-[var(--color-priority-high)]"
+      >
+        <Clock className="mr-1 h-2.5 w-2.5" /> Waiting on client
+      </Badge>
+    );
+  }
   if (status === "in_progress") {
     return (
       <Badge variant="outline" className="shrink-0 text-[10px]">
         <Clock className="mr-1 h-2.5 w-2.5" /> In progress
+      </Badge>
+    );
+  }
+  if (status === "ready_to_file") {
+    return (
+      <Badge
+        variant="outline"
+        className="shrink-0 text-[10px] text-[var(--color-priority-done)]"
+      >
+        <CheckCircle2 className="mr-1 h-2.5 w-2.5" /> Ready to file
       </Badge>
     );
   }

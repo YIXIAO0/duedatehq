@@ -14,12 +14,7 @@ import "server-only";
 import { z } from "zod";
 import { and, asc, eq, gte, lte, ne, sql } from "drizzle-orm";
 import { getDb } from "@/lib/db";
-import {
-  clients,
-  deadlineInstances,
-  deadlineRules,
-  entities,
-} from "@/lib/db/schema";
+import { deadlineInstances } from "@/lib/db/schema";
 import { recordAudit } from "./audit";
 
 // ---------------------------------------------------------------------------
@@ -353,6 +348,96 @@ export async function reopenDeadline(input: MarkCompletedInput) {
 // ---------------------------------------------------------------------------
 // Fetch a single deadline with its joined context (rule + entity + client)
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Workflow-status setter — for the "soft" states that aren't tied to
+// a concrete event (mark-completed / file-extension are their own
+// actions). Currently used by:
+//   - waiting_on_client   "I'm blocked on the client sending docs"
+//   - in_progress         "I'm working on it"
+//   - ready_to_file       "Done my work, awaiting signature/e-file ack"
+//
+// Refuses to set terminal states (completed/extended/missed) — those
+// have richer event-bearing actions (markCompleted / fileExtension)
+// that the caller should use instead.
+// ---------------------------------------------------------------------------
+
+const WORKFLOW_STATUSES = [
+  "pending",
+  "waiting_on_client",
+  "in_progress",
+  "ready_to_file",
+] as const;
+
+export const SetDeadlineStatusInputSchema = z.object({
+  deadlineInstanceId: z.string(),
+  orgId: z.string(),
+  status: z.enum(WORKFLOW_STATUSES),
+  actorType: z.enum(["user", "agent", "cron", "system"]).default("user"),
+  actorId: z.string().nullable().default(null),
+});
+export type SetDeadlineStatusInput = z.input<typeof SetDeadlineStatusInputSchema>;
+
+export async function setDeadlineStatus(input: SetDeadlineStatusInput) {
+  const parsed = SetDeadlineStatusInputSchema.parse(input);
+  const db = getDb();
+
+  const [pre] = await db
+    .select()
+    .from(deadlineInstances)
+    .where(
+      and(
+        eq(deadlineInstances.id, parsed.deadlineInstanceId),
+        eq(deadlineInstances.orgId, parsed.orgId),
+      ),
+    )
+    .limit(1);
+  if (!pre) {
+    throw new Error(
+      `Deadline ${parsed.deadlineInstanceId} not found in org ${parsed.orgId}`,
+    );
+  }
+
+  // Defensive: don't let this back-track from completed/extended into a
+  // workflow state silently. The caller should use reopenDeadline first.
+  if (
+    pre.status === "completed" ||
+    pre.status === "extended" ||
+    pre.status === "missed"
+  ) {
+    throw new Error(
+      `Cannot set workflow status on a ${pre.status} deadline. Reopen first.`,
+    );
+  }
+
+  if (pre.status === parsed.status) return pre; // no-op, no audit noise
+
+  const [row] = await db
+    .update(deadlineInstances)
+    .set({ status: parsed.status, updatedAt: new Date() })
+    .where(
+      and(
+        eq(deadlineInstances.id, parsed.deadlineInstanceId),
+        eq(deadlineInstances.orgId, parsed.orgId),
+      ),
+    )
+    .returning();
+
+  await recordAudit({
+    orgId: parsed.orgId,
+    actorType: parsed.actorType,
+    actorId: parsed.actorId,
+    action: "deadline.status_changed",
+    targetType: "deadline_instance",
+    targetId: row.id,
+    payload: {
+      previousStatus: pre.status,
+      newStatus: parsed.status,
+    },
+  });
+
+  return row;
+}
 
 export async function getDeadlineDetail(
   deadlineInstanceId: string,

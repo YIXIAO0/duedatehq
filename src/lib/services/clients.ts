@@ -375,7 +375,7 @@ export async function listClientsWithEntityCount(
              INNER JOIN entities e2 ON e2.id = di.entity_id
              WHERE e2.client_id = c.id
                AND e2.archived_at IS NULL
-               AND di.status IN ('pending', 'in_progress', 'extended')
+               AND di.status IN ('pending', 'waiting_on_client', 'in_progress', 'ready_to_file', 'extended')
            ) AS active_deadline_count
     FROM clients c
     WHERE c.org_id = ${parsed.orgId}

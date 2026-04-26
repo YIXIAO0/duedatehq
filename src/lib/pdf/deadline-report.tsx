@@ -28,7 +28,15 @@ export type ReportDeadline = {
   id: string;
   effectiveDueDate: string; // ISO YYYY-MM-DD
   originalDueDate: string;
-  status: "pending" | "in_progress" | "completed" | "extended" | "missed" | "not_applicable";
+  status:
+    | "pending"
+    | "waiting_on_client"
+    | "in_progress"
+    | "ready_to_file"
+    | "completed"
+    | "extended"
+    | "missed"
+    | "not_applicable";
   formCode: string;
   ruleTitle: string;
   jurisdictionCode: string;
@@ -297,6 +305,19 @@ function StatusBadge({ status }: { status: ReportDeadline["status"] }) {
   if (status === "in_progress") {
     return (
       <Text style={[styles.badgeStatus, { color: COLOR.primary }]}>WIP</Text>
+    );
+  }
+  // Use a short tag the page can fit in the badge column. "WAIT" reads
+  // clearer than "WOC" when the partner is reviewing print-outs at a
+  // morning huddle.
+  if (status === "waiting_on_client") {
+    return (
+      <Text style={[styles.badgeStatus, { color: COLOR.high }]}>WAIT</Text>
+    );
+  }
+  if (status === "ready_to_file") {
+    return (
+      <Text style={[styles.badgeStatus, { color: COLOR.done }]}>READY</Text>
     );
   }
   return null;

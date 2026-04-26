@@ -8,6 +8,13 @@
       "when": 1776993592729,
       "tag": "0000_lame_mimic",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1777219778717,
+      "tag": "0001_noisy_lockjaw",
+      "breakpoints": true
     }
   ]
 }

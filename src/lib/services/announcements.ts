@@ -457,7 +457,7 @@ export async function getAnnouncementReview(
         INNER JOIN entities e2 ON e2.id = di.entity_id
         WHERE e2.client_id = c.id
           AND e2.archived_at IS NULL
-          AND di.status IN ('pending', 'in_progress', 'extended')
+          AND di.status IN ('pending', 'waiting_on_client', 'in_progress', 'ready_to_file', 'extended')
           AND (
             COALESCE(di.extension_due_date, di.due_date) <= CURRENT_DATE
             OR COALESCE(di.extension_due_date, di.due_date)
