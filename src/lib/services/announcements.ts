@@ -164,6 +164,10 @@ export async function listAnnouncementsWithImpact(
     relevance_score: number;
     ai_summary: string | null;
     created_at: Date;
+    affected_form_codes: string[];
+    original_deadline_start: string | null;
+    original_deadline_end: string | null;
+    relief_deadline: string | null;
     affected_clients: AffectedClient[] | null;
     acked_client_count: number;
   }>(sql`
@@ -171,6 +175,10 @@ export async function listAnnouncementsWithImpact(
       a.id, a.source, a.external_id, a.title, a.summary, a.url,
       a.published_at, a.category, a.affected_jurisdictions,
       a.relevance_score, a.ai_summary, a.created_at,
+      a.affected_form_codes,
+      a.original_deadline_start,
+      a.original_deadline_end,
+      a.relief_deadline,
       COALESCE(
         (
           SELECT jsonb_agg(
@@ -222,6 +230,10 @@ export async function listAnnouncementsWithImpact(
     relevanceScore: r.relevance_score,
     aiSummary: r.ai_summary,
     createdAt: new Date(r.created_at),
+    affectedFormCodes: r.affected_form_codes ?? [],
+    originalDeadlineStart: r.original_deadline_start,
+    originalDeadlineEnd: r.original_deadline_end,
+    reliefDeadline: r.relief_deadline,
     affectedClients: r.affected_clients ?? [],
     ackedClientCount: Number(r.acked_client_count ?? 0),
   }));
@@ -378,13 +390,23 @@ export type ReviewableClient = {
   primaryContactEmail: string | null;
   matchedStates: string[]; // which of the client's entity states matched
   /**
-   * Total open deadlines for this client (pending/in_progress/extended).
-   * Just a context number — we deliberately don't list them inline because
-   * we can't reliably narrow to the ones the announcement actually affects
-   * without structured AI date/form extraction (V2). Showing all of them
-   * was noisy and falsely implied "these are the affected ones".
+   * Open deadlines for this client.
+   *
+   *   - openDeadlineCount: total open (pending/wait/in_progress/ready/
+   *     extended) within the client's normal +365d window. Always
+   *     populated.
+   *   - affectedDeadlineCount: of those, how many actually fall in
+   *     this announcement's scope — i.e. their form code matches
+   *     `affected_form_codes` (when non-empty) AND their effective
+   *     date falls in the original-deadline window (when set). When
+   *     the announcement has no structured filters, equals the total.
+   *
+   * The UI shows "3 affected (of 12 total)" so a CPA opening a FL
+   * disaster-relief announcement immediately sees only the clients
+   * that have actual work in the relief window, not all 28 FL clients.
    */
   openDeadlineCount: number;
+  affectedDeadlineCount: number;
   acked: boolean;
 };
 
@@ -422,12 +444,22 @@ export async function getAnnouncementReview(
   //    treat it as text and the `@>` operator fails to resolve. Explicit
   //    `::jsonb` cast on a JSON-string literal is the reliable shape.
   const affectedJsonb = JSON.stringify(ann.affectedJurisdictions ?? []);
+  const formCodesJsonb = JSON.stringify(ann.affectedFormCodes ?? []);
+  // The form-code filter is "AND if there are any specified codes,
+  // require the rule to match one of them". When the array is empty,
+  // we want the filter to be a no-op (match all forms) — the SQL
+  // `(jsonb_array_length(x) = 0 OR ... ? form_code)` short-circuits
+  // exactly that.
+  const dateRangeStart = ann.originalDeadlineStart;
+  const dateRangeEnd = ann.originalDeadlineEnd;
+
   const rows = await db.execute<{
     client_id: string;
     client_name: string;
     primary_contact_email: string | null;
     matched_states: string[];
     open_deadline_count: number;
+    affected_deadline_count: number;
     acked: boolean;
   }>(sql`
     SELECT
@@ -442,15 +474,8 @@ export async function getAnnouncementReview(
           AND e.home_state IS NOT NULL
           AND (${affectedJsonb}::jsonb) ? e.home_state
       ) AS matched_states,
-      -- Just the count; we deliberately don't list deadlines inline
-      -- because we can't yet reliably scope them to the announcement
-      -- (no AI-extracted dates/forms). Showing all of them implied
-      -- "these are the affected deadlines" which was misleading.
-      --
-      -- Window MUST match listDeadlinesForClient on /clients/[id]
-      -- (overdue OR within +365d) — otherwise this count and the
-      -- count on the client page disagree and the user (rightly)
-      -- spots the inconsistency.
+      -- Total open count (within the +365d window). Same shape as
+      -- /clients/[id] so the two pages agree on what "open" means.
       (
         SELECT COUNT(*)::int
         FROM deadline_instances di
@@ -464,6 +489,39 @@ export async function getAnnouncementReview(
                <= (CURRENT_DATE + INTERVAL '365 days')
           )
       ) AS open_deadline_count,
+      -- Affected count: of those open deadlines, how many actually
+      -- match this announcement's scope?
+      --   - Form filter: only when affected_form_codes is non-empty;
+      --     match the rule's form_code against that list.
+      --   - Date filter: only when original_deadline_start/end set;
+      --     match the deadline's effective date in that window.
+      -- When NEITHER filter is set, this equals the total — graceful
+      -- fallback to coarse state-only matching for older or AI-failed
+      -- rows.
+      (
+        SELECT COUNT(*)::int
+        FROM deadline_instances di
+        INNER JOIN entities e2 ON e2.id = di.entity_id
+        INNER JOIN deadline_rules r ON r.id = di.rule_id
+        WHERE e2.client_id = c.id
+          AND e2.archived_at IS NULL
+          AND di.status IN ('pending', 'waiting_on_client', 'in_progress', 'ready_to_file', 'extended')
+          AND (
+            COALESCE(di.extension_due_date, di.due_date) <= CURRENT_DATE
+            OR COALESCE(di.extension_due_date, di.due_date)
+               <= (CURRENT_DATE + INTERVAL '365 days')
+          )
+          AND (
+            jsonb_array_length((${formCodesJsonb}::jsonb)) = 0
+            OR (${formCodesJsonb}::jsonb) ? r.form_code
+          )
+          ${
+            dateRangeStart && dateRangeEnd
+              ? sql`AND COALESCE(di.extension_due_date, di.due_date)
+                      BETWEEN ${dateRangeStart}::date AND ${dateRangeEnd}::date`
+              : sql``
+          }
+      ) AS affected_deadline_count,
       EXISTS (
         SELECT 1 FROM announcement_client_acks ack
         WHERE ack.announcement_id = ${announcementId}
@@ -483,16 +541,29 @@ export async function getAnnouncementReview(
     ORDER BY acked ASC, c.name ASC
   `);
 
-  return {
-    announcement: ann,
-    clients: rows.rows.map((r) => ({
+  // Filter out clients where the structured filters narrow it to zero
+  // affected deadlines — but ONLY when there are actual filters to
+  // narrow with. Keep the coarse state-match behavior for older /
+  // unenriched announcements (no form codes AND no date range).
+  const hasNarrowingFilter =
+    (ann.affectedFormCodes ?? []).length > 0 ||
+    (ann.originalDeadlineStart != null && ann.originalDeadlineEnd != null);
+
+  const clients = rows.rows
+    .map((r) => ({
       clientId: r.client_id,
       clientName: r.client_name,
       primaryContactEmail: r.primary_contact_email,
       matchedStates: r.matched_states ?? [],
       openDeadlineCount: Number(r.open_deadline_count ?? 0),
+      affectedDeadlineCount: Number(r.affected_deadline_count ?? 0),
       acked: Boolean(r.acked),
-    })),
+    }))
+    .filter((c) => !hasNarrowingFilter || c.affectedDeadlineCount > 0);
+
+  return {
+    announcement: ann,
+    clients,
   };
 }
 

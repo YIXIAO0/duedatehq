@@ -422,6 +422,34 @@ export const announcements = pgTable(
     /** AI one-line summary in CPA-friendly language. */
     aiSummary: text("ai_summary"),
 
+    /**
+     * Structured AI extraction layer (Round C).
+     *
+     * The original `affectedJurisdictions` (state codes only) is too
+     * coarse — "FL hurricane" matched all FL clients including ones
+     * who have no deadlines in the relief window. These four fields
+     * narrow the match to exactly the affected work:
+     *
+     *   - affectedFormCodes: form codes the announcement specifically
+     *     names (["1040", "1120", "941"]). Empty when "all returns".
+     *   - originalDeadlineStart/End: ISO date range that the
+     *     announcement is postponing (e.g. "deadlines from Aug 5
+     *     through Feb 3"). NULL when not a date-postponement item.
+     *   - reliefDeadline: the new postponed date (e.g. "moved to
+     *     Feb 3, 2026"). NULL when not applicable.
+     *
+     * All four are nullable / empty by default so older rows still
+     * work without backfill, and AI failures gracefully degrade to
+     * the coarse state-only match.
+     */
+    affectedFormCodes: jsonb("affected_form_codes")
+      .$type<string[]>()
+      .notNull()
+      .default([]),
+    originalDeadlineStart: text("original_deadline_start"), // YYYY-MM-DD
+    originalDeadlineEnd: text("original_deadline_end"),     // YYYY-MM-DD
+    reliefDeadline: text("relief_deadline"),                // YYYY-MM-DD
+
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

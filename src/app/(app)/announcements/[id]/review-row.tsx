@@ -88,12 +88,29 @@ export function ReviewRow({
           ))}
         </div>
         <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-          <span>
-            {client.openDeadlineCount}{" "}
-            {client.openDeadlineCount === 1
-              ? "open deadline"
-              : "open deadlines"}
-          </span>
+          {/* Show affected count when AI extracted form/date filters,
+              otherwise fall back to total open. The "X of Y" framing
+              tells the CPA "this client has 3 deadlines that the
+              announcement actually touches, not all 12" — which was
+              the entire point of structured extraction. */}
+          {client.affectedDeadlineCount < client.openDeadlineCount ? (
+            <span>
+              <span className="font-medium text-foreground/80">
+                {client.affectedDeadlineCount}
+              </span>{" "}
+              affected{" "}
+              <span className="text-muted-foreground/70">
+                · {client.openDeadlineCount} total open
+              </span>
+            </span>
+          ) : (
+            <span>
+              {client.openDeadlineCount}{" "}
+              {client.openDeadlineCount === 1
+                ? "open deadline"
+                : "open deadlines"}
+            </span>
+          )}
           {client.primaryContactEmail ? (
             <a
               href={`mailto:${client.primaryContactEmail}`}

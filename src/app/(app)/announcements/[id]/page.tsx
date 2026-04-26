@@ -83,6 +83,53 @@ async function Detail({ params }: { params: Params }) {
             {a.aiSummary}
           </p>
         ) : null}
+
+        {/* AI-extracted scope filters (Round C). When the model
+            extracted form codes or a deadline window, surface them
+            so the CPA understands why we narrowed the affected list
+            — and can spot when the AI got it wrong. Hidden when no
+            structured fields, since the row would be confusing. */}
+        {a.affectedFormCodes.length > 0 ||
+        a.originalDeadlineStart ||
+        a.reliefDeadline ? (
+          <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-border bg-muted/30 px-3 py-2 text-xs">
+            <span className="font-semibold uppercase tracking-wider text-muted-foreground">
+              AI scope
+            </span>
+            {a.affectedFormCodes.length > 0 ? (
+              <span className="inline-flex flex-wrap items-center gap-1">
+                <span className="text-muted-foreground">Forms:</span>
+                {a.affectedFormCodes.map((f) => (
+                  <Badge
+                    key={f}
+                    variant="outline"
+                    className="font-mono text-[10px]"
+                  >
+                    {f}
+                  </Badge>
+                ))}
+              </span>
+            ) : null}
+            {a.originalDeadlineStart && a.originalDeadlineEnd ? (
+              <span className="text-muted-foreground">
+                Postponed window:{" "}
+                <span className="font-medium text-foreground/80">
+                  {formatPlainDate(a.originalDeadlineStart)} →{" "}
+                  {formatPlainDate(a.originalDeadlineEnd)}
+                </span>
+              </span>
+            ) : null}
+            {a.reliefDeadline ? (
+              <span className="text-muted-foreground">
+                New deadline:{" "}
+                <span className="font-medium text-foreground/80">
+                  {formatPlainDate(a.reliefDeadline)}
+                </span>
+              </span>
+            ) : null}
+          </div>
+        ) : null}
+
         <div className="mt-3">
           <a
             href={a.url}
@@ -146,6 +193,20 @@ async function Detail({ params }: { params: Params }) {
       )}
     </>
   );
+}
+
+// Format an ISO YYYY-MM-DD into "Apr 15, 2026" — keeps the AI scope
+// row compact while still readable. Defensive against malformed input
+// from older rows that the AI hadn't extracted yet.
+function formatPlainDate(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso + "T00:00:00");
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 function CategoryBadge({ category }: { category: string }) {

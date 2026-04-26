@@ -50,6 +50,15 @@ type ParsedItem = {
 
 type Classification = z.infer<typeof ClassificationSchema>;
 
+// ISO date string. Models occasionally hallucinate non-ISO formats
+// ("Feb 3 2026"), and Zod's z.string().date() in newer ai-sdk versions
+// rejects those. Using a regex keeps validation but falls back to null
+// at the call site if the model returns garbage.
+const IsoDateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "must be YYYY-MM-DD")
+  .nullable();
+
 const ClassificationSchema = z.object({
   category: z.enum(ANNOUNCEMENT_CATEGORIES),
   /** ISO state codes ("FL", "TX") or "federal". Empty when unclear. */
@@ -58,6 +67,23 @@ const ClassificationSchema = z.object({
   relevanceScore: z.number().int().min(1).max(5),
   /** One sentence in CPA-friendly language, ≤ 160 chars. */
   summary: z.string().min(1).max(180),
+
+  /**
+   * Round C — structured extraction so the affected-clients matcher
+   * can narrow beyond "all clients in this state". When the model
+   * isn't sure, return [] / null and we fall back to the coarse match.
+   */
+  /** Form codes the announcement specifically names. ["1040","1120"]
+   *  for "individual + corporate returns affected", [] for "all
+   *  returns" or items that aren't form-scoped. */
+  affectedFormCodes: z.array(z.string().max(20)).max(40),
+  /** ISO date — the start of the original-deadline window being
+   *  postponed by disaster relief. NULL for non-relief items. */
+  originalDeadlineStart: IsoDateSchema,
+  /** ISO date — the end of the original-deadline window. */
+  originalDeadlineEnd: IsoDateSchema,
+  /** ISO date — the new postponed deadline. NULL for non-relief. */
+  reliefDeadline: IsoDateSchema,
 });
 
 export type ScrapeResult = {
@@ -318,6 +344,35 @@ async function classifyAndStoreOne(
         "",
         "Summary: ONE short sentence, plain CPA English, max 160 chars.",
         "Say WHAT changed and WHO is affected. Don't copy the title.",
+        "",
+        "STRUCTURED EXTRACTION (these narrow the affected-clients match",
+        "from 'all clients in this state' to 'clients with the actual",
+        "affected work'). Be conservative — empty array / null is the",
+        "right answer when the item doesn't say.",
+        "",
+        "affectedFormCodes: form codes the announcement specifically names.",
+        "  - '1040' for individual returns, '1120' for C-corp, '1120S'",
+        "    for S-corp, '1065' for partnership, '941' for payroll, '1099'",
+        "    for info returns, '5500' for retirement plans, etc.",
+        "  - Use the canonical IRS code, not 'Form 1040'.",
+        "  - [] when the item is generic ('all returns', 'various filings')",
+        "    or when no form is named.",
+        "",
+        "originalDeadlineStart / originalDeadlineEnd: ISO YYYY-MM-DD.",
+        "  - For disaster relief: the date range of original deadlines",
+        "    being postponed. If the article says 'deadlines from Aug 5",
+        "    through Feb 3', convert each to ISO YYYY-MM-DD format.",
+        "  - When only a single deadline is postponed, set start = end.",
+        "  - null when not a deadline-postponement item, or when the",
+        "    article doesn't give explicit dates.",
+        "",
+        "reliefDeadline: ISO YYYY-MM-DD.",
+        "  - The new postponed deadline. If article says 'all postponed",
+        "    to Feb 3, 2026', convert to ISO YYYY-MM-DD format.",
+        "  - null when not applicable or unclear.",
+        "",
+        "If you're unsure on a date, return null — a wrong date is worse",
+        "than no date because it would silently misclassify clients.",
       ].join("\n"),
       prompt: [
         `Title: ${item.title}`,
@@ -338,6 +393,10 @@ async function classifyAndStoreOne(
       affectedJurisdictions: [],
       relevanceScore: 3,
       summary: "", // empty so the UI knows AI hasn't enriched this yet
+      affectedFormCodes: [],
+      originalDeadlineStart: null,
+      originalDeadlineEnd: null,
+      reliefDeadline: null,
     };
   }
 
@@ -356,6 +415,14 @@ async function classifyAndStoreOne(
       affectedJurisdictions: cls.affectedJurisdictions,
       relevanceScore: cls.relevanceScore,
       aiSummary: cls.summary,
+      // Round C structured-extraction fields. Form codes default
+      // to [] when AI is unsure (matcher then ignores form filter
+      // and falls back to coarse state match). Date fields stay
+      // null when not a deadline-postponement item.
+      affectedFormCodes: cls.affectedFormCodes,
+      originalDeadlineStart: cls.originalDeadlineStart,
+      originalDeadlineEnd: cls.originalDeadlineEnd,
+      reliefDeadline: cls.reliefDeadline,
     })
     .onConflictDoNothing({
       target: [announcements.source, announcements.externalId],
