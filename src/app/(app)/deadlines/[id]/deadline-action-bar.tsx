@@ -43,20 +43,22 @@ import {
 
 // Display labels for the four workflow states. Order matters — this is
 // the typical CPA progression: nothing started → blocked on client →
-// actively working → handoff to client. Keep them short; they sit in
-// a narrow dropdown trigger.
+// actively working → handoff to client. Labels are short on purpose so
+// the trigger stays single-line; hints are shown as a caption below
+// the action row, not inside SelectItem (Radix's SelectValue copies
+// item children into the trigger, so a 2-line item = 2-line trigger).
 const WORKFLOW_OPTIONS: { value: WorkflowStatus; label: string; hint: string }[] = [
   { value: "pending", label: "Pending", hint: "Not started" },
   {
     value: "waiting_on_client",
     label: "Waiting on client",
-    hint: "Blocked on docs / signature",
+    hint: "Blocked on docs or signature",
   },
-  { value: "in_progress", label: "In progress", hint: "Actively working" },
+  { value: "in_progress", label: "In progress", hint: "Actively working on it" },
   {
     value: "ready_to_file",
     label: "Ready to file",
-    hint: "Done — awaiting e-file ack",
+    hint: "Done — awaiting e-file acknowledgement",
   },
 ];
 
@@ -122,42 +124,44 @@ export function DeadlineActionBar({
   const currentWorkflow: WorkflowStatus | null = isWorkflowStatus(status)
     ? status
     : null;
+  const currentHint =
+    currentWorkflow != null
+      ? WORKFLOW_OPTIONS.find((o) => o.value === currentWorkflow)?.hint
+      : null;
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      {/* Workflow status — quick-toggle stage without committing to filed */}
-      {currentWorkflow ? (
-        <Select
-          value={currentWorkflow}
-          disabled={pending}
-          onValueChange={(v) => {
-            if (!isWorkflowStatus(v) || v === currentWorkflow) return;
-            startTransition(() => setStatusAction(deadlineId, v));
-          }}
-        >
-          <SelectTrigger className="h-9 w-[180px]" aria-label="Workflow status">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {WORKFLOW_OPTIONS.map((o) => (
-              <SelectItem key={o.value} value={o.value}>
-                <div className="flex flex-col">
-                  <span>{o.label}</span>
-                  <span className="text-xs text-muted-foreground">{o.hint}</span>
-                </div>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      ) : null}
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        {/* Workflow status — quick-toggle stage without committing to filed */}
+        {currentWorkflow ? (
+          <Select
+            value={currentWorkflow}
+            disabled={pending}
+            onValueChange={(v) => {
+              if (!isWorkflowStatus(v) || v === currentWorkflow) return;
+              startTransition(() => setStatusAction(deadlineId, v));
+            }}
+          >
+            <SelectTrigger className="w-[180px]" aria-label="Workflow status">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {WORKFLOW_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : null}
 
-      {/* Mark complete */}
-      <AlertDialog>
-        <AlertDialogTrigger asChild>
-          <Button disabled={pending}>
-            <CheckCircle2 className="mr-2 h-4 w-4" /> Mark as filed
-          </Button>
-        </AlertDialogTrigger>
+        {/* Mark complete */}
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button disabled={pending}>
+              <CheckCircle2 className="mr-2 h-4 w-4" /> Mark as filed
+            </Button>
+          </AlertDialogTrigger>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Mark this deadline as filed?</AlertDialogTitle>
@@ -275,6 +279,15 @@ export function DeadlineActionBar({
           </form>
         </DialogContent>
       </Dialog>
+      </div>
+
+      {/* Caption: explains what the currently-selected workflow status
+          *means*. Lives outside the SelectItem (Radix would copy it
+          into the trigger and break the layout) and outside the row
+          (so it doesn't fight for horizontal space with the buttons). */}
+      {currentHint ? (
+        <p className="text-xs text-muted-foreground">{currentHint}</p>
+      ) : null}
     </div>
   );
 }

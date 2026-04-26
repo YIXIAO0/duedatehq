@@ -117,49 +117,51 @@ async function DeadlineDetail({ params }: { params: Params }) {
         </p>
       </div>
 
-      {/* Due date + actions */}
+      {/* Due date + actions. Stacked vertically rather than 2-column
+          because the action bar (status dropdown + Mark as filed +
+          File extension) needs the full card width to fit cleanly on
+          one row without wrapping. The horizontal divider keeps the
+          two zones visually separated. */}
       <Card>
-        <CardContent className="pt-6">
-          <div className="grid gap-6 md:grid-cols-2">
-            <div>
-              <p className="text-xs uppercase tracking-wider text-muted-foreground">
-                {isExtended ? "New due date (after extension)" : "Due date"}
+        <CardContent className="space-y-5 pt-6">
+          <div>
+            <p className="text-xs uppercase tracking-wider text-muted-foreground">
+              {isExtended ? "New due date (after extension)" : "Due date"}
+            </p>
+            <div className="mt-1 flex items-baseline gap-3">
+              <p className="text-2xl font-semibold">
+                {formatDate(effectiveDueDate)}
               </p>
-              <div className="mt-1 flex items-baseline gap-3">
-                <p className="text-2xl font-semibold">
-                  {formatDate(effectiveDueDate)}
-                </p>
-                {!isCompleted ? (
-                  <RelativeDate iso={effectiveDueDate} />
-                ) : null}
-              </div>
-              {isExtended ? (
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Original due {formatDate(d.due_date)} — extension filed{" "}
-                  {d.extension_filed_at
-                    ? formatDate(d.extension_filed_at.slice(0, 10))
-                    : ""}
-                </p>
-              ) : null}
-              {isCompleted && d.completed_at ? (
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Filed on {formatDate(d.completed_at.slice(0, 10))}
-                </p>
+              {!isCompleted ? (
+                <RelativeDate iso={effectiveDueDate} />
               ) : null}
             </div>
-
-            <div>
-              <p className="text-xs uppercase tracking-wider text-muted-foreground">
-                Actions
+            {isExtended ? (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Original due {formatDate(d.due_date)} — extension filed{" "}
+                {d.extension_filed_at
+                  ? formatDate(d.extension_filed_at.slice(0, 10))
+                  : ""}
               </p>
-              <div className="mt-2">
-                <DeadlineActionBar
-                  deadlineId={d.id}
-                  status={status}
-                  defaultNewDueDate={defaultNewDueDate}
-                  currentExtensionDueDate={d.extension_due_date}
-                />
-              </div>
+            ) : null}
+            {isCompleted && d.completed_at ? (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Filed on {formatDate(d.completed_at.slice(0, 10))}
+              </p>
+            ) : null}
+          </div>
+
+          <div className="border-t border-border pt-5">
+            <p className="text-xs uppercase tracking-wider text-muted-foreground">
+              Actions
+            </p>
+            <div className="mt-2">
+              <DeadlineActionBar
+                deadlineId={d.id}
+                status={status}
+                defaultNewDueDate={defaultNewDueDate}
+                currentExtensionDueDate={d.extension_due_date}
+              />
             </div>
           </div>
         </CardContent>
