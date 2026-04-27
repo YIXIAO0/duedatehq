@@ -18,10 +18,13 @@ import { resolveIcalToken } from "@/lib/services/ical-tokens";
 import { listDeadlinesForOrgIcal } from "@/lib/services/deadlines";
 import { buildIcs } from "@/lib/ical/generate";
 
-// Force dynamic rendering — this is per-user data with auth, must not
-// be cached at the framework level. We do set HTTP Cache-Control so
-// upstream caches (Google's pull cache) keep the load down.
-export const dynamic = "force-dynamic";
+// Note: previously exported `dynamic = "force-dynamic"` here — Next.js
+// 16 with Cache Components enabled rejects that segment config. The
+// route is naturally dynamic anyway: it reads `params.token` and
+// per-request `request.headers`, both of which opt it out of any
+// framework-level caching. We do set an HTTP Cache-Control on the
+// response so upstream caches (Google Calendar's pull cache) keep
+// the load down.
 
 const APP_URL =
   process.env.NEXT_PUBLIC_APP_URL ?? "https://duedatehq.com";

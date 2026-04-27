@@ -22,7 +22,10 @@ import { getCurrentContext } from "@/lib/auth/current-org";
 import { getDeadlineDetail } from "@/lib/services/deadlines";
 import { buildIcs } from "@/lib/ical/generate";
 
-export const dynamic = "force-dynamic";
+// Note: no `dynamic = "force-dynamic"` segment config — Next.js 16
+// with Cache Components enabled rejects it. The route is naturally
+// dynamic: it reads `params.id` and the auth cookie via
+// getCurrentContext(), so it's never statically generated.
 
 const APP_URL =
   process.env.NEXT_PUBLIC_APP_URL ?? "https://duedatehq.com";
