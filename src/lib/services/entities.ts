@@ -14,6 +14,10 @@ import { getDb } from "@/lib/db";
 import { entities, type Entity } from "@/lib/db/schema";
 import { generateDeadlinesForEntity } from "./deadline-engine";
 import { recordAudit } from "./audit";
+import {
+  defaultServiceIdsForEntityType,
+  setEntityServices,
+} from "./entity-services";
 
 const US_STATE = z
   .string()
@@ -43,6 +47,13 @@ export const CreateEntityInputSchema = z.object({
     .string()
     .regex(/^\d{2}-\d{2}$/)
     .default("12-31"),
+  /**
+   * Service group IDs to assign to the new entity. When omitted, the
+   * caller hasn't expressed a preference — the service layer falls
+   * back to the entity-type defaults (Personal Tax for individuals,
+   * etc.). Pass an empty array to mean "no services" explicitly.
+   */
+  serviceGroupIds: z.array(z.string()).optional(),
   actorType: z.enum(["user", "agent", "cron", "system"]).default("user"),
   actorId: z.string().nullable().default(null),
   /** Import opt-in: materialize past-tax-year deadlines as status="completed". */
@@ -99,6 +110,23 @@ export async function createEntity(input: CreateEntityInput) {
     payload: { name: parsed.name, entityType: parsed.entityType },
   });
 
+  // Service-group assignment. Caller-supplied list wins; otherwise we
+  // pick the defaults that match the entity type (Personal Tax for
+  // individuals, C-Corp Tax for c_corps, etc.). The deadline engine
+  // then materializes only the rules attached to those services.
+  const serviceIds = parsed.serviceGroupIds
+    ? parsed.serviceGroupIds
+    : await defaultServiceIdsForEntityType(parsed.entityType);
+  if (serviceIds.length > 0) {
+    await setEntityServices({
+      entityId: row.id,
+      orgId: parsed.orgId,
+      desiredServiceIds: serviceIds,
+      actorType: parsed.actorType,
+      actorId: parsed.actorId,
+    });
+  }
+
   // Fire-and-await: generate deadlines for the current tax year.
   // We use `taxYear = currentYear - 1` if we're before April, reflecting
   // that CPAs are filing *last year's* returns in Jan–Apr; otherwise the
@@ -146,6 +174,9 @@ export const UpdateEntityInputSchema = z.object({
     .string()
     .regex(/^\d{2}-\d{2}$/)
     .optional(),
+  /** When supplied, replace the entity's active services. Omitted =
+   *  don't touch services (typical for forms that don't expose them). */
+  serviceGroupIds: z.array(z.string()).optional(),
   actorType: z.enum(["user", "agent", "cron", "system"]).default("user"),
   actorId: z.string().nullable().default(null),
 });
@@ -182,6 +213,40 @@ export async function updateEntity(input: UpdateEntityInput) {
     .returning();
 
   if (!row) throw new Error(`Entity ${parsed.id} not found`);
+
+  // Service-group changes — only when caller supplied an explicit
+  // list. We re-materialize deadlines if anything actually changed so
+  // newly-added services produce their rules' deadlines and removed
+  // services don't leave orphan instances surface in lists. (We don't
+  // hard-delete existing instances — those carry status/notes/audit
+  // history and may already be filed; the caller can archive them
+  // manually.)
+  if (parsed.serviceGroupIds) {
+    const diff = await setEntityServices({
+      entityId: row.id,
+      orgId: parsed.orgId,
+      desiredServiceIds: parsed.serviceGroupIds,
+      actorType: parsed.actorType,
+      actorId: parsed.actorId,
+    });
+    if (diff.added.length > 0) {
+      const now = new Date();
+      const currentYear = now.getUTCFullYear();
+      for (const taxYear of [currentYear - 1, currentYear]) {
+        await generateDeadlinesForEntity(
+          {
+            orgId: parsed.orgId,
+            entityId: row.id,
+            taxYear,
+            actorType: parsed.actorType,
+            actorId: parsed.actorId,
+            includeHistoricalAsCompleted: false,
+          },
+          row,
+        );
+      }
+    }
+  }
 
   await recordAudit({
     orgId: parsed.orgId,

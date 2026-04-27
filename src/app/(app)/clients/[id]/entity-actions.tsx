@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -38,6 +39,7 @@ import {
 } from "@/components/ui/select";
 import { MoreHorizontal, Pencil, Archive, Loader2 } from "lucide-react";
 import { updateEntityAction, archiveEntityAction } from "./edit-actions";
+import type { ServiceGroup } from "@/lib/db/schema";
 
 const ENTITY_TYPE_OPTIONS = [
   { value: "individual", label: "Individual (1040)" },
@@ -54,6 +56,7 @@ const SUPPORTED_STATES = ["CA", "NY", "TX", "DE", "NJ"];
 
 export function EntityActions({
   entity,
+  availableServices,
 }: {
   entity: {
     id: string;
@@ -63,11 +66,25 @@ export function EntityActions({
     operatingStates: string[];
     ein: string | null;
     fiscalYearEnd: string;
+    activeServiceIds: string[];
   };
+  availableServices: ServiceGroup[];
 }) {
   const [editOpen, setEditOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [pending, startTransition] = useTransition();
+  // Track service selection within the edit dialog. Initialized from
+  // the active set; user toggles add/remove. Submitted as multiple
+  // hidden inputs named "serviceGroupIds" so FormData.getAll() reads
+  // them on the server.
+  const [checkedServiceIds, setCheckedServiceIds] = useState<string[]>(
+    entity.activeServiceIds,
+  );
+  const toggleService = (id: string) => {
+    setCheckedServiceIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
 
   return (
     <>
@@ -201,6 +218,56 @@ export function EntityActions({
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+
+              {/* Service-group editor. Re-checks regenerate the
+                  deadline list for newly-added services on save —
+                  removed services don't delete existing instances
+                  (they keep their status/notes/audit history). */}
+              <div className="space-y-2 border-t border-border pt-4">
+                <Label>Services</Label>
+                <p className="text-xs text-muted-foreground">
+                  Adding a service generates its deadlines for the
+                  current and next tax year. Removing one stops adding
+                  new deadlines but doesn&apos;t delete existing ones.
+                </p>
+                <div className="grid gap-2 pt-1 sm:grid-cols-2">
+                  {availableServices.map((s) => {
+                    const checked = checkedServiceIds.includes(s.id);
+                    return (
+                      <label
+                        key={s.id}
+                        className={`flex cursor-pointer items-start gap-2 rounded-md border px-2.5 py-1.5 transition-colors ${
+                          checked
+                            ? "border-primary/40 bg-primary/5"
+                            : "border-border bg-background hover:bg-muted/30"
+                        }`}
+                      >
+                        <Checkbox
+                          checked={checked}
+                          onCheckedChange={() => toggleService(s.id)}
+                          className="mt-0.5"
+                        />
+                        <span className="text-xs font-medium">{s.name}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                {/* Hidden inputs feed the form's serviceGroupIds[]. */}
+                {checkedServiceIds.map((id) => (
+                  <input
+                    key={id}
+                    type="hidden"
+                    name="serviceGroupIds"
+                    value={id}
+                  />
+                ))}
+                {/* Marker so the server action can distinguish "form
+                    rendered the picker (use checkboxes)" from "form
+                    didn't (don't touch services)". Without this, an
+                    edit that simply doesn't expose services would
+                    blast all assignments. */}
+                <input type="hidden" name="hasServicePicker" value="1" />
               </div>
             </div>
 

@@ -22,13 +22,23 @@ import {
 } from "lucide-react";
 import { getCurrentContext } from "@/lib/auth/current-org";
 import { getDb } from "@/lib/db";
-import { clients, entities, deadlineInstances, deadlineRules } from "@/lib/db/schema";
+import {
+  clients,
+  entities,
+  deadlineInstances,
+  deadlineRules,
+  type ServiceGroup,
+} from "@/lib/db/schema";
 import { isNull } from "drizzle-orm";
 import {
   listDeadlinesForClient,
   type ClientDeadlineRow,
 } from "@/lib/services/deadlines";
 import { listContactsForClient } from "@/lib/services/client-contacts";
+import {
+  listAvailableServices,
+  listActiveServicesForEntity,
+} from "@/lib/services/entity-services";
 import { AddEntityForm } from "./add-entity-form";
 import { ClientActions } from "./client-actions";
 import { ContactsSection } from "./contacts-section";
@@ -114,6 +124,9 @@ async function ClientDetail({
     clientId: id,
   });
 
+  // Available service groups for the add-entity form picker.
+  const availableServices = await listAvailableServices();
+
   return (
     <div className="space-y-8">
       <Button asChild variant="ghost" size="sm" className="-ml-3">
@@ -184,7 +197,12 @@ async function ClientDetail({
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
             {entityRows.map((e) => (
-              <EntityCard key={e.id} entity={e} orgId={ctx.organization.id} />
+              <EntityCard
+                key={e.id}
+                entity={e}
+                orgId={ctx.organization.id}
+                availableServices={availableServices}
+              />
             ))}
           </div>
         )}
@@ -193,7 +211,7 @@ async function ClientDetail({
       {/* Add entity form */}
       <section>
         <h2 className="mb-4 text-lg font-semibold">Add a tax entity</h2>
-        <AddEntityForm clientId={id} />
+        <AddEntityForm clientId={id} services={availableServices} />
       </section>
     </div>
   );
@@ -542,9 +560,11 @@ function formatFyeShort(mmdd: string): string {
 async function EntityCard({
   entity,
   orgId,
+  availableServices,
 }: {
   entity: typeof entities.$inferSelect;
   orgId: string;
+  availableServices: ServiceGroup[];
 }) {
   const db = getDb();
   const deadlineCount = await db
@@ -557,6 +577,14 @@ async function EntityCard({
         eq(deadlineInstances.orgId, orgId),
       ),
     );
+
+  // The services this entity is currently assigned to. Surfaces as
+  // small badges so the CPA sees at a glance "this client is on
+  // Personal Tax + Quarterly Payroll" without opening the edit
+  // dialog. One query per entity card is fine — entities are
+  // typically <10 per client and N+1 here is dwarfed by the deadline
+  // count query above.
+  const activeServices = await listActiveServicesForEntity(entity.id);
 
   const icon =
     entity.entityType === "individual" ? (
@@ -608,11 +636,27 @@ async function EntityCard({
               operatingStates: entity.operatingStates ?? [],
               ein: entity.ein,
               fiscalYearEnd: entity.fiscalYearEnd,
+              activeServiceIds: activeServices.map((s) => s.id),
             }}
+            availableServices={availableServices}
           />
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-2">
+        {activeServices.length > 0 ? (
+          <div className="flex flex-wrap gap-1">
+            {activeServices.map((s) => (
+              <Badge
+                key={s.id}
+                variant="outline"
+                className="text-[10px]"
+                title={s.description ?? undefined}
+              >
+                {s.name}
+              </Badge>
+            ))}
+          </div>
+        ) : null}
         <p className="text-sm text-muted-foreground">
           {deadlineCount.length} deadlines generated
         </p>

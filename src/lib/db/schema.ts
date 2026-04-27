@@ -22,7 +22,9 @@ import {
   index,
   uniqueIndex,
   pgEnum,
+  primaryKey,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
 // ---------------------------------------------------------------------------
@@ -290,6 +292,125 @@ export const deadlineRules = pgTable(
       t.title,
       t.version,
     ),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Service groups — bundles of rules that get applied as a unit when a CPA
+// onboards a client. The mental model: "Acme Corp gets Personal Tax Filing
+// + Quarterly Payroll" rather than "Acme Corp is an individual so they get
+// every rule that mentions individual". This is FIT's "service codes"
+// concept, retooled.
+//
+// Two reasons services exist:
+//   1. NOISE CONTROL — adding 941 quarterly rules for every employer means
+//      individuals (who don't file 941) shouldn't see them. Services let us
+//      add many rules without flooding clients who don't need them.
+//   2. CPA INTENT — a sole proprietor with employees is "individual" entity
+//      type but DOES need 941. The entity type alone can't express that;
+//      a service can.
+//
+// Built-in services have org_id = NULL and a stable slug (e.g.
+// `personal_tax`); firms get to use them as-is. V2 will let firms clone /
+// customize built-ins by inserting their own org_id row.
+// ---------------------------------------------------------------------------
+
+export const serviceGroups = pgTable(
+  "service_groups",
+  {
+    id: text("id").primaryKey().$defaultFn(() => `svc_${nanoid(12)}`),
+    /** NULL = built-in / system-provided. Set = firm-customized service. */
+    orgId: text("org_id").references(() => organizations.id, {
+      onDelete: "cascade",
+    }),
+    /** Stable identifier used to reference services from seed/code
+     *  ("personal_tax", "quarterly_payroll"). Lets the seeder upsert
+     *  without UUIDs leaking. */
+    slug: text("slug").notNull(),
+    name: text("name").notNull(),
+    description: text("description"),
+    /** Auto-pre-check this service when a CPA adds an entity of these
+     *  types. e.g. "personal_tax" defaults for ["individual"]. Empty
+     *  array = opt-in only (CPA must check it manually). */
+    defaultForEntityTypes: jsonb("default_for_entity_types")
+      .$type<string[]>()
+      .notNull()
+      .default([]),
+    /** Sort order in the UI picker — lower comes first. Lets us put
+     *  the most common services up top. */
+    sortOrder: integer("sort_order").notNull().default(100),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    // Slug is unique per org (NULL allowed for built-ins; PG treats
+    // multiple NULLs as distinct so no collision on built-in vs custom).
+    uniqueIndex("service_groups_slug_org_idx").on(t.slug, t.orgId),
+    index("service_groups_org_idx").on(t.orgId),
+  ],
+);
+
+/**
+ * Many-to-many: which deadline rules belong to which service. A 941
+ * quarterly rule is in `quarterly_payroll`; a 1040 rule is in
+ * `personal_tax`. The same rule CAN be in multiple services (e.g. a
+ * state 1040 might live in both "personal_tax" and a state-specific
+ * bundle), so we use a join table rather than an array column.
+ */
+export const serviceGroupRules = pgTable(
+  "service_group_rules",
+  {
+    serviceGroupId: text("service_group_id")
+      .notNull()
+      .references(() => serviceGroups.id, { onDelete: "cascade" }),
+    ruleId: text("rule_id")
+      .notNull()
+      .references(() => deadlineRules.id, { onDelete: "cascade" }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.serviceGroupId, t.ruleId] }),
+    index("service_group_rules_rule_idx").on(t.ruleId),
+  ],
+);
+
+/**
+ * Which services are active for which entity. Soft-deleted via
+ * removed_at so we can later support "show service history" without
+ * losing past assignments. Uniqueness on active rows is enforced via
+ * a partial index (entity, service) WHERE removed_at IS NULL.
+ */
+export const entityServices = pgTable(
+  "entity_services",
+  {
+    id: text("id").primaryKey().$defaultFn(() => `esv_${nanoid(12)}`),
+    entityId: text("entity_id")
+      .notNull()
+      .references(() => entities.id, { onDelete: "cascade" }),
+    serviceGroupId: text("service_group_id")
+      .notNull()
+      .references(() => serviceGroups.id, { onDelete: "cascade" }),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    addedAt: timestamp("added_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    removedAt: timestamp("removed_at", { withTimezone: true }),
+  },
+  (t) => [
+    // Active assignments are unique per (entity, service). We allow
+    // multiple historical rows where removed_at is set, so a CPA who
+    // toggles a service off and back on doesn't lose history.
+    uniqueIndex("entity_services_active_idx")
+      .on(t.entityId, t.serviceGroupId)
+      .where(sql`${t.removedAt} IS NULL`),
+    index("entity_services_entity_idx").on(t.entityId),
+    index("entity_services_org_idx").on(t.orgId),
   ],
 );
 
@@ -627,3 +748,7 @@ export type AnnouncementDismissal = typeof announcementDismissals.$inferSelect;
 export type AnnouncementClientAck = typeof announcementClientAcks.$inferSelect;
 export type ClientContact = typeof clientContacts.$inferSelect;
 export type NewClientContact = typeof clientContacts.$inferInsert;
+export type ServiceGroup = typeof serviceGroups.$inferSelect;
+export type NewServiceGroup = typeof serviceGroups.$inferInsert;
+export type EntityService = typeof entityServices.$inferSelect;
+export type NewEntityService = typeof entityServices.$inferInsert;

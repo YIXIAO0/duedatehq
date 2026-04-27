@@ -18,8 +18,13 @@
 import { config } from "dotenv";
 import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
-import { deadlineRules, ruleTypeEnum } from "../src/lib/db/schema";
-import { sql } from "drizzle-orm";
+import {
+  deadlineRules,
+  ruleTypeEnum,
+  serviceGroups,
+  serviceGroupRules,
+} from "../src/lib/db/schema";
+import { sql, eq, and, isNull, inArray } from "drizzle-orm";
 
 config({ path: ".env.local" });
 
@@ -275,6 +280,48 @@ const FEDERAL: SeedRule[] = [
     rulePayload: { month: 4, day: 15, yearOffset: 1 },
     extensionPayload: { month: 10, day: 15, yearOffset: 1 },
     sourceUrl: "https://www.fincen.gov/report-foreign-bank-and-financial-accounts",
+  },
+  {
+    jurisdictionType: "federal",
+    jurisdictionCode: "federal",
+    formCode: "1099-MISC",
+    title: "Form 1099-MISC — Miscellaneous Information",
+    entityTypes: ["c_corp", "s_corp", "partnership", "llc", "individual", "nonprofit"],
+    ruleType: "fixed_date",
+    // Paper file: Feb 28; e-file: Mar 31. Most CPAs e-file these days,
+    // but the most defensible "always-safe" date is Feb 28. We use that
+    // and let CPAs file later when they e-file via their software.
+    rulePayload: { month: 2, day: 28, yearOffset: 1 },
+    sourceUrl: "https://www.irs.gov/forms-pubs/about-form-1099-misc",
+  },
+  {
+    jurisdictionType: "federal",
+    jurisdictionCode: "federal",
+    formCode: "W-3",
+    title: "Form W-3 — Transmittal of Wage Statements (Paper)",
+    entityTypes: ["c_corp", "s_corp", "partnership", "llc", "nonprofit"],
+    ruleType: "fixed_date",
+    // W-3 is the paper transmittal that accompanies paper W-2s to the
+    // SSA. Same Jan 31 deadline. E-filing W-2s makes W-3 unnecessary.
+    rulePayload: { month: 1, day: 31, yearOffset: 1 },
+    sourceUrl: "https://www.irs.gov/forms-pubs/about-form-w-3",
+  },
+  {
+    jurisdictionType: "federal",
+    jurisdictionCode: "federal",
+    formCode: "5500",
+    title: "Form 5500 — Retirement Plan Annual Return",
+    entityTypes: ["c_corp", "s_corp", "partnership", "llc", "nonprofit"],
+    ruleType: "fixed_date",
+    // 5500 is due the last day of the 7th month after the plan year
+    // end. For calendar-year plans (most common): July 31 of the
+    // following year. fyeDayOfMonth=-1 means "last day of month",
+    // handled by the engine.
+    rulePayload: { fyeMonthOffset: 7, fyeDayOfMonth: -1 },
+    extensionFormCode: "5558",
+    extensionPayload: { fyeMonthOffset: 10, fyeDayOfMonth: 15 },
+    penaltySummary: "$250/day to $150,000 max for late filing",
+    sourceUrl: "https://www.dol.gov/agencies/ebsa/employers-and-advisers/plan-administration-and-compliance/reporting-and-filing/form-5500",
   },
 ];
 
@@ -1182,6 +1229,312 @@ const ALL_RULES: SeedRule[] = [
   ...FLORIDA,
 ];
 
+// ---------------------------------------------------------------------------
+// Service groups — bundles of rules that get applied as a unit when an
+// entity is onboarded. Org_id is NULL for built-in services (every firm
+// uses them).
+//
+// `defaultForEntityTypes` controls which entity types get this service
+// auto-checked in the entity-creation form. Empty array = always opt-in
+// (the CPA explicitly adds it; e.g. "Quarterly Payroll" only matters for
+// employers, regardless of entity type).
+//
+// `formCodeFilter` is local to this seed script. The rule list is
+// resolved at seed-time: any rule whose form_code starts with one of
+// the prefixes (or matches exactly) gets attached to the service. This
+// lets us avoid hand-listing every state form when a service like
+// "Personal Tax Filing" should naturally include both federal 1040 and
+// every state 1040-equivalent.
+// ---------------------------------------------------------------------------
+
+type SeedService = {
+  slug: string;
+  name: string;
+  description: string;
+  defaultForEntityTypes: EntityType[];
+  sortOrder: number;
+  /** Rules selected by exact form_code match. */
+  formCodes?: string[];
+  /** Rules selected by form_code prefix (e.g. "1040-ES" picks Q1-Q4). */
+  formCodePrefixes?: string[];
+};
+
+const SERVICES: SeedService[] = [
+  {
+    slug: "personal_tax",
+    name: "Personal Tax Filing",
+    description:
+      "Federal Form 1040 and state equivalents, including quarterly estimated tax. Default for individuals.",
+    defaultForEntityTypes: ["individual"],
+    sortOrder: 10,
+    formCodes: [
+      "1040",
+      "CA-540",
+      "NY-IT-201",
+      "NJ-1040",
+      "PA-40",
+      "IL-1040",
+      "IT 1040",
+      "GA-500",
+      "MA-1",
+      "VA-760",
+      "AZ-140",
+      "NC-D-400",
+      "DE-PIT-RES",
+    ],
+    formCodePrefixes: ["1040-ES", "CA-540-ES"],
+  },
+  {
+    slug: "c_corp_tax",
+    name: "C-Corporation Tax Filing",
+    description:
+      "Federal Form 1120 and state corporate income tax returns.",
+    defaultForEntityTypes: ["c_corp"],
+    sortOrder: 20,
+    formCodes: [
+      "1120",
+      "CA-100",
+      "NY-CT-3",
+      "NJ-CBT-100",
+      "RCT-101",
+      "IL-1120",
+      "GA-600",
+      "MA-355",
+      "VA-500",
+      "AZ-120",
+      "NC-CD-405",
+      "DE-1100",
+      "FL-F-1120",
+      "TX-Franchise",
+      "TX-PIR",
+      "WA-BO-ANNUAL",
+    ],
+  },
+  {
+    slug: "s_corp_tax",
+    name: "S-Corporation Tax Filing",
+    description: "Federal Form 1120-S and state S-corp returns.",
+    defaultForEntityTypes: ["s_corp"],
+    sortOrder: 30,
+    formCodes: [
+      "1120-S",
+      "CA-100S",
+      "NY-CT-3-S",
+      "NJ-CBT-100S",
+      "IL-1120-ST",
+      "GA-600S",
+      "MA-355S",
+      "AZ-120S",
+      "NC-CD-401S",
+      "DE-1100-S",
+    ],
+  },
+  {
+    slug: "partnership_tax",
+    name: "Partnership / LLC Tax Filing",
+    description:
+      "Federal Form 1065 and state partnership/LLC returns. Use this for partnerships and LLCs taxed as partnerships.",
+    defaultForEntityTypes: ["partnership", "llc"],
+    sortOrder: 40,
+    formCodes: [
+      "1065",
+      "CA-568",
+      "CA-3522",
+      "NY-IT-204",
+      "NY-IT-204-LL",
+      "NJ-1065",
+      "PA-20S/PA-65",
+      "IL-1065",
+      "IT 4708",
+      "GA-700",
+      "MA-3",
+      "VA-502",
+      "AZ-165",
+      "NC-D-403",
+      "DE-300",
+      "DE-LLC-300",
+      "DE-Franchise-Corp",
+      "FL-F-1065",
+    ],
+  },
+  {
+    slug: "trust_estate_tax",
+    name: "Trust & Estate Filing",
+    description: "Federal Form 1041 for trusts and estates.",
+    defaultForEntityTypes: ["trust", "estate"],
+    sortOrder: 50,
+    formCodes: ["1041"],
+  },
+  {
+    slug: "nonprofit_tax",
+    name: "Nonprofit Annual Filing",
+    description: "Federal Form 990 and state nonprofit returns.",
+    defaultForEntityTypes: ["nonprofit"],
+    sortOrder: 60,
+    formCodes: ["990"],
+  },
+  {
+    slug: "quarterly_payroll",
+    name: "Quarterly Payroll",
+    description:
+      "Form 941 quarterly federal payroll tax (Apr 30 / Jul 31 / Oct 31 / Jan 31). Add for any client with W-2 employees.",
+    defaultForEntityTypes: [], // opt-in only — not every entity has employees
+    sortOrder: 70,
+    formCodePrefixes: ["941-Q"],
+  },
+  {
+    slug: "annual_payroll",
+    name: "Annual Payroll & Info Returns",
+    description:
+      "W-2 / W-3, Form 940 (FUTA), and 1099-NEC / 1099-MISC. The January-31 cluster every employer faces.",
+    defaultForEntityTypes: [],
+    sortOrder: 80,
+    formCodes: ["940", "W-2", "W-3", "1099-NEC", "1099-MISC"],
+  },
+  {
+    slug: "retirement_plan",
+    name: "Retirement Plan (5500)",
+    description:
+      "Form 5500 annual return for clients with 401(k), pension, or other ERISA-covered plans.",
+    defaultForEntityTypes: [],
+    sortOrder: 90,
+    formCodes: ["5500"],
+  },
+  {
+    slug: "ptet",
+    name: "PTE Election (Pass-Through Entity Tax)",
+    description:
+      "State PTE elections — the SALT-cap workaround filings (NY-PTET, CA-3893, etc.). Add for partnerships or S-corps that elect.",
+    defaultForEntityTypes: [],
+    sortOrder: 100,
+    formCodes: [
+      "NY-PTET",
+      "CA-3893",
+      "NJ-PTE",
+      "GA-PTE-ELECT",
+      "MA-63D-ELT",
+      "VA-502PTET",
+      "AZ-PTE-ELECT",
+      "NC-PTE-ELECT",
+      "IT 4738",
+    ],
+  },
+  {
+    slug: "foreign_account",
+    name: "Foreign Account Reporting (FBAR)",
+    description:
+      "FinCEN-114 (FBAR) for clients with foreign bank accounts aggregating over $10,000.",
+    defaultForEntityTypes: [],
+    sortOrder: 110,
+    formCodes: ["FinCEN-114"],
+  },
+];
+
+/** Resolve which rule IDs match a service's form-code criteria. */
+async function resolveServiceRuleIds(svc: SeedService): Promise<string[]> {
+  const exactMatches: string[] = [];
+  if (svc.formCodes && svc.formCodes.length > 0) {
+    const rows = await db
+      .select({ id: deadlineRules.id })
+      .from(deadlineRules)
+      .where(inArray(deadlineRules.formCode, svc.formCodes));
+    exactMatches.push(...rows.map((r) => r.id));
+  }
+
+  const prefixMatches: string[] = [];
+  if (svc.formCodePrefixes && svc.formCodePrefixes.length > 0) {
+    for (const prefix of svc.formCodePrefixes) {
+      const rows = await db
+        .select({ id: deadlineRules.id })
+        .from(deadlineRules)
+        .where(sql`${deadlineRules.formCode} LIKE ${prefix + "%"}`);
+      prefixMatches.push(...rows.map((r) => r.id));
+    }
+  }
+
+  // Dedupe — a rule could match both an exact and a prefix entry.
+  return Array.from(new Set([...exactMatches, ...prefixMatches]));
+}
+
+/**
+ * Idempotent service-group seeding. Built-in services are identified by
+ * (slug, org_id IS NULL) — re-running updates name/description/sortOrder
+ * but doesn't disturb firm-customized services or entity assignments.
+ *
+ * Rule mappings are fully replaced on each run: drop all existing
+ * `service_group_rules` for the built-in service, re-insert from the
+ * resolved form-code criteria. Safe because rules CAN be re-attached
+ * cheaply and an entity's deadlines are materialized eagerly anyway —
+ * existing deadline_instances aren't affected by service-rule edits.
+ */
+async function seedServiceGroups(): Promise<void> {
+  console.log(`Seeding ${SERVICES.length} built-in service groups…`);
+
+  let upserted = 0;
+  let totalRulesAttached = 0;
+
+  for (const svc of SERVICES) {
+    // Upsert the service row keyed on (slug, org_id IS NULL).
+    const existing = await db
+      .select({ id: serviceGroups.id })
+      .from(serviceGroups)
+      .where(
+        and(eq(serviceGroups.slug, svc.slug), isNull(serviceGroups.orgId)),
+      )
+      .limit(1);
+
+    let serviceId: string;
+    if (existing[0]) {
+      serviceId = existing[0].id;
+      await db
+        .update(serviceGroups)
+        .set({
+          name: svc.name,
+          description: svc.description,
+          defaultForEntityTypes: svc.defaultForEntityTypes,
+          sortOrder: svc.sortOrder,
+          updatedAt: new Date(),
+        })
+        .where(eq(serviceGroups.id, serviceId));
+    } else {
+      const [row] = await db
+        .insert(serviceGroups)
+        .values({
+          orgId: null,
+          slug: svc.slug,
+          name: svc.name,
+          description: svc.description,
+          defaultForEntityTypes: svc.defaultForEntityTypes,
+          sortOrder: svc.sortOrder,
+        })
+        .returning({ id: serviceGroups.id });
+      serviceId = row.id;
+    }
+    upserted++;
+
+    // Replace the rule mapping. Quick + simple; the table is small.
+    await db
+      .delete(serviceGroupRules)
+      .where(eq(serviceGroupRules.serviceGroupId, serviceId));
+
+    const ruleIds = await resolveServiceRuleIds(svc);
+    if (ruleIds.length > 0) {
+      await db.insert(serviceGroupRules).values(
+        ruleIds.map((ruleId) => ({
+          serviceGroupId: serviceId,
+          ruleId,
+        })),
+      );
+    }
+    totalRulesAttached += ruleIds.length;
+    console.log(`  ✓ ${svc.slug} → ${ruleIds.length} rules`);
+  }
+
+  console.log(
+    `✅ Upserted ${upserted} services with ${totalRulesAttached} total rule attachments.`,
+  );
+}
+
 async function main() {
   console.log(`Seeding ${ALL_RULES.length} deadline rules…`);
   const EFFECTIVE_FROM = "2025-01-01";
@@ -1257,6 +1610,9 @@ async function main() {
   console.log(
     `   Total: ${ALL_RULES.length} rules across ${uniqueJurisdictions.size} jurisdictions.`,
   );
+
+  // Service groups depend on rules existing first, so seed them last.
+  await seedServiceGroups();
 }
 
 main().catch((err) => {

@@ -100,6 +100,16 @@ export async function createEntityAction(formData: FormData) {
     .map((s) => s.trim().toUpperCase())
     .filter((s) => /^[A-Z]{2}$/.test(s));
 
+  // Service-group selection — the form sends one hidden input per
+  // checked service. getAll() reads them all.
+  // When the form was rendered without any services (older clients
+  // without the new picker), we leave this empty and let createEntity
+  // fall back to the entity-type defaults.
+  const rawServiceIds = formData.getAll("serviceGroupIds");
+  const serviceGroupIds = rawServiceIds
+    .map((v) => (typeof v === "string" ? v : ""))
+    .filter((v) => v.length > 0);
+
   await createEntity({
     orgId: ctx.organization.id,
     clientId: parsed.data.clientId,
@@ -109,6 +119,9 @@ export async function createEntityAction(formData: FormData) {
     operatingStates,
     ein: parsed.data.ein || undefined,
     fiscalYearEnd: parsed.data.fiscalYearEnd || undefined,
+    // Pass-through only when the form supplied a list (any length,
+    // including 0 = explicit "no services"). Undefined = fall back.
+    serviceGroupIds: rawServiceIds.length > 0 ? serviceGroupIds : undefined,
     actorType: "user",
     actorId: ctx.user.id,
   });

@@ -22,6 +22,8 @@ import { getDb } from "@/lib/db";
 import {
   deadlineInstances,
   deadlineRules,
+  entityServices,
+  serviceGroupRules,
   type DeadlineRule,
   type Entity,
 } from "@/lib/db/schema";
@@ -140,6 +142,25 @@ export function computeDueDate(
  * Pick rules applicable to the entity.
  * Runs as a single DB query using jsonb containment for entity_types.
  */
+/**
+ * Pick the rules whose deadlines this entity will materialize.
+ *
+ * Two paths, in order of preference:
+ *
+ *   1. SERVICE-DRIVEN — when the entity has at least one active row in
+ *      `entity_services`, the rule set is the union of rules attached
+ *      to those services (via `service_group_rules`). This is the
+ *      canonical model going forward: "Acme is on Personal Tax Filing
+ *      + Annual Payroll, so they get exactly those rules."
+ *
+ *   2. ENTITY-TYPE FALLBACK — when no services are assigned (newly-
+ *      created entities mid-migration, legacy data), fall back to the
+ *      old `deadline_rules.entity_types ? entityType` match. Keeps
+ *      pre-services behavior intact until the backfill finishes.
+ *
+ * Both paths layer on the jurisdiction filter (federal + entity's
+ * home_state + operating_states) and the effective-date window.
+ */
 async function selectApplicableRules(
   entity: Entity,
 ): Promise<DeadlineRule[]> {
@@ -149,15 +170,74 @@ async function selectApplicableRules(
   const jurisdictions = new Set<string>(["federal"]);
   if (entity.homeState) jurisdictions.add(entity.homeState);
   for (const state of entity.operatingStates ?? []) jurisdictions.add(state);
+  const jurisdictionList = Array.from(jurisdictions);
 
-  // jsonb ? 'key' checks array element presence. Using sql.raw is fine here
-  // because entity.entityType is from a pgEnum (trusted input).
+  // Look up active services for this entity. We do this first so we
+  // can decide which path to take.
+  const activeServices = await db
+    .select({ serviceGroupId: entityServices.serviceGroupId })
+    .from(entityServices)
+    .where(
+      and(
+        eq(entityServices.entityId, entity.id),
+        isNull(entityServices.removedAt),
+      ),
+    );
+
+  if (activeServices.length > 0) {
+    // SERVICE-DRIVEN PATH. The rule list = rules attached to any of
+    // the entity's active services, intersected with jurisdiction
+    // and effective-date filters.
+    const serviceIds = activeServices.map((s) => s.serviceGroupId);
+    const rows = await db
+      .selectDistinct({
+        id: deadlineRules.id,
+        jurisdictionType: deadlineRules.jurisdictionType,
+        jurisdictionCode: deadlineRules.jurisdictionCode,
+        formCode: deadlineRules.formCode,
+        title: deadlineRules.title,
+        description: deadlineRules.description,
+        entityTypes: deadlineRules.entityTypes,
+        ruleType: deadlineRules.ruleType,
+        rulePayload: deadlineRules.rulePayload,
+        extensionFormCode: deadlineRules.extensionFormCode,
+        extensionPayload: deadlineRules.extensionPayload,
+        penaltySummary: deadlineRules.penaltySummary,
+        sourceUrl: deadlineRules.sourceUrl,
+        version: deadlineRules.version,
+        effectiveFrom: deadlineRules.effectiveFrom,
+        effectiveTo: deadlineRules.effectiveTo,
+        irrevocable: deadlineRules.irrevocable,
+        createdAt: deadlineRules.createdAt,
+      })
+      .from(deadlineRules)
+      .innerJoin(
+        serviceGroupRules,
+        eq(serviceGroupRules.ruleId, deadlineRules.id),
+      )
+      .where(
+        and(
+          inArray(serviceGroupRules.serviceGroupId, serviceIds),
+          inArray(deadlineRules.jurisdictionCode, jurisdictionList),
+          lte(deadlineRules.effectiveFrom, today),
+          or(
+            isNull(deadlineRules.effectiveTo),
+            sql`${deadlineRules.effectiveTo} > ${today}`,
+          ),
+        ),
+      );
+    return rows as DeadlineRule[];
+  }
+
+  // ENTITY-TYPE FALLBACK PATH (pre-services entities or anything that
+  // was never assigned services). jsonb ? 'key' checks array
+  // membership; entity.entityType comes from the pgEnum so safe.
   const rows = await db
     .select()
     .from(deadlineRules)
     .where(
       and(
-        inArray(deadlineRules.jurisdictionCode, Array.from(jurisdictions)),
+        inArray(deadlineRules.jurisdictionCode, jurisdictionList),
         sql`${deadlineRules.entityTypes} ? ${entity.entityType}`,
         lte(deadlineRules.effectiveFrom, today),
         or(

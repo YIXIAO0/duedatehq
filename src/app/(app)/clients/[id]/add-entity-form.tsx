@@ -1,3 +1,6 @@
+"use client";
+
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -13,7 +16,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { createEntityAction } from "../actions";
+import type { ServiceGroup } from "@/lib/db/schema";
 
 const ENTITY_TYPE_OPTIONS = [
   { value: "individual", label: "Individual (1040)" },
@@ -35,11 +40,6 @@ const SUPPORTED_STATES = [
   { value: "NJ", label: "New Jersey" },
 ];
 
-// Common FYE choices. The seven options cover ~99% of US entities —
-// most are calendar year (Dec 31), and "natural business years" of
-// Jun 30 / Sep 30 / Mar 31 cover the rest. Free-form would let CPAs
-// pick weird dates but we'd have to handle Feb 29 + last-day-of-month
-// math more carefully. Stick with the standard choices.
 const FYE_OPTIONS = [
   { value: "12-31", label: "Dec 31 — Calendar year (most common)" },
   { value: "06-30", label: "Jun 30 — Common for C-corps" },
@@ -50,10 +50,61 @@ const FYE_OPTIONS = [
   { value: "11-30", label: "Nov 30" },
 ];
 
-export function AddEntityForm({ clientId }: { clientId: string }) {
+export function AddEntityForm({
+  clientId,
+  services,
+}: {
+  clientId: string;
+  services: ServiceGroup[];
+}) {
+  // Form is now a client component so the service picker can react
+  // to entity-type changes — picking "C-Corp" auto-checks "C-Corp Tax
+  // Filing", picking "Individual" swaps to "Personal Tax Filing".
+  const [entityType, setEntityType] = useState("individual");
+
+  // Defaults for the currently-selected type. Memoized so the effect
+  // below has a stable dependency.
+  const defaultServiceIds = useMemo(
+    () =>
+      services
+        .filter((s) => (s.defaultForEntityTypes ?? []).includes(entityType))
+        .map((s) => s.id),
+    [services, entityType],
+  );
+
+  // The "store previous prop in state" pattern — React's recommended
+  // way to reset state when an input changes, without useEffect:
+  // https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes
+  // When entityType flips, we snap the checks to that type's
+  // defaults. Overwrites any manual edits — intentional: a CPA who
+  // picks "Individual" then switches to "C-Corp" almost certainly
+  // wants the C-Corp defaults, not the Individual checks they had.
+  const [trackedEntityType, setTrackedEntityType] = useState(entityType);
+  const [checkedServiceIds, setCheckedServiceIds] = useState<string[]>(
+    defaultServiceIds,
+  );
+  if (trackedEntityType !== entityType) {
+    setTrackedEntityType(entityType);
+    setCheckedServiceIds(defaultServiceIds);
+  }
+
+  const toggleService = (id: string) => {
+    setCheckedServiceIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
+
   return (
     <form action={createEntityAction}>
       <input type="hidden" name="clientId" value={clientId} />
+      {/* Hidden inputs (one per checked service) so the FormData
+          submitted to the server action carries the full selection.
+          Using "name=serviceGroupIds[]" + multiple values is the
+          form-encoding convention; FormData.getAll() reads them all. */}
+      {checkedServiceIds.map((id) => (
+        <input key={id} type="hidden" name="serviceGroupIds" value={id} />
+      ))}
+
       <Card>
         <CardContent className="space-y-5 pt-6">
           <div className="grid gap-5 sm:grid-cols-2">
@@ -69,7 +120,12 @@ export function AddEntityForm({ clientId }: { clientId: string }) {
             </div>
             <div className="space-y-2">
               <Label htmlFor="entityType">Entity type *</Label>
-              <Select name="entityType" defaultValue="individual" required>
+              <Select
+                name="entityType"
+                value={entityType}
+                onValueChange={setEntityType}
+                required
+              >
                 <SelectTrigger id="entityType">
                   <SelectValue placeholder="Select entity type" />
                 </SelectTrigger>
@@ -152,11 +208,61 @@ export function AddEntityForm({ clientId }: { clientId: string }) {
               </p>
             </div>
           </div>
+
+          {/* Service picker — what the CPA is filing for this entity.
+              Defaults to the entity-type's natural bundle but the
+              CPA can add Quarterly Payroll for an employer client,
+              or remove the default for unusual cases. */}
+          <div className="space-y-2 border-t border-border pt-5">
+            <Label>Services</Label>
+            <p className="text-xs text-muted-foreground">
+              Pick which filings to track. Defaults are pre-checked
+              based on entity type — add more for clients with payroll,
+              retirement plans, or special elections.
+            </p>
+            <div className="grid gap-2 pt-2 sm:grid-cols-2">
+              {services.map((s) => {
+                const checked = checkedServiceIds.includes(s.id);
+                const isDefault = (s.defaultForEntityTypes ?? []).includes(
+                  entityType,
+                );
+                return (
+                  <label
+                    key={s.id}
+                    className={`flex cursor-pointer items-start gap-2.5 rounded-md border px-3 py-2 transition-colors ${
+                      checked
+                        ? "border-primary/40 bg-primary/5"
+                        : "border-border bg-background hover:bg-muted/30"
+                    }`}
+                  >
+                    <Checkbox
+                      checked={checked}
+                      onCheckedChange={() => toggleService(s.id)}
+                      className="mt-0.5"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-1.5 text-sm font-medium">
+                        {s.name}
+                        {isDefault ? (
+                          <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+                            Default
+                          </span>
+                        ) : null}
+                      </div>
+                      {s.description ? (
+                        <p className="mt-0.5 text-xs leading-snug text-muted-foreground">
+                          {s.description}
+                        </p>
+                      ) : null}
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
         </CardContent>
         <CardFooter className="justify-end">
-          <Button type="submit">
-            Create entity & generate deadlines
-          </Button>
+          <Button type="submit">Create entity & generate deadlines</Button>
         </CardFooter>
       </Card>
     </form>

@@ -106,6 +106,16 @@ export async function updateEntityAction(formData: FormData) {
     .map((s) => s.trim().toUpperCase())
     .filter((s) => /^[A-Z]{2}$/.test(s));
 
+  // Service-group selection. Only act on it when the form rendered
+  // the picker (signaled by the `hasServicePicker` marker). Without
+  // this guard, edits from forms that don't include the picker would
+  // blast all assignments to empty.
+  const hasPicker = formData.get("hasServicePicker") === "1";
+  const rawServiceIds = formData.getAll("serviceGroupIds");
+  const serviceGroupIds = rawServiceIds
+    .map((v) => (typeof v === "string" ? v : ""))
+    .filter((v) => v.length > 0);
+
   await updateEntity({
     id: parsed.data.id,
     orgId: ctx.organization.id,
@@ -115,12 +125,14 @@ export async function updateEntityAction(formData: FormData) {
     operatingStates,
     ein: parsed.data.ein || undefined,
     fiscalYearEnd: parsed.data.fiscalYearEnd || undefined,
+    serviceGroupIds: hasPicker ? serviceGroupIds : undefined,
     actorType: "user",
     actorId: ctx.user.id,
   });
 
   revalidatePath("/clients");
   revalidatePath("/dashboard");
+  revalidatePath(`/clients/${parsed.data.id}`);
 }
 
 export async function archiveEntityAction(entityId: string) {
