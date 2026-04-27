@@ -340,7 +340,7 @@ function CategoryBadge({ category }: { category: string }) {
   };
   if (category === "disaster_relief") {
     return (
-      <Badge className="bg-[var(--color-priority-urgent-bg)] text-[var(--color-priority-urgent)] hover:bg-[var(--color-priority-urgent-bg)]">
+      <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300 dark:hover:bg-amber-950/40">
         <AlertTriangle className="mr-1 h-3 w-3" />
         {labels[category]}
       </Badge>

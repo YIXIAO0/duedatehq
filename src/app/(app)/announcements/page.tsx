@@ -217,8 +217,11 @@ function AnnouncementRow({
   return (
     <article
       className={`rounded-lg border p-4 transition-colors ${
+        // Highlight tone: switched from urgent-red to calm sky-blue.
+        // Announcements are "FYI affecting your book", not "fire".
+        // Keep the highlight visible but informational, not alarming.
         highlight
-          ? "border-[var(--color-priority-urgent)]/30 bg-[var(--color-priority-urgent-bg)]/40"
+          ? "border-sky-200 bg-sky-50/60 dark:border-sky-900/50 dark:bg-sky-950/30"
           : "border-border bg-card hover:bg-muted/30"
       }`}
     >
@@ -259,7 +262,7 @@ function AnnouncementRow({
               className={`mt-2 flex items-center gap-3 rounded-md border px-3 py-2 transition-colors ${
                 allReviewed
                   ? "border-[var(--color-priority-done)]/40 bg-[var(--color-priority-done-bg)]/40 hover:bg-[var(--color-priority-done-bg)]/70"
-                  : "border-[var(--color-priority-urgent)]/40 bg-background/60 hover:bg-[var(--color-priority-urgent-bg)]/50"
+                  : "border-sky-300 bg-background/60 hover:bg-sky-50 dark:border-sky-800 dark:hover:bg-sky-950/40"
               }`}
             >
               <div className="min-w-0 flex-1">
@@ -267,7 +270,7 @@ function AnnouncementRow({
                   className={`text-[12px] font-semibold ${
                     allReviewed
                       ? "text-[var(--color-priority-done)]"
-                      : "text-[var(--color-priority-urgent)]"
+                      : "text-sky-800 dark:text-sky-300"
                   }`}
                 >
                   {allReviewed
@@ -314,22 +317,28 @@ function AnnouncementRow({
 }
 
 function CategoryIcon({ category }: { category: string }) {
+  // Category palette dialed back. Disaster relief used to be urgent-red
+  // — but for a CPA this is "FYI clients in declared counties qualify
+  // for relief", not a fire alarm. Amber (caution) reads as "pay
+  // attention" without the panic of red. Form change → sky blue
+  // (informational), procedural → slate (administrative), general →
+  // muted. None of these warrant red.
   const map: Record<string, { icon: React.ReactNode; bg: string; fg: string }> =
     {
       disaster_relief: {
         icon: <Flame className="h-4 w-4" />,
-        bg: "bg-[var(--color-priority-urgent-bg)]",
-        fg: "text-[var(--color-priority-urgent)]",
+        bg: "bg-amber-100 dark:bg-amber-950/40",
+        fg: "text-amber-700 dark:text-amber-400",
       },
       form_change: {
         icon: <FileWarning className="h-4 w-4" />,
-        bg: "bg-[var(--color-priority-high-bg)]",
-        fg: "text-[var(--color-priority-high)]",
+        bg: "bg-sky-100 dark:bg-sky-950/40",
+        fg: "text-sky-700 dark:text-sky-400",
       },
       procedural: {
         icon: <ShieldCheck className="h-4 w-4" />,
-        bg: "bg-[var(--color-priority-medium-bg)]",
-        fg: "text-[var(--color-priority-medium)]",
+        bg: "bg-slate-100 dark:bg-slate-800/60",
+        fg: "text-slate-700 dark:text-slate-300",
       },
       general: {
         icon: <Newspaper className="h-4 w-4" />,
@@ -356,7 +365,7 @@ function CategoryBadge({ category }: { category: string }) {
   };
   if (category === "disaster_relief") {
     return (
-      <Badge className="bg-[var(--color-priority-urgent-bg)] text-[var(--color-priority-urgent)] hover:bg-[var(--color-priority-urgent-bg)]">
+      <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300 dark:hover:bg-amber-950/40">
         <AlertTriangle className="mr-1 h-3 w-3" /> {labels[category]}
       </Badge>
     );
