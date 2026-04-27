@@ -370,12 +370,23 @@ export async function listClientsWithEntityCount(
                AND e.archived_at IS NULL
            ) AS entity_count,
            (
+             -- Window MUST match listDeadlinesForClient on /clients/[id]
+             -- (overdue OR within +365d). Otherwise the count on this
+             -- list page contradicts the count the user sees when they
+             -- click into the client. CPA mental model: "open" = work
+             -- I might need to act on this filing season or next; we
+             -- don't include deadlines two tax years out.
              SELECT COUNT(*)::int
              FROM deadline_instances di
              INNER JOIN entities e2 ON e2.id = di.entity_id
              WHERE e2.client_id = c.id
                AND e2.archived_at IS NULL
                AND di.status IN ('pending', 'waiting_on_client', 'in_progress', 'ready_to_file', 'extended')
+               AND (
+                 COALESCE(di.extension_due_date, di.due_date) <= CURRENT_DATE
+                 OR COALESCE(di.extension_due_date, di.due_date)
+                    <= (CURRENT_DATE + INTERVAL '365 days')
+               )
            ) AS active_deadline_count
     FROM clients c
     WHERE c.org_id = ${parsed.orgId}

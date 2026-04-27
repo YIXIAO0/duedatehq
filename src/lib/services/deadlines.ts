@@ -578,9 +578,15 @@ export async function listDeadlinesForClient(args: {
   const includeFiled = args.includeFiled ?? false;
   const withinDays = args.withinDays ?? 365;
 
+  // The five "open" statuses must match the count on /clients (the
+  // listing page). When Round A added waiting_on_client and
+  // ready_to_file, this filter wasn't updated and the two pages
+  // disagreed on what "open" meant — a client with deadlines in
+  // waiting_on_client showed N on /clients but N - (those) on the
+  // detail page. Keep all five in lock-step here.
   const statusFilter = includeFiled
     ? sql``
-    : sql`AND di.status IN ('pending', 'in_progress', 'extended')`;
+    : sql`AND di.status IN ('pending', 'waiting_on_client', 'in_progress', 'ready_to_file', 'extended')`;
 
   // future-window cap. Past items pass through unconditionally (overdue
   // work is real work), only future deadlines get the +N days lid.
