@@ -322,11 +322,13 @@ function formatPlainDate(iso: string | null): string {
   if (!iso) return "—";
   const d = new Date(iso + "T00:00:00");
   if (isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("en-US", {
+  const date = d.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
   });
+  const dow = d.toLocaleDateString("en-US", { weekday: "short" });
+  return `${date} ${dow}`;
 }
 
 function CategoryBadge({ category }: { category: string }) {

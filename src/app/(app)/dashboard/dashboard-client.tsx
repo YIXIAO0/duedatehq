@@ -769,10 +769,14 @@ function SharedDateInline({ date }: { date: string }) {
       : days === 1
       ? "Tomorrow"
       : `in ${days}d`;
+  // FIT-style: weekday appended after date. "Apr 15 Wed" lets the
+  // CPA scan the dashboard and tell at a glance whether a deadline
+  // is on a workday or hits the weekend.
   return (
     <>
       <span className="ml-2 font-medium text-foreground">
-        {due.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+        {due.toLocaleDateString("en-US", { month: "short", day: "numeric" })}{" "}
+        {due.toLocaleDateString("en-US", { weekday: "short" })}
       </span>
       <span className={`ml-1 ${accent}`}>{relLabel}</span>
     </>
@@ -814,7 +818,8 @@ function DateSubheader({ date, count }: { date: string; count: number }) {
         {due.toLocaleDateString("en-US", {
           month: "short",
           day: "numeric",
-        })}
+        })}{" "}
+        {due.toLocaleDateString("en-US", { weekday: "short" })}
       </span>
       <span className={`text-[11px] ${accent}`}>{relLabel}</span>
       <span className="ml-auto text-[11px] text-muted-foreground">

@@ -487,11 +487,13 @@ function DeadlineRow({
 
 function humanDate(iso: string): string {
   const d = new Date(iso + "T00:00:00");
-  return d.toLocaleDateString("en-US", {
+  const date = d.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
   });
+  const dow = d.toLocaleDateString("en-US", { weekday: "short" });
+  return `${date} ${dow}`;
 }
 
 // "Apr 15" — used inside button labels where year is implied.

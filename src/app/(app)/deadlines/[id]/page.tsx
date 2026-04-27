@@ -426,11 +426,13 @@ function describeHistory(entry: DeadlineHistoryEntry): {
 
 function humanDate(iso: string): string {
   const d = new Date(iso + (iso.length === 10 ? "T00:00:00" : ""));
-  return d.toLocaleDateString("en-US", {
+  const date = d.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
   });
+  const dow = d.toLocaleDateString("en-US", { weekday: "short" });
+  return `${date} ${dow}`;
 }
 
 // Map raw enum values from audit_events.payload to the same display
@@ -534,12 +536,17 @@ function RelativeDate({ iso }: { iso: string }) {
 }
 
 function formatDate(iso: string): string {
+  // Long form for the prominent due-date display, with weekday
+  // appended in FIT style. "April 15, 2026 Wed" lets the CPA know
+  // immediately whether the deadline is a working day.
   const d = new Date(iso + "T00:00:00");
-  return d.toLocaleDateString("en-US", {
+  const date = d.toLocaleDateString("en-US", {
     month: "long",
     day: "numeric",
     year: "numeric",
   });
+  const dow = d.toLocaleDateString("en-US", { weekday: "short" });
+  return `${date} · ${dow}`;
 }
 
 function entityLabel(type: string): string {

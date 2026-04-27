@@ -513,12 +513,17 @@ function StatusBadge({
 }
 
 function formatShortDate(iso: string): string {
+  // FIT-style: weekday after the date so the CPA can scan-plan their
+  // week ("is this a Friday or a Saturday?") without doing the
+  // mental conversion. "Apr 15, 2026 Wed" reads naturally.
   const d = new Date(iso + "T00:00:00");
-  return d.toLocaleDateString("en-US", {
+  const date = d.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
   });
+  const dow = d.toLocaleDateString("en-US", { weekday: "short" });
+  return `${date} ${dow}`;
 }
 
 // "06-30" → "Jun 30". Simple month-day formatter for the FYE badge.
