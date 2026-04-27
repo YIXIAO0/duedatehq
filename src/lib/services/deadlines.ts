@@ -571,12 +571,21 @@ export async function listDeadlinesForClient(args: {
   clientId: string;
   /** Default false — only show work-still-to-do. Set true for full history. */
   includeFiled?: boolean;
-  /** Default 365 — cap how far into the future we show. Overdue always shown. */
+  /**
+   * Optional future-horizon cap, in days. When undefined (the default),
+   * we return ALL open deadlines for the client regardless of how far
+   * out — matching how File In Time and similar pro tools treat the
+   * "open" count. The cap exists for callers that want a filtered
+   * window (e.g. a "next 30 days" filter UI), not as a default.
+   *
+   * Past-due items always pass through; the cap only applies to
+   * future deadlines.
+   */
   withinDays?: number;
 }): Promise<ClientDeadlineRow[]> {
   const db = getDb();
   const includeFiled = args.includeFiled ?? false;
-  const withinDays = args.withinDays ?? 365;
+  const withinDays = args.withinDays;
 
   // The five "open" statuses must match the count on /clients (the
   // listing page). When Round A added waiting_on_client and
@@ -588,13 +597,16 @@ export async function listDeadlinesForClient(args: {
     ? sql``
     : sql`AND di.status IN ('pending', 'waiting_on_client', 'in_progress', 'ready_to_file', 'extended')`;
 
-  // future-window cap. Past items pass through unconditionally (overdue
-  // work is real work), only future deadlines get the +N days lid.
-  const windowFilter = sql`AND (
-    COALESCE(di.extension_due_date, di.due_date) <= CURRENT_DATE
-    OR COALESCE(di.extension_due_date, di.due_date)
-       <= (CURRENT_DATE + (${withinDays}::int * INTERVAL '1 day'))
-  )`;
+  // Window only applies when a caller explicitly opts in. No cap by
+  // default — the open count is a true portfolio metric, not a
+  // "next 12 months" subset.
+  const windowFilter = withinDays
+    ? sql`AND (
+        COALESCE(di.extension_due_date, di.due_date) <= CURRENT_DATE
+        OR COALESCE(di.extension_due_date, di.due_date)
+           <= (CURRENT_DATE + (${withinDays}::int * INTERVAL '1 day'))
+      )`
+    : sql``;
 
   const rows = await db.execute<{
     id: string;

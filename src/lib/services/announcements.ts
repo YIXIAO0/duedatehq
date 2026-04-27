@@ -574,8 +574,10 @@ export async function getAnnouncementReview(
           AND e.home_state IS NOT NULL
           AND (${affectedJsonb}::jsonb) ? e.home_state
       ) AS matched_states,
-      -- Total open (any kind) for context — shown only when no
-      -- affected deadlines so the CPA can still tell something exists.
+      -- Total open (any kind) for context — same definition as the
+      -- /clients list and /clients/[id] detail page (no artificial
+      -- future-horizon cap). Shown when no affected deadlines so the
+      -- CPA can still tell something exists for this client.
       (
         SELECT COUNT(*)::int
         FROM deadline_instances di
@@ -583,11 +585,6 @@ export async function getAnnouncementReview(
         WHERE e2.client_id = c.id
           AND e2.archived_at IS NULL
           AND di.status IN ('pending', 'waiting_on_client', 'in_progress', 'ready_to_file', 'extended')
-          AND (
-            COALESCE(di.extension_due_date, di.due_date) <= CURRENT_DATE
-            OR COALESCE(di.extension_due_date, di.due_date)
-               <= (CURRENT_DATE + INTERVAL '365 days')
-          )
       ) AS open_deadline_count,
       -- Affected deadlines list. Only populated when AI narrowed the
       -- scope — without a form-code filter or a date range we don't
