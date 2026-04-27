@@ -161,12 +161,39 @@
   }
   body {
     @apply bg-background text-foreground;
-    /* Persona is 50+ CPAs — boost base font a notch */
-    font-size: 15.5px;
-    line-height: 1.6;
+    /* Persona is 50+ CPAs. They've been using Excel and QuickBooks for
+       20+ years and expect dense, readable typography — not a 14px
+       SaaS dashboard. We bump the base substantially:
+         - 17px body (was 15.5) — comfortable read-ahead, still feels
+           like a desk app, not a marketing page
+         - 1.55 line-height — slight tightening from 1.6 because larger
+           font sizes already give visual breathing room
+       Tailwind's `text-sm` / `text-xs` etc. cascade off the rem unit
+       which is set on <html> below — bumping html to 17px scales
+       every Tailwind size class proportionally without touching each
+       component. */
+    font-size: 17px;
+    line-height: 1.55;
   }
   html {
     @apply font-sans;
+    /* Anchor rem to the same 17px so Tailwind's text-* and spacing
+       scales (gap, padding, etc.) inherit the larger baseline. This
+       is what gets the "everything is bigger" effect across the app
+       without us having to audit every component. */
+    font-size: 17px;
+  }
+  /* Bump the smallest text floors. We had a lot of `text-[10px]` and
+     `text-[11px]` literals scattered around for badges, sub-labels,
+     and uppercase headers. At 17px base + the original 10/11 absolute
+     pixels they read fine, but for a 50+ user under reading-glasses
+     conditions, anything below 12px is a strain. These selectors
+     promote those literals globally without us editing every file. */
+  [class*="text-[10px]"] {
+    font-size: 12px !important;
+  }
+  [class*="text-[11px]"] {
+    font-size: 13px !important;
   }
   /* Note: previously had a global `[data-slot="button"] { min-height: 2.25rem }`
      rule meant to give older CPAs a larger click target. It silently caused

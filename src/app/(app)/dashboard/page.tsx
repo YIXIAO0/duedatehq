@@ -7,29 +7,21 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Plus,
   Calendar,
-  AlertTriangle,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   FileSpreadsheet,
-  ExternalLink,
-  Flame,
-  FileWarning,
-  ShieldCheck,
+  Bell,
 } from "lucide-react";
 import { getCurrentContext } from "@/lib/auth/current-org";
 import {
   getDashboardStats,
   listDashboardDeadlines,
 } from "@/lib/services/deadline-engine";
-import {
-  listAnnouncementsWithImpact,
-  type AnnouncementWithImpact,
-} from "@/lib/services/announcements";
-import { AnnouncementDismissButton } from "@/components/announcement-dismiss-button";
+import { listAnnouncementsWithImpact } from "@/lib/services/announcements";
 import {
   DashboardClient,
   type DashboardDeadline,
@@ -78,208 +70,75 @@ export default function DashboardPage() {
   );
 }
 
-// Renders the top 1-3 high-relevance (score≥4) IRS announcements from
-// the last 7 days as a proper inline card on the dashboard. This is the
-// moat feature — a CPA opens the app and immediately sees "deadline
-// extended in FL" / "1099-K threshold changed", with the AI summary
-// readable inline. No render at all when there's nothing high-signal,
-// so the dashboard stays focused on deadlines on quiet days.
+// Single-line "you have N IRS updates affecting your clients" strip
+// at the top of the dashboard. Deliberately calm — slate-blue tone,
+// not the previous red. Announcements aren't urgent ("call 911")
+// events; they're informational ("FYI, here are some changes that
+// touch your book"). The deadline list below it remains the focal
+// point of the dashboard.
+//
+// Click → /announcements where the CPA can drill into specifics,
+// review per-client, mark applied, etc. We deliberately don't
+// surface the per-announcement cards / summaries / dismiss buttons
+// inline here — that page is where the actual work happens.
 async function DashboardAnnouncements() {
   // Mark this Suspense boundary as dynamic before listAnnouncementsWithImpact
   // hits `new Date()`. Cache Components requires this read of auth /
-  // request data first; the parent page is dynamic via DashboardStats
-  // but each Suspense boundary needs to qualify on its own.
+  // request data first.
   const ctx = await getCurrentContext();
   const allItems = await listAnnouncementsWithImpact(ctx.organization.id, {
     sinceDays: 30,
     minScore: 4,
-    limit: 10, // pull more so we can filter + still surface 3
-    userId: ctx.user.id, // exclude this user's dismissed items
+    limit: 20,
+    userId: ctx.user.id,
   });
 
-  // Strict rule: only surface items where we can name specific clients
-  // affected. If `affectedClients.length === 0` we don't have a credible
-  // claim that this changes the CPA's work TODAY — the federal-only
-  // 1BBB regs are real news, but if we can't say "this hits Anderson,
-  // Martinez, Smith" then the dashboard is the wrong surface for it.
-  // Such items still appear on /announcements (header nav "IRS updates").
-  //
-  // Also hide items where every affected client is already reviewed.
-  const deadlineRelevant = allItems.filter((a) => {
+  // Same gating as before: only count items where we have specific
+  // affected clients AND not every client is already reviewed. The
+  // strip should mean "there's actual review work waiting".
+  const pending = allItems.filter((a) => {
     if (a.affectedClients.length === 0) return false;
-    const fullyReviewed = a.ackedClientCount >= a.affectedClients.length;
-    return !fullyReviewed;
+    return a.ackedClientCount < a.affectedClients.length;
   });
+  if (pending.length === 0) return null;
 
-  // Sort: more pending reviews first (most work to do), then by recency.
-  // The CPA's eye lands on "I have 5 unreviewed clients" before
-  // "I have 1 unreviewed client".
-  const items = deadlineRelevant
-    .sort((a, b) => {
-      const aPending = a.affectedClients.length - a.ackedClientCount;
-      const bPending = b.affectedClients.length - b.ackedClientCount;
-      if (aPending !== bPending) return bPending - aPending;
-      return b.publishedAt.getTime() - a.publishedAt.getTime();
-    })
-    .slice(0, 3);
-
-  if (items.length === 0) return null;
-
-  return (
-    <div className="mb-6 rounded-lg border border-[var(--color-priority-urgent)]/30 bg-[var(--color-priority-urgent-bg)]/30">
-      <div className="flex items-center justify-between gap-3 border-b border-[var(--color-priority-urgent)]/20 px-4 py-2.5">
-        <div className="flex items-center gap-2">
-          <AlertTriangle className="h-4 w-4 text-[var(--color-priority-urgent)]" />
-          <span className="text-sm font-semibold text-[var(--color-priority-urgent)]">
-            Heads up — affecting your clients&apos; deadlines
-          </span>
-        </div>
-        <Link
-          href="/announcements"
-          className="text-xs font-medium text-[var(--color-priority-urgent)] hover:underline"
-        >
-          See all IRS updates →
-        </Link>
-      </div>
-      <div className="divide-y divide-[var(--color-priority-urgent)]/15">
-        {items.map((a) => (
-          <DashboardAnnouncementRow key={a.id} a={a} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function DashboardAnnouncementRow({ a }: { a: AnnouncementWithImpact }) {
-  // Use the AI-rewritten summary when available — that's the value-add.
-  // Fall back to title only when AI hasn't run yet (e.g. AI Gateway
-  // outage day; the row will still appear, just without the summary).
-  const matchCount = a.affectedClients.length;
-  const ackedCount = a.ackedClientCount;
-  const pendingCount = matchCount - ackedCount;
-  const allReviewed = matchCount > 0 && pendingCount === 0;
-  return (
-    // pr-10 reserves space for the absolute-positioned X so the date in the
-    // meta row doesn't slide under it. Without this the date wraps or gets
-    // visually overlapped by the dismiss button.
-    <div className="group/announcement-row relative flex items-start gap-3 px-4 py-3 pr-10">
-      <CategoryGlyph category={a.category} />
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <CategoryPill category={a.category} />
-          {a.affectedJurisdictions.slice(0, 4).map((j) => (
-            <Badge key={j} variant="outline" className="text-[10px]">
-              {j === "federal" ? "US Federal" : j}
-            </Badge>
-          ))}
-          <span className="ml-auto text-[11px] text-muted-foreground">
-            {new Date(a.publishedAt).toLocaleDateString("en-US", {
-              month: "short",
-              day: "numeric",
-            })}
-          </span>
-        </div>
-        <div className="mt-1 text-sm font-medium leading-snug">
-          {a.title}
-        </div>
-        {a.aiSummary ? (
-          <div className="mt-0.5 text-xs leading-snug text-foreground/75">
-            {a.aiSummary}
-          </div>
-        ) : null}
-        {/* Primary CTA — review affected clients one by one. This is the
-            deadline-centric reframe: the announcement is just the trigger;
-            the work is "go through these N clients and check their
-            deadlines". When the user has acked all N, the block flips to
-            an "All reviewed" state. */}
-        {matchCount > 0 ? (
-          <Link
-            href={`/announcements/${a.id}`}
-            className={`mt-2 flex items-center gap-3 rounded-md border px-3 py-2 transition-colors ${
-              allReviewed
-                ? "border-[var(--color-priority-done)]/40 bg-[var(--color-priority-done-bg)]/40 hover:bg-[var(--color-priority-done-bg)]/70"
-                : "border-[var(--color-priority-urgent)]/40 bg-background/60 hover:bg-[var(--color-priority-urgent-bg)]/50"
-            }`}
-          >
-            <div className="min-w-0 flex-1">
-              <div
-                className={`text-[12px] font-semibold ${
-                  allReviewed
-                    ? "text-[var(--color-priority-done)]"
-                    : "text-[var(--color-priority-urgent)]"
-                }`}
-              >
-                {allReviewed
-                  ? `All ${matchCount} clients reviewed`
-                  : ackedCount === 0
-                  ? `Review ${matchCount} affected ${
-                      matchCount === 1 ? "client" : "clients"
-                    }`
-                  : `${pendingCount} more to review (${ackedCount}/${matchCount} done)`}
-              </div>
-              <div className="mt-0.5 truncate text-[11px] text-foreground/65">
-                {a.affectedClients
-                  .slice(0, 4)
-                  .map((c) => c.name)
-                  .join(" · ")}
-                {matchCount > 4 ? ` · +${matchCount - 4} more` : ""}
-              </div>
-            </div>
-            <span className="text-sm font-semibold">→</span>
-          </Link>
-        ) : null}
-        {/* Source link — secondary now, not the headline action */}
-        <div className="mt-1.5">
-          <a
-            href={a.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground hover:underline"
-          >
-            Read on IRS.gov <ExternalLink className="h-2.5 w-2.5" />
-          </a>
-        </div>
-      </div>
-      {/* Dismiss X — top-right of each row. Visible always; hover gives
-          subtle background. After click, the row disappears on revalidate. */}
-      <div className="absolute right-2 top-2">
-        <AnnouncementDismissButton announcementId={a.id} size="sm" />
-      </div>
-    </div>
-  );
-}
-
-function CategoryGlyph({ category }: { category: string }) {
-  const map: Record<string, React.ReactNode> = {
-    disaster_relief: <Flame className="h-4 w-4 text-[var(--color-priority-urgent)]" />,
-    form_change: <FileWarning className="h-4 w-4 text-[var(--color-priority-high)]" />,
-    procedural: <ShieldCheck className="h-4 w-4 text-[var(--color-priority-medium)]" />,
-  };
-  return (
-    <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center">
-      {map[category] ?? <AlertCircle className="h-4 w-4 text-muted-foreground" />}
-    </div>
-  );
-}
-
-function CategoryPill({ category }: { category: string }) {
-  const labels: Record<string, string> = {
-    disaster_relief: "Disaster relief",
-    form_change: "Form change",
-    procedural: "Procedural",
-    general: "General",
-  };
-  if (category === "disaster_relief") {
-    return (
-      <Badge className="bg-[var(--color-priority-urgent)] text-white hover:bg-[var(--color-priority-urgent)] text-[10px]">
-        {labels[category]}
-      </Badge>
-    );
+  // How many distinct clients across all unreviewed announcements
+  // still need attention? More useful than "3 announcements" — the
+  // CPA cares about people, not press releases.
+  const pendingClientIds = new Set<string>();
+  for (const a of pending) {
+    const acked = new Set<string>(); // we don't track per-client ack here, so approximate
+    void acked;
+    // acked set isn't surfaced on the listing query; fall back to "any client
+    // in an unreviewed announcement is potentially pending". Slight over-count
+    // is fine for the headline strip — exact numbers live on /announcements.
+    for (const c of a.affectedClients) pendingClientIds.add(c.id);
   }
+
+  const announcementWord = pending.length === 1 ? "update" : "updates";
+  const clientPhrase =
+    pendingClientIds.size === 1
+      ? "1 client"
+      : `${pendingClientIds.size} clients`;
+
   return (
-    <Badge variant="outline" className="text-[10px]">
-      {labels[category] ?? category}
-    </Badge>
+    <Link
+      href="/announcements"
+      className="mb-5 flex items-center gap-3 rounded-md border border-sky-200 bg-sky-50/60 px-4 py-2.5 transition-colors hover:bg-sky-50 dark:border-sky-900/50 dark:bg-sky-950/30 dark:hover:bg-sky-950/50"
+    >
+      <Bell className="h-4 w-4 shrink-0 text-sky-700 dark:text-sky-400" />
+      <span className="flex-1 text-sm">
+        <span className="font-semibold text-sky-900 dark:text-sky-100">
+          {pending.length} IRS {announcementWord}
+        </span>
+        <span className="ml-1 text-sky-800/80 dark:text-sky-200/80">
+          may affect {clientPhrase} on your list.
+        </span>
+      </span>
+      <span className="text-xs font-medium text-sky-700 dark:text-sky-400">
+        Review →
+      </span>
+    </Link>
   );
 }
 
