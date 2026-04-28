@@ -39,10 +39,11 @@ import {
   listAvailableServices,
   listActiveServicesForEntity,
 } from "@/lib/services/entity-services";
-import { AddEntityForm } from "./add-entity-form";
+import { AddEntityCollapser } from "./add-entity-collapser";
 import { ClientActions } from "./client-actions";
 import { ContactsSection } from "./contacts-section";
 import { EntityActions } from "./entity-actions";
+import { DeadlinesCollapse } from "./deadlines-collapse";
 
 type Params = Promise<{ id: string }>;
 type SearchParams = Promise<{ fromAnnouncement?: string }>;
@@ -208,10 +209,12 @@ async function ClientDetail({
         )}
       </section>
 
-      {/* Add entity form */}
+      {/* Add-entity affordance — collapsed by default. The page leads
+          with the actual content (deadlines, entities, contacts) and
+          the form is one click away when the CPA wants to add another
+          entity. */}
       <section>
-        <h2 className="mb-4 text-lg font-semibold">Add a tax entity</h2>
-        <AddEntityForm clientId={id} services={availableServices} />
+        <AddEntityCollapser clientId={id} services={availableServices} />
       </section>
     </div>
   );
@@ -246,24 +249,48 @@ function DeadlinesSection({
     );
   }
 
-  // Pure chronological order. Earlier I grouped by entity which broke
-  // the time flow (Mar 15 from entity A above Jun 15 from entity A
-  // above Apr 15 from entity B). For a CPA scanning "what's coming
-  // next?" the date axis must dominate. When the client has multiple
-  // entities, we show a small entity column so the row still answers
-  // "for which sub-business?".
-  //
-  // Date streaks: deadlines that share the same effective_due_date
-  // (very common when state + federal forms collide on Apr 15) are
-  // hoisted under a single date subheader. The rows below drop their
-  // date column entirely so the form-code + title gets the visual
-  // weight, instead of a wall of repeating dates.
+  // Pure chronological order with date-streak grouping. See history in
+  // git for the reasoning (entity-grouping broke time flow; same-date
+  // hoisting reduces date-string repetition).
   const streaks: { date: string; rows: ClientDeadlineRow[] }[] = [];
   for (const d of deadlines) {
     const last = streaks[streaks.length - 1];
     if (last && last.date === d.effectiveDueDate) last.rows.push(d);
     else streaks.push({ date: d.effectiveDueDate, rows: [d] });
   }
+
+  // Progressive disclosure: streaks within 90 days of today render
+  // immediately; anything beyond goes into a collapsible block. This
+  // is the meaningful semantic boundary — "imminent work I'm planning
+  // around" vs "future planning bucket I'll glance at occasionally".
+  // The CPA still sees the count (16 total) so they know more exists.
+  const HORIZON_DAYS = 90;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const horizon = new Date(today.getTime() + HORIZON_DAYS * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+
+  const nearStreaks: typeof streaks = [];
+  const farStreaks: typeof streaks = [];
+  for (const s of streaks) {
+    if (s.date <= horizon) nearStreaks.push(s);
+    else farStreaks.push(s);
+  }
+
+  // Edge case: every streak is far-future (e.g. brand-new client with
+  // first 1040 due 6 months out). Promote the first 3 streaks into the
+  // "near" bucket so the user isn't staring at a single "Show N more"
+  // button on an otherwise-empty list.
+  if (nearStreaks.length === 0 && farStreaks.length > 0) {
+    const promote = farStreaks.splice(0, Math.min(3, farStreaks.length));
+    nearStreaks.push(...promote);
+  }
+
+  const farRowCount = farStreaks.reduce((sum, s) => sum + s.rows.length, 0);
+  const farLabel = farStreaks[0]
+    ? `after ${humanDateShort(farStreaks[0].date)}`
+    : "";
 
   return (
     <section>
@@ -280,7 +307,7 @@ function DeadlinesSection({
       </div>
       <div className="overflow-hidden rounded-lg border border-border">
         <div className="divide-y divide-border">
-          {streaks.map((streak) => (
+          {nearStreaks.map((streak) => (
             <Fragment key={streak.date}>
               <DateSubheader
                 date={streak.date}
@@ -295,10 +322,45 @@ function DeadlinesSection({
               ))}
             </Fragment>
           ))}
+          {farStreaks.length > 0 ? (
+            <DeadlinesCollapse
+              trailingCount={farRowCount}
+              trailingLabel={farLabel}
+            >
+              <div className="divide-y divide-border">
+                {farStreaks.map((streak) => (
+                  <Fragment key={streak.date}>
+                    <DateSubheader
+                      date={streak.date}
+                      count={streak.rows.length}
+                    />
+                    {streak.rows.map((d) => (
+                      <DeadlineRow
+                        key={d.id}
+                        d={d}
+                        showEntityCol={showEntityCol}
+                      />
+                    ))}
+                  </Fragment>
+                ))}
+              </div>
+            </DeadlinesCollapse>
+          ) : null}
         </div>
       </div>
     </section>
   );
+}
+
+// Used by the "Show N more (after Apr 15, 2027)" expander label so we
+// don't repeat the date logic.
+function humanDateShort(iso: string): string {
+  const d = new Date(iso + "T00:00:00");
+  return d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 /**
@@ -523,11 +585,12 @@ function StatusBadge({
       </Badge>
     );
   }
-  return (
-    <Badge variant="outline" className="shrink-0 text-[10px]">
-      Pending
-    </Badge>
-  );
+  // Pending is the default state for ~80% of rows. Showing a badge
+  // for it on every row was visual noise; hiding it lets the
+  // *interesting* statuses (Waiting / In progress / Ready / Filed /
+  // Overdue) actually pop. Pending = "no badge" reads as the implicit
+  // baseline.
+  return null;
 }
 
 function formatShortDate(iso: string): string {
