@@ -2,20 +2,28 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Plus, X } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Plus } from "lucide-react";
 import { AddEntityForm } from "./add-entity-form";
 import type { ServiceGroup } from "@/lib/db/schema";
 
 /**
- * Progressive disclosure for the "Add tax entity" form.
+ * Modal-style trigger for the "Add a tax entity" flow. Single button
+ * on the page; click pops a dialog with the full form. This matches
+ * the create/edit symmetry we already have for entity edits (which
+ * also use a Dialog) and keeps the page layout from being shoved
+ * around by an inline-expanding form.
  *
- * Previously the form was always rendered fully expanded — for a CPA
- * landing on a client page, that's a wall of inputs (entity name,
- * type, home state, operating states, EIN, FYE, services picker)
- * before they've even decided they want to add anything. Collapsed-
- * by-default removes that pressure: the page leads with the existing
- * entities and deadlines (the actual content), and the form is one
- * click away when needed.
+ * `max-h-[90vh] overflow-y-auto` on DialogContent handles the case
+ * where the form is taller than the viewport — common with the
+ * services picker when 11 services are listed.
  */
 export function AddEntityCollapser({
   clientId,
@@ -26,33 +34,27 @@ export function AddEntityCollapser({
 }) {
   const [open, setOpen] = useState(false);
 
-  if (!open) {
-    return (
-      <Button
-        type="button"
-        variant="outline"
-        onClick={() => setOpen(true)}
-        className="w-full justify-center sm:w-auto"
-      >
-        <Plus className="mr-2 h-4 w-4" /> Add a tax entity
-      </Button>
-    );
-  }
-
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Add a tax entity</h2>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => setOpen(false)}
-        >
-          <X className="mr-1 h-4 w-4" /> Cancel
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline">
+          <Plus className="mr-2 h-4 w-4" /> Add a tax entity
         </Button>
-      </div>
-      <AddEntityForm clientId={clientId} services={services} />
-    </div>
+      </DialogTrigger>
+      <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Add a tax entity</DialogTitle>
+          <DialogDescription>
+            Pick the entity type and the filings to track. We&apos;ll
+            generate the deadlines automatically.
+          </DialogDescription>
+        </DialogHeader>
+        <AddEntityForm
+          clientId={clientId}
+          services={services}
+          onSubmitted={() => setOpen(false)}
+        />
+      </DialogContent>
+    </Dialog>
   );
 }

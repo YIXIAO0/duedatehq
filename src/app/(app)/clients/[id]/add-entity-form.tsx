@@ -2,11 +2,6 @@
 
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardFooter,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -53,9 +48,14 @@ const FYE_OPTIONS = [
 export function AddEntityForm({
   clientId,
   services,
+  onSubmitted,
 }: {
   clientId: string;
   services: ServiceGroup[];
+  /** Fired after the server action resolves successfully. The dialog
+   *  wrapper uses this to close itself; standalone callers can leave
+   *  it unset. */
+  onSubmitted?: () => void;
 }) {
   // Form is now a client component so the service picker can react
   // to entity-type changes — picking "C-Corp" auto-checks "C-Corp Tax
@@ -95,7 +95,12 @@ export function AddEntityForm({
   };
 
   return (
-    <form action={createEntityAction}>
+    <form
+      action={async (fd) => {
+        await createEntityAction(fd);
+        onSubmitted?.();
+      }}
+    >
       <input type="hidden" name="clientId" value={clientId} />
       {/* Hidden inputs (one per checked service) so the FormData
           submitted to the server action carries the full selection.
@@ -105,8 +110,7 @@ export function AddEntityForm({
         <input key={id} type="hidden" name="serviceGroupIds" value={id} />
       ))}
 
-      <Card>
-        <CardContent className="space-y-5 pt-6">
+      <div className="space-y-5">
           <div className="grid gap-5 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="name">Entity name *</Label>
@@ -259,12 +263,11 @@ export function AddEntityForm({
                 );
               })}
             </div>
-          </div>
-        </CardContent>
-        <CardFooter className="justify-end">
-          <Button type="submit">Create entity & generate deadlines</Button>
-        </CardFooter>
-      </Card>
+        </div>
+      </div>
+      <div className="mt-6 flex justify-end gap-2 border-t border-border pt-4">
+        <Button type="submit">Create entity & generate deadlines</Button>
+      </div>
     </form>
   );
 }
