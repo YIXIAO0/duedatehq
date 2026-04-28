@@ -110,163 +110,191 @@ export function AddEntityForm({
         <input key={id} type="hidden" name="serviceGroupIds" value={id} />
       ))}
 
-      <div className="space-y-5">
-          <div className="grid gap-5 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="name">Entity name *</Label>
-              <Input
-                id="name"
-                name="name"
-                required
-                placeholder='e.g. "John Smith" or "Smith Holdings LLC"'
-                maxLength={200}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="entityType">Entity type *</Label>
-              <Select
-                name="entityType"
-                value={entityType}
-                onValueChange={setEntityType}
-                required
-              >
-                <SelectTrigger id="entityType" className="w-full">
-                  <SelectValue placeholder="Select entity type" />
-                </SelectTrigger>
-                <SelectContent>
-                  {ENTITY_TYPE_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+      {/*
+        Pro-tool aesthetic for 50+ CPAs. Spreadsheet/QuickBooks vibe:
+        tighter spacing, helper-text immediately under labels (not
+        floating below inputs), section header as a strip, services
+        as a dense bordered list rather than rounded cards. The form
+        should feel like a desk-tool dialog box, not a marketing
+        signup page.
+      */}
+      <div className="space-y-4">
+        <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="name" className="text-sm">
+              Entity name <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              id="name"
+              name="name"
+              required
+              placeholder='e.g. "John Smith" or "Smith Holdings LLC"'
+              maxLength={200}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="entityType" className="text-sm">
+              Entity type <span className="text-destructive">*</span>
+            </Label>
+            <Select
+              name="entityType"
+              value={entityType}
+              onValueChange={setEntityType}
+              required
+            >
+              <SelectTrigger id="entityType" className="w-full">
+                <SelectValue placeholder="Select entity type" />
+              </SelectTrigger>
+              <SelectContent>
+                {ENTITY_TYPE_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
-          <div className="grid gap-5 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="homeState">Home / domicile state</Label>
-              <Select name="homeState">
-                <SelectTrigger id="homeState" className="w-full">
-                  <SelectValue placeholder="Select home state (optional)" />
-                </SelectTrigger>
-                <SelectContent>
-                  {SUPPORTED_STATES.map((s) => (
-                    <SelectItem key={s.value} value={s.value}>
-                      {s.value} — {s.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          <div className="space-y-1.5">
+            <div>
+              <Label htmlFor="homeState" className="text-sm">
+                Home / domicile state
+              </Label>
               <p className="text-xs text-muted-foreground">
-                For individuals, this is where they live. For entities, where
+                For individuals, where they live; for entities, where
                 they&apos;re organized.
               </p>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="operatingStates">Other operating states</Label>
-              <Input
-                id="operatingStates"
-                name="operatingStates"
-                placeholder="CA, NY, TX"
-                maxLength={200}
-              />
+            <Select name="homeState">
+              <SelectTrigger id="homeState" className="w-full">
+                <SelectValue placeholder="Select home state (optional)" />
+              </SelectTrigger>
+              <SelectContent>
+                {SUPPORTED_STATES.map((s) => (
+                  <SelectItem key={s.value} value={s.value}>
+                    {s.value} — {s.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <div>
+              <Label htmlFor="operatingStates" className="text-sm">
+                Other operating states
+              </Label>
               <p className="text-xs text-muted-foreground">
-                Comma-separated 2-letter codes. Leave blank if single-state.
+                Comma-separated 2-letter codes. Blank if single-state.
               </p>
             </div>
+            <Input
+              id="operatingStates"
+              name="operatingStates"
+              placeholder="CA, NY, TX"
+              maxLength={200}
+            />
           </div>
 
-          <div className="grid gap-5 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="ein">EIN / SSN (optional)</Label>
-              <Input
-                id="ein"
-                name="ein"
-                placeholder="XX-XXXXXXX"
-                maxLength={20}
-              />
+          <div className="space-y-1.5">
+            <div>
+              <Label htmlFor="ein" className="text-sm">
+                EIN / SSN
+              </Label>
               <p className="text-xs text-muted-foreground">
-                Not required — used only for your reference.
+                Optional — for your reference only.
               </p>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="fiscalYearEnd">Fiscal year end</Label>
-              <Select name="fiscalYearEnd" defaultValue="12-31">
-                <SelectTrigger id="fiscalYearEnd" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {FYE_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                Drives 1120 / 1120-S / 1065 / 1041 / 990 due dates. Most
-                entities are calendar year — change only if this client
-                explicitly elected otherwise.
-              </p>
-            </div>
+            <Input
+              id="ein"
+              name="ein"
+              placeholder="XX-XXXXXXX"
+              maxLength={20}
+            />
           </div>
-
-          {/* Service picker — what the CPA is filing for this entity.
-              Defaults to the entity-type's natural bundle but the
-              CPA can add Quarterly Payroll for an employer client,
-              or remove the default for unusual cases. */}
-          <div className="space-y-2 border-t border-border pt-5">
-            <Label>Services</Label>
-            <p className="text-xs text-muted-foreground">
-              Pick which filings to track. Defaults are pre-checked
-              based on entity type — add more for clients with payroll,
-              retirement plans, or special elections.
-            </p>
-            <div className="grid gap-2 pt-2 sm:grid-cols-2">
-              {services.map((s) => {
-                const checked = checkedServiceIds.includes(s.id);
-                const isDefault = (s.defaultForEntityTypes ?? []).includes(
-                  entityType,
-                );
-                return (
-                  <label
-                    key={s.id}
-                    className={`flex cursor-pointer items-start gap-2.5 rounded-md border px-3 py-2 transition-colors ${
-                      checked
-                        ? "border-primary/40 bg-primary/5"
-                        : "border-border bg-background hover:bg-muted/30"
-                    }`}
-                  >
-                    <Checkbox
-                      checked={checked}
-                      onCheckedChange={() => toggleService(s.id)}
-                      className="mt-0.5"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-1.5 text-sm font-medium">
-                        {s.name}
-                        {isDefault ? (
-                          <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
-                            Default
-                          </span>
-                        ) : null}
-                      </div>
-                      {s.description ? (
-                        <p className="mt-0.5 text-xs leading-snug text-muted-foreground">
-                          {s.description}
-                        </p>
-                      ) : null}
-                    </div>
-                  </label>
-                );
-              })}
+          <div className="space-y-1.5">
+            <div>
+              <Label htmlFor="fiscalYearEnd" className="text-sm">
+                Fiscal year end
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Drives 1120 / 1120-S / 1065 / 1041 / 990 dates. Change
+                only if elected non-calendar.
+              </p>
             </div>
+            <Select name="fiscalYearEnd" defaultValue="12-31">
+              <SelectTrigger id="fiscalYearEnd" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {FYE_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {/* Section header strip — feels like a QuickBooks/Excel sub-
+            heading, not a soft border. Compact tracking-wider uppercase
+            label on a muted bg communicates "we're entering a new
+            block" without taking visual real-estate. */}
+        <div className="-mx-6 mt-2 border-y border-border bg-muted/40 px-6 py-1.5">
+          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Services to track
+          </span>
+        </div>
+
+        {/* Dense bordered checkbox list. Each row = one service. The
+            DEFAULT pill stays inline; description renders as a tight
+            secondary line. No floating cards, no big rounded
+            containers — reads like a settings dialog from a desktop
+            app, not a SaaS onboarding flow. */}
+        <p className="-mt-2 text-xs text-muted-foreground">
+          Defaults are pre-checked by entity type. Add more for payroll,
+          retirement plans, or PTE elections.
+        </p>
+        <div className="divide-y divide-border rounded border border-border">
+          {services.map((s) => {
+            const checked = checkedServiceIds.includes(s.id);
+            const isDefault = (s.defaultForEntityTypes ?? []).includes(
+              entityType,
+            );
+            return (
+              <label
+                key={s.id}
+                className={`flex cursor-pointer items-start gap-3 px-3 py-2 transition-colors ${
+                  checked ? "bg-primary/5" : "hover:bg-muted/30"
+                }`}
+              >
+                <Checkbox
+                  checked={checked}
+                  onCheckedChange={() => toggleService(s.id)}
+                  className="mt-0.5"
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-baseline gap-2">
+                    <span className="text-sm font-medium">{s.name}</span>
+                    {isDefault ? (
+                      <span className="rounded-sm bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        Default
+                      </span>
+                    ) : null}
+                    {s.description ? (
+                      <span className="text-xs text-muted-foreground">
+                        {s.description}
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+              </label>
+            );
+          })}
         </div>
       </div>
-      <div className="mt-6 flex justify-end gap-2 border-t border-border pt-4">
-        <Button type="submit">Create entity & generate deadlines</Button>
+      <div className="-mx-6 mt-5 flex justify-end gap-2 border-t border-border bg-muted/30 px-6 py-3">
+        <Button type="submit">Create entity &amp; generate deadlines</Button>
       </div>
     </form>
   );
