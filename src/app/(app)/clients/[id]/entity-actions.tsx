@@ -146,7 +146,7 @@ export function EntityActions({
                     defaultValue={entity.entityType}
                     required
                   >
-                    <SelectTrigger id="entityType">
+                    <SelectTrigger id="entityType" className="w-full">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -166,7 +166,7 @@ export function EntityActions({
                     name="homeState"
                     defaultValue={entity.homeState ?? ""}
                   >
-                    <SelectTrigger id="homeState">
+                    <SelectTrigger id="homeState" className="w-full">
                       <SelectValue placeholder="None" />
                     </SelectTrigger>
                     <SelectContent>
@@ -204,7 +204,7 @@ export function EntityActions({
                     name="fiscalYearEnd"
                     defaultValue={entity.fiscalYearEnd || "12-31"}
                   >
-                    <SelectTrigger id="fiscalYearEnd">
+                    <SelectTrigger id="fiscalYearEnd" className="w-full">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>

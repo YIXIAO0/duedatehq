@@ -130,7 +130,7 @@ export function AddEntityForm({
                 onValueChange={setEntityType}
                 required
               >
-                <SelectTrigger id="entityType">
+                <SelectTrigger id="entityType" className="w-full">
                   <SelectValue placeholder="Select entity type" />
                 </SelectTrigger>
                 <SelectContent>
@@ -148,7 +148,7 @@ export function AddEntityForm({
             <div className="space-y-2">
               <Label htmlFor="homeState">Home / domicile state</Label>
               <Select name="homeState">
-                <SelectTrigger id="homeState">
+                <SelectTrigger id="homeState" className="w-full">
                   <SelectValue placeholder="Select home state (optional)" />
                 </SelectTrigger>
                 <SelectContent>
@@ -194,7 +194,7 @@ export function AddEntityForm({
             <div className="space-y-2">
               <Label htmlFor="fiscalYearEnd">Fiscal year end</Label>
               <Select name="fiscalYearEnd" defaultValue="12-31">
-                <SelectTrigger id="fiscalYearEnd">
+                <SelectTrigger id="fiscalYearEnd" className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
