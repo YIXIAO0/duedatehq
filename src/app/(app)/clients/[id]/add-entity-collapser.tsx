@@ -41,7 +41,12 @@ export function AddEntityCollapser({
           <Plus className="mr-2 h-4 w-4" /> Add a tax entity
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
+      {/* max-w-3xl (768px) gives each form column ~350px after dialog
+          padding — enough room that placeholders ("e.g. John Smith
+          or Smith Holdings LLC", "Dec 31 — Calendar year (most common)")
+          stop truncating and the helper text doesn't wrap into 4
+          lines under each input. 2xl was too cramped. */}
+      <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Add a tax entity</DialogTitle>
           <DialogDescription>
