@@ -305,7 +305,7 @@ function ContactDialog({
           "Owner, Bookkeeper, CFO…" truncates. 2xl gives each column
           ~300px which fits realistic role labels and longer email
           addresses without horizontal scrolling. */}
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="sm:max-w-2xl">
         <form
           action={async (fd) => {
             if (mode === "create") await createContactAction(fd);

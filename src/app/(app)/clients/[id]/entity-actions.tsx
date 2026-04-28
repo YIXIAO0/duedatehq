@@ -110,7 +110,7 @@ export function EntityActions({
 
       {/* Edit Dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="sm:max-w-2xl">
           <form
             action={async (fd) => {
               await updateEntityAction(fd);

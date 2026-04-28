@@ -185,21 +185,27 @@ async function ClientDetail({
           receivesReminders=true. */}
       <ContactsSection clientId={id} contacts={contacts} />
 
-      {/* Entities */}
+      {/* Entities — section header carries the "Add" trigger on the
+          right so the action is co-located with the thing it modifies.
+          Standard pattern (think GitHub's "New issue" or Linear's
+          "+ Issue" sitting next to the list header). Beats parking
+          the button at the bottom of the page where the user has to
+          scroll past everything else to find it. */}
       <section>
-        <div className="mb-4 flex items-center justify-between">
+        <div className="mb-4 flex items-center justify-between gap-3">
           <h2 className="text-lg font-semibold">
             Tax entities ({entityRows.length})
           </h2>
+          <AddEntityCollapser clientId={id} services={availableServices} />
         </div>
         {entityRows.length === 0 ? (
           <Card>
             <CardHeader>
               <CardTitle>No entities yet</CardTitle>
               <CardDescription>
-                Add an entity below. When you do, DueDateHQ generates the full
-                deadline calendar for the current and next tax year
-                automatically.
+                Click <strong>Add a tax entity</strong> above to start.
+                We&apos;ll generate the full deadline calendar for the
+                current and next tax year automatically.
               </CardDescription>
             </CardHeader>
           </Card>
@@ -217,13 +223,9 @@ async function ClientDetail({
         )}
       </section>
 
-      {/* Add-entity affordance — collapsed by default. The page leads
-          with the actual content (deadlines, entities, contacts) and
-          the form is one click away when the CPA wants to add another
-          entity. */}
-      <section>
-        <AddEntityCollapser clientId={id} services={availableServices} />
-      </section>
+      {/* (The "Add a tax entity" trigger used to live in its own
+          section at the bottom — it now lives in the entities-section
+          header above, where the action is co-located with the list.) */}
     </div>
   );
 }

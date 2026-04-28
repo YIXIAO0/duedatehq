@@ -41,12 +41,16 @@ export function AddEntityCollapser({
           <Plus className="mr-2 h-4 w-4" /> Add a tax entity
         </Button>
       </DialogTrigger>
-      {/* max-w-3xl (768px) gives each form column ~350px after dialog
-          padding — enough room that placeholders ("e.g. John Smith
-          or Smith Holdings LLC", "Dec 31 — Calendar year (most common)")
-          stop truncating and the helper text doesn't wrap into 4
-          lines under each input. 2xl was too cramped. */}
-      <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
+      {/* IMPORTANT: must use `sm:max-w-3xl` (not bare `max-w-3xl`) —
+          shadcn's DialogContent default class includes `sm:max-w-sm`
+          (384px) which is more specific than an unprefixed `max-w-*`
+          at sm+ screens, so a plain `max-w-3xl` gets stomped on
+          desktop. The `sm:` prefix matches the same breakpoint and
+          overrides cleanly via tailwind-merge.
+          3xl (768px) gives each form column ~350px so placeholders
+          ("Smith Holdings LLC", "Dec 31 — Calendar year (most common)")
+          stop truncating. */}
+      <DialogContent className="max-h-[90vh] sm:max-w-3xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Add a tax entity</DialogTitle>
           <DialogDescription>

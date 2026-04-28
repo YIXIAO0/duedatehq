@@ -91,7 +91,7 @@ export function ClientActions({
 
       {/* Edit Dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="sm:max-w-lg">
           <form
             action={async (fd) => {
               await updateClientAction(fd);
