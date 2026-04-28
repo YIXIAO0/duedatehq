@@ -111,12 +111,20 @@ async function ClientDetail({
       ),
     );
 
-  // All open + extended deadlines for this client, sorted by effective
-  // due date. We don't include filed/missed in the main view — there's
-  // a "Show filed" toggle for that on V2.
+  // All open + extended deadlines for this client, capped at 18 months
+  // out. We materialize 2 tax years upfront (currentYear-1 +
+  // currentYear), so the raw data goes ~21 months into the future —
+  // for a CPA looking at "what's open for this client", that's too
+  // much (a 2026 view shouldn't surface 2028 estimates). 18 months
+  // covers the natural CPA horizon: rest of current filing season +
+  // next April's 1040 + Q4 estimate after that, without bleeding into
+  // a second tax cycle. File In Time uses explicit tax-year tabs to
+  // achieve the same scope; until we have those, this is the cleanest
+  // default. Overdue items always pass through regardless of the cap.
   const deadlines = await listDeadlinesForClient({
     orgId: ctx.organization.id,
     clientId: id,
+    withinDays: 545,
   });
 
   // Active contacts for this client, primary first.
