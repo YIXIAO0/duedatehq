@@ -15,9 +15,98 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Users, Merge, X, AlertCircle, ArrowRight } from "lucide-react";
+import { Merge, X, AlertCircle, ArrowRight } from "lucide-react";
 import { mergeClientsAction } from "./actions";
 import type { ClientWithEntityCount } from "@/lib/services/clients";
+
+// Initials + brand-tinted avatar bg, derived deterministically from
+// the client name. Replaces the generic Users-icon avatar that made
+// every row identical at a glance — initials let CPA pattern-match
+// on familiar clients in long lists.
+const AVATAR_PALETTE = [
+  "bg-blue-100 text-blue-800",
+  "bg-purple-100 text-purple-800",
+  "bg-green-100 text-green-800",
+  "bg-amber-100 text-amber-800",
+  "bg-rose-100 text-rose-800",
+  "bg-slate-200 text-slate-700",
+  "bg-teal-100 text-teal-800",
+  "bg-indigo-100 text-indigo-800",
+] as const;
+
+function avatarStyle(name: string): { initials: string; colorClass: string } {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  const initials =
+    words.length >= 2
+      ? `${words[0][0] ?? ""}${words[1][0] ?? ""}`.toUpperCase()
+      : (words[0]?.slice(0, 2) ?? "?").toUpperCase();
+  // Cheap deterministic hash — djb2-ish, sufficient for an 8-bucket
+  // palette pick. Same name always yields the same color across
+  // sessions and devices.
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = (hash * 31 + name.charCodeAt(i)) | 0;
+  }
+  const colorClass = AVATAR_PALETTE[Math.abs(hash) % AVATAR_PALETTE.length];
+  return { initials: initials || "?", colorClass };
+}
+
+const ENTITY_TYPE_LABELS: Record<string, string> = {
+  individual: "Individual",
+  c_corp: "C-Corp",
+  s_corp: "S-Corp",
+  partnership: "Partnership",
+  llc: "LLC",
+  trust: "Trust",
+  estate: "Estate",
+  nonprofit: "Nonprofit",
+};
+
+function entityTypeLabel(type: string): string {
+  return ENTITY_TYPE_LABELS[type] ?? type;
+}
+
+/** Days from today to an ISO YYYY-MM-DD date (negative = overdue). */
+function daysUntil(iso: string): number {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const due = new Date(iso + "T00:00:00");
+  return Math.round((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+function relativeLabel(iso: string): string {
+  const d = daysUntil(iso);
+  if (d < 0) return `${Math.abs(d)}d overdue`;
+  if (d === 0) return "Today";
+  if (d === 1) return "Tomorrow";
+  if (d <= 30) return `in ${d}d`;
+  if (d <= 90) return `in ${Math.round(d / 7)}w`;
+  if (d <= 365) return `in ${Math.round(d / 30)}mo`;
+  return `in ${Math.round(d / 365)}y`;
+}
+
+function urgencyTextClass(iso: string): string {
+  const d = daysUntil(iso);
+  if (d <= 3) return "text-[var(--color-priority-urgent)]";
+  if (d <= 14) return "text-[var(--color-priority-high)]";
+  if (d <= 30) return "text-[var(--color-priority-medium)]";
+  if (d <= 90) return "text-emerald-600 dark:text-emerald-400";
+  if (d <= 180) return "text-sky-600 dark:text-sky-400";
+  return "text-muted-foreground";
+}
+
+function formatShortDate(iso: string): string {
+  const d = new Date(iso + "T00:00:00");
+  // Include year if not the current year — keeps "Apr 15 '27" readable
+  // without the year cluttering the common same-year case.
+  const now = new Date();
+  const sameYear = d.getFullYear() === now.getFullYear();
+  return d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    ...(sameYear ? {} : { year: "2-digit" }),
+  });
+}
 
 export function ClientsList({ clients }: { clients: ClientWithEntityCount[] }) {
   const router = useRouter();
@@ -140,8 +229,10 @@ function ClientRow({
   // When in merge mode, the whole row is a click target for toggle. When not
   // in merge mode, it's a Link to the client detail page. We render two
   // different wrappers to keep the semantics right for keyboard/screen-reader.
+  const { initials, colorClass } = avatarStyle(client.name);
+  const extraEntities = Math.max(0, client.entityCount - 1);
   const inner = (
-    <div className="flex items-center gap-4">
+    <div className="flex items-center gap-3">
       {mergeMode ? (
         <Checkbox
           checked={selected}
@@ -150,54 +241,87 @@ function ClientRow({
           onClick={(e) => e.stopPropagation()}
         />
       ) : (
-        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary">
-          <Users className="h-4 w-4" />
+        <div
+          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${colorClass}`}
+          aria-hidden
+        >
+          {initials}
         </div>
       )}
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <div className="truncate font-medium">{client.name}</div>
-          {client.entityCount > 0 ? (
-            <Badge variant="outline" className="text-[11px]">
-              {client.entityCount}{" "}
-              {client.entityCount === 1 ? "entity" : "entities"}
-            </Badge>
-          ) : (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="truncate font-semibold">{client.name}</span>
+          {/* Primary entity type + state as inline chips. For multi-
+              entity clients, show "+N more" rather than pretending the
+              first entity's type covers all of them. No-entity clients
+              get an amber warning chip — that's a real "you should fix
+              this" state, not just a count of zero. */}
+          {client.entityCount === 0 ? (
             <Badge variant="outline" className="text-[11px] text-amber-700">
               No entities
             </Badge>
+          ) : (
+            <>
+              {client.primaryEntityType ? (
+                <Badge variant="outline" className="text-[11px]">
+                  {entityTypeLabel(client.primaryEntityType)}
+                </Badge>
+              ) : null}
+              {client.primaryHomeState ? (
+                <Badge variant="outline" className="font-mono text-[11px]">
+                  {client.primaryHomeState}
+                </Badge>
+              ) : null}
+              {extraEntities > 0 ? (
+                <Badge
+                  variant="outline"
+                  className="text-[11px] text-muted-foreground"
+                >
+                  +{extraEntities} more
+                </Badge>
+              ) : null}
+            </>
           )}
         </div>
         {client.primaryContactEmail ? (
-          <div className="text-xs text-muted-foreground">
+          <div className="mt-0.5 truncate text-xs text-muted-foreground">
             {client.primaryContactEmail}
           </div>
         ) : null}
       </div>
-      {/* Right-side stat — open work for this client at a glance.
-          Tinted red when there are active items so the eye lands on
-          high-load clients first. Suppressed when 0 (no entities or all
-          filed) so the row stays clean. */}
-      {client.activeDeadlineCount > 0 ? (
-        <div className="hidden flex-col items-end leading-tight sm:flex">
-          <span
-            className={`text-sm font-semibold ${
-              client.activeDeadlineCount >= 10
-                ? "text-[var(--color-priority-urgent)]"
-                : client.activeDeadlineCount >= 5
-                ? "text-[var(--color-priority-high)]"
-                : "text-foreground"
-            }`}
+      {/* Right-side stat block — next deadline date + relative time
+          (urgency-colored) + open count. Far more useful than the old
+          standalone "16 OPEN" red number, which told the CPA the
+          weight of the client but nothing about *when* they need to
+          act. The relative chip ("Today" / "in 7w") carries the
+          urgency tier; the date underneath gives the absolute anchor;
+          the urgent count is highlighted only when non-zero. */}
+      {client.activeDeadlineCount > 0 && client.nextDueDate ? (
+        <div className="hidden shrink-0 text-right leading-tight sm:block">
+          <div
+            className={`font-mono text-[11px] font-bold uppercase tracking-wider ${urgencyTextClass(client.nextDueDate)}`}
           >
-            {client.activeDeadlineCount}
-          </span>
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-            open
-          </span>
+            {relativeLabel(client.nextDueDate)}
+          </div>
+          <div className="mt-0.5 text-[11px] text-muted-foreground">
+            {formatShortDate(client.nextDueDate)} ·{" "}
+            {client.urgentCount > 0 ? (
+              <>
+                <span className="font-semibold text-[var(--color-priority-urgent)]">
+                  {client.urgentCount} urgent
+                </span>{" "}
+                of {client.activeDeadlineCount}
+              </>
+            ) : (
+              <span>{client.activeDeadlineCount} open</span>
+            )}
+          </div>
         </div>
       ) : (
-        <div className="hidden text-xs text-muted-foreground sm:block">
-          Added {client.createdAt.toLocaleDateString()}
+        <div className="hidden shrink-0 text-xs text-muted-foreground sm:block">
+          {client.activeDeadlineCount === 0 && client.entityCount > 0
+            ? "All clear"
+            : `Added ${client.createdAt.toLocaleDateString()}`}
         </div>
       )}
     </div>

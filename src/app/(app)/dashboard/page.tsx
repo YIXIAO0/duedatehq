@@ -1,27 +1,10 @@
 import Link from "next/link";
 import { Suspense } from "react";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import {
-  Plus,
-  Calendar,
-  CheckCircle2,
-  AlertCircle,
-  AlertTriangle,
-  FileSpreadsheet,
-  Bell,
-} from "lucide-react";
 import { getCurrentContext } from "@/lib/auth/current-org";
-import {
-  getDashboardStats,
-  listDashboardDeadlines,
-} from "@/lib/services/deadline-engine";
+import { listDashboardDeadlines } from "@/lib/services/deadline-engine";
+import { listClientsWithEntityCount } from "@/lib/services/clients";
 import { listAnnouncementsWithImpact } from "@/lib/services/announcements";
+import { listMembers } from "@/lib/services/team";
 import {
   DashboardClient,
   type DashboardDeadline,
@@ -29,43 +12,16 @@ import {
 
 export default function DashboardPage() {
   return (
-    <div className="mx-auto w-full max-w-7xl px-6 py-8">
-      <div className="mb-8 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-        </div>
-        <div className="flex gap-2">
-          <Button asChild variant="outline">
-            <Link href="/clients/import">
-              <FileSpreadsheet className="mr-2 h-4 w-4" /> Import
-            </Link>
-          </Button>
-          <Button asChild>
-            <Link href="/clients/new">
-              <Plus className="mr-2 h-4 w-4" /> Add client
-            </Link>
-          </Button>
-        </div>
-      </div>
-
-      {/* IRS-update inline card — only renders when there's actual signal
-          (score ≥4 in the last 7 days). Suspense lets the page paint
-          without waiting for the announcements query.
-          Sits above stats because "what changed" beats "what's coming up"
-          for the first read of the morning. */}
+    <div className="mx-auto w-full max-w-[1200px] px-8 py-8">
+      {/* Page-level Import / Add-client buttons live inside the chips row
+          rendered by DashboardClient now — the chrome stays together. */}
       <Suspense fallback={null}>
         <DashboardAnnouncements />
       </Suspense>
 
-      <Suspense fallback={<StatsSkeleton />}>
-        <DashboardStats />
+      <Suspense fallback={<DeadlinesSkeleton />}>
+        <UpcomingDeadlines />
       </Suspense>
-
-      <div className="mt-8">
-        <Suspense fallback={<DeadlinesSkeleton />}>
-          <UpcomingDeadlines />
-        </Suspense>
-      </div>
     </div>
   );
 }
@@ -124,134 +80,97 @@ async function DashboardAnnouncements() {
   return (
     <Link
       href="/announcements"
-      className="mb-5 flex items-center gap-3 rounded-md border border-sky-200 bg-sky-50/60 px-4 py-2.5 transition-colors hover:bg-sky-50 dark:border-sky-900/50 dark:bg-sky-950/30 dark:hover:bg-sky-950/50"
+      className="mb-6 flex items-center gap-3 rounded-2xl bg-card px-4 py-3 shadow-card transition-colors hover:bg-muted/30"
     >
-      <Bell className="h-4 w-4 shrink-0 text-sky-700 dark:text-sky-400" />
-      <span className="flex-1 text-sm">
-        <span className="font-semibold text-sky-900 dark:text-sky-100">
-          {pending.length} IRS {announcementWord}
+      <span
+        className="w-7 h-7 rounded-xl flex items-center justify-center text-white text-[14px]"
+        style={{
+          background: "linear-gradient(135deg, #FF7B7B, #FFB85C)",
+        }}
+      >
+        ⚑
+      </span>
+      <span className="flex-1 text-[14px]">
+        <span className="font-semibold text-foreground">
+          {pending.length} tax {announcementWord}
         </span>
-        <span className="ml-1 text-sky-800/80 dark:text-sky-200/80">
+        <span className="ml-1 text-muted-foreground">
           may affect {clientPhrase} on your list.
         </span>
       </span>
-      <span className="text-xs font-medium text-sky-700 dark:text-sky-400">
+      <span
+        className="text-[13px] font-medium"
+        style={{ color: "var(--client-rose)" }}
+      >
         Review →
       </span>
     </Link>
   );
 }
 
-async function DashboardStats() {
-  const ctx = await getCurrentContext();
-  const stats = await getDashboardStats(ctx.organization.id);
-
-  return (
-    <div className="grid gap-4 md:grid-cols-4">
-      <StatCard
-        title="Due this week"
-        value={stats.thisWeek}
-        icon={
-          <AlertCircle className="h-5 w-5 text-[var(--color-priority-urgent)]" />
-        }
-        highlight={stats.thisWeek > 0}
-      />
-      <StatCard
-        title="Due this month"
-        value={stats.thisMonth}
-        icon={
-          <Calendar className="h-5 w-5 text-[var(--color-priority-high)]" />
-        }
-      />
-      <StatCard
-        title="Overdue"
-        value={stats.overdue}
-        icon={
-          <AlertTriangle className="h-5 w-5 text-[var(--color-priority-urgent)]" />
-        }
-        highlight={stats.overdue > 0}
-      />
-      <StatCard
-        title="Completed (30d)"
-        value={stats.completed}
-        icon={
-          <CheckCircle2 className="h-5 w-5 text-[var(--color-priority-done)]" />
-        }
-      />
-    </div>
-  );
-}
-
 async function UpcomingDeadlines() {
   const ctx = await getCurrentContext();
-  // Fetch first page (100 rows) server-side for fast initial paint.
-  // Filter changes + Load More run via /api/deadlines/list.
-  const rows = await listDashboardDeadlines({
-    orgId: ctx.organization.id,
-    daysAhead: 60,
-    limit: 100,
-    offset: 0,
-  });
+  // Parallelize: deadlines (for the agenda) and clients (for the sidebar
+  // quick-list). Both keyed off the same org so they stream together.
+  const [rows, clients, members] = await Promise.all([
+    listDashboardDeadlines({
+      orgId: ctx.organization.id,
+      daysAhead: 60,
+      limit: 100,
+      offset: 0,
+    }),
+    listClientsWithEntityCount({
+      orgId: ctx.organization.id,
+      limit: 50,
+      offset: 0,
+      includeArchived: false,
+    }),
+    // Org members — drives the owner-filter ("Mine" vs everyone) and the
+    // owner picker on the deadline detail page. Solo orgs (1 member)
+    // skip the filter chrome entirely; multi-member orgs default to the
+    // current user's view.
+    listMembers(ctx.organization.id),
+  ]);
   const hasMore = rows.length === 100;
+  // Order clients by open-deadline count desc so the busiest names sit
+  // at the top of the sidebar — the CPA's working set, not just the
+  // most recently added.
+  const sortedClients = clients
+    .slice()
+    .sort((a, b) => b.activeDeadlineCount - a.activeDeadlineCount)
+    .map((c) => ({
+      id: c.id,
+      name: c.name,
+      activeDeadlineCount: c.activeDeadlineCount,
+    }));
+  const memberSummaries = members.map((m) => ({
+    userId: m.user.id,
+    fullName: m.user.fullName,
+    email: m.user.email,
+  }));
+
   return (
     <DashboardClient
       initialDeadlines={rows as unknown as DashboardDeadline[]}
       initialHasMore={hasMore}
+      clients={sortedClients}
+      currentUserId={ctx.user.id}
+      members={memberSummaries}
     />
-  );
-}
-
-
-function StatCard({
-  title,
-  value,
-  icon,
-  highlight,
-}: {
-  title: string;
-  value: number;
-  icon: React.ReactNode;
-  highlight?: boolean;
-}) {
-  return (
-    <Card
-      className={
-        highlight
-          ? "border-[var(--color-priority-urgent)]/40"
-          : undefined
-      }
-    >
-      <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">
-          {title}
-        </CardTitle>
-        {icon}
-      </CardHeader>
-      <CardContent>
-        <div className="text-3xl font-semibold">{value}</div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function StatsSkeleton() {
-  return (
-    <div className="grid gap-4 md:grid-cols-4">
-      {Array.from({ length: 4 }).map((_, i) => (
-        <div
-          key={i}
-          className="h-[110px] animate-pulse rounded-lg border border-border bg-muted/40"
-        />
-      ))}
-    </div>
   );
 }
 
 function DeadlinesSkeleton() {
   return (
-    <div className="space-y-2">
-      <div className="h-6 w-48 animate-pulse rounded bg-muted" />
-      <div className="h-[400px] animate-pulse rounded-lg border border-border bg-muted/40" />
+    <div className="space-y-6">
+      <div className="h-12 animate-pulse rounded-full bg-muted/40" />
+      <div className="h-16 animate-pulse rounded-2xl bg-muted/40" />
+      <div className="grid grid-cols-3 gap-4">
+        <div className="h-32 animate-pulse rounded-2xl bg-muted/40" />
+        <div className="h-32 animate-pulse rounded-2xl bg-muted/40" />
+        <div className="h-32 animate-pulse rounded-2xl bg-muted/40" />
+      </div>
+      <div className="h-[480px] animate-pulse rounded-3xl bg-muted/40" />
     </div>
   );
 }

@@ -354,6 +354,16 @@ export const ListDashboardInputSchema = z.object({
   jurisdictionCode: z.string().default("all"),
   entityType: z.string().default("all"),
   status: z.enum(["active", "extended_only"]).default("active"),
+  // Free-text narrow — case-insensitive contains-match against client name,
+  // entity name, form code, and rule title. Undefined / empty means no
+  // search applied.
+  search: z.string().min(1).max(200).optional(),
+  /**
+   * Scope to deadlines owned by a specific user. Special value
+   * "unassigned" maps to NULL owner. Undefined means no owner filter
+   * (all deadlines visible regardless of assignment).
+   */
+  ownerFilter: z.string().min(1).optional(),
 });
 export type ListDashboardInput = z.input<typeof ListDashboardInputSchema>;
 
@@ -375,10 +385,15 @@ export async function listDashboardDeadlines(input: ListDashboardInput) {
   })();
 
   // Build WHERE clause dynamically using conditional fragments.
+  // "extended_only" filter narrows to deadlines that have had an
+  // extension filed against them. is_extended is a real boolean column
+  // now (used to be the status='extended' check before the 4-status
+  // refactor). Workflow filter "active" is the union of the 3 open
+  // workflow statuses — extended rows already sit inside in_progress.
   const statusWhere =
     parsed.status === "extended_only"
-      ? sql`di.status = 'extended'`
-      : sql`di.status IN ('pending', 'waiting_on_client', 'in_progress', 'ready_to_file', 'extended')`;
+      ? sql`di.is_extended = true AND di.status != 'completed'`
+      : sql`di.status IN ('pending', 'waiting_on_client', 'in_progress')`;
 
   const urgencyWhere =
     parsed.urgency === "urgent"
@@ -397,6 +412,30 @@ export async function listDashboardDeadlines(input: ListDashboardInput) {
       ? sql``
       : sql`AND e.entity_type::text = ${parsed.entityType}`;
 
+  // Owner narrow — "unassigned" maps to IS NULL; an actual user id
+  // filters to deadlines owned by that user. Undefined skips the filter.
+  const ownerWhere = parsed.ownerFilter
+    ? parsed.ownerFilter === "unassigned"
+      ? sql`AND di.owner_user_id IS NULL`
+      : sql`AND di.owner_user_id = ${parsed.ownerFilter}`
+    : sql``;
+
+  // Free-text search — escape SQL LIKE wildcards so a CPA pasting
+  // "Tan_Fund%" treats those as literal characters, not LIKE patterns.
+  // The pattern is built once and reused across 4 ILIKE branches.
+  const searchWhere = parsed.search
+    ? (() => {
+        const escaped = parsed.search!.replace(/\\/g, "\\\\").replace(/[%_]/g, "\\$&");
+        const pattern = `%${escaped}%`;
+        return sql`AND (
+          c.name ILIKE ${pattern}
+          OR e.name ILIKE ${pattern}
+          OR r.form_code ILIKE ${pattern}
+          OR r.title ILIKE ${pattern}
+        )`;
+      })()
+    : sql``;
+
   const rows = await db.execute<{
     id: string;
     due_date: string;
@@ -414,6 +453,9 @@ export async function listDashboardDeadlines(input: ListDashboardInput) {
     jurisdiction_code: string;
     irrevocable: boolean;
     is_extended: boolean;
+    owner_user_id: string | null;
+    owner_full_name: string | null;
+    owner_email: string | null;
   }>(sql`
     SELECT
       di.id,
@@ -431,17 +473,23 @@ export async function listDashboardDeadlines(input: ListDashboardInput) {
       r.title AS rule_title,
       r.jurisdiction_code,
       r.irrevocable,
-      (di.status = 'extended') AS is_extended
+      di.is_extended,
+      di.owner_user_id,
+      ow.full_name AS owner_full_name,
+      ow.email AS owner_email
     FROM deadline_instances di
     INNER JOIN entities e ON e.id = di.entity_id
     INNER JOIN clients c ON c.id = e.client_id
     INNER JOIN deadline_rules r ON r.id = di.rule_id
+    LEFT JOIN users ow ON ow.id = di.owner_user_id
     WHERE di.org_id = ${parsed.orgId}
       AND COALESCE(di.extension_due_date, di.due_date) BETWEEN ${today} AND ${future}
       AND ${statusWhere}
       ${urgencyWhere}
       ${jurisdictionWhere}
       ${entityTypeWhere}
+      ${ownerWhere}
+      ${searchWhere}
     ORDER BY effective_due_date ASC, r.irrevocable DESC, di.id ASC
     LIMIT ${parsed.limit}
     OFFSET ${parsed.offset}
@@ -467,15 +515,15 @@ export async function getDashboardStats(orgId: string) {
     SELECT
       COUNT(*) FILTER (
         WHERE COALESCE(extension_due_date, due_date) BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '7 days'
-        AND status IN ('pending', 'waiting_on_client', 'in_progress', 'ready_to_file', 'extended')
+        AND status IN ('pending', 'waiting_on_client', 'in_progress')
       ) AS this_week,
       COUNT(*) FILTER (
         WHERE COALESCE(extension_due_date, due_date) BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '30 days'
-        AND status IN ('pending', 'waiting_on_client', 'in_progress', 'ready_to_file', 'extended')
+        AND status IN ('pending', 'waiting_on_client', 'in_progress')
       ) AS this_month,
       COUNT(*) FILTER (
         WHERE COALESCE(extension_due_date, due_date) < CURRENT_DATE
-        AND status IN ('pending', 'waiting_on_client', 'in_progress', 'ready_to_file', 'extended')
+        AND status IN ('pending', 'waiting_on_client', 'in_progress')
       ) AS overdue,
       COUNT(*) FILTER (
         WHERE status = 'completed'

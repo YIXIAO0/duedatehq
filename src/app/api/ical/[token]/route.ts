@@ -78,7 +78,7 @@ export async function GET(
       const summary =
         d.status === "completed"
           ? `[Filed] ${d.formCode} — ${d.clientName}`
-          : d.status === "extended"
+          : d.isExtended
           ? `[Ext] ${d.formCode} — ${d.clientName}`
           : `${d.formCode} — ${d.clientName}`;
 

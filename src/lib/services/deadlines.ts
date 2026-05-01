@@ -14,7 +14,7 @@ import "server-only";
 import { z } from "zod";
 import { and, asc, eq, gte, lte, ne, sql } from "drizzle-orm";
 import { getDb } from "@/lib/db";
-import { deadlineInstances } from "@/lib/db/schema";
+import { deadlineInstances, memberships } from "@/lib/db/schema";
 import { recordAudit } from "./audit";
 import { nextBusinessDay } from "@/lib/dates/business-days";
 
@@ -66,7 +66,6 @@ export async function listUpcoming(input: ListUpcomingInput) {
         gte(deadlineInstances.dueDate, from),
         lte(deadlineInstances.dueDate, to),
         ne(deadlineInstances.status, "completed"),
-        ne(deadlineInstances.status, "not_applicable"),
       ),
     )
     .orderBy(asc(deadlineInstances.dueDate))
@@ -131,7 +130,7 @@ export async function markCompleted(input: MarkCompletedInput) {
       originalDueDate: row.dueDate,
       effectiveDueDate: row.extensionDueDate ?? row.dueDate,
       previousStatus: pre.status,
-      wasExtended: pre.status === "extended",
+      wasExtended: pre.isExtended === true,
       completedAt: row.completedAt?.toISOString(),
     },
   });
@@ -140,7 +139,98 @@ export async function markCompleted(input: MarkCompletedInput) {
 }
 
 // ---------------------------------------------------------------------------
-// File extension — marks original as "extended" with a new effective due date
+// Assign owner — sets / clears the deadline's responsible member. NULL
+// means "unassigned, in queue". Caller is presumed authorized via the
+// org-scoped server action; we re-check that the target user is a
+// member of the org so a tampered request can't pin ownership to
+// someone outside the workspace.
+// ---------------------------------------------------------------------------
+
+export const AssignDeadlineInputSchema = z.object({
+  deadlineInstanceId: z.string(),
+  orgId: z.string(),
+  /** Null clears the assignment (= "unassigned"). */
+  ownerUserId: z.string().nullable(),
+  actorType: z.enum(["user", "agent", "cron", "system"]).default("user"),
+  actorId: z.string().nullable().default(null),
+});
+export type AssignDeadlineInput = z.input<typeof AssignDeadlineInputSchema>;
+
+export async function assignDeadline(input: AssignDeadlineInput) {
+  const parsed = AssignDeadlineInputSchema.parse(input);
+  const db = getDb();
+
+  // Verify deadline exists in this org first — defends against a tampered
+  // deadlineInstanceId pointing at another tenant.
+  const [pre] = await db
+    .select()
+    .from(deadlineInstances)
+    .where(
+      and(
+        eq(deadlineInstances.id, parsed.deadlineInstanceId),
+        eq(deadlineInstances.orgId, parsed.orgId),
+      ),
+    )
+    .limit(1);
+  if (!pre) {
+    throw new Error(
+      `Deadline ${parsed.deadlineInstanceId} not found in org ${parsed.orgId}`,
+    );
+  }
+
+  // If assigning a user, verify they're a member of this org. NULL skips.
+  if (parsed.ownerUserId) {
+    const [member] = await db
+      .select({ id: memberships.id })
+      .from(memberships)
+      .where(
+        and(
+          eq(memberships.orgId, parsed.orgId),
+          eq(memberships.userId, parsed.ownerUserId),
+        ),
+      )
+      .limit(1);
+    if (!member) {
+      throw new Error(
+        `User ${parsed.ownerUserId} is not a member of org ${parsed.orgId}`,
+      );
+    }
+  }
+
+  // No-op when the target value matches — saves a write + an audit row.
+  if (pre.ownerUserId === parsed.ownerUserId) return pre;
+
+  const [row] = await db
+    .update(deadlineInstances)
+    .set({ ownerUserId: parsed.ownerUserId, updatedAt: new Date() })
+    .where(eq(deadlineInstances.id, parsed.deadlineInstanceId))
+    .returning();
+
+  await recordAudit({
+    orgId: parsed.orgId,
+    actorType: parsed.actorType,
+    actorId: parsed.actorId,
+    action:
+      parsed.ownerUserId === null
+        ? "deadline.unassigned"
+        : "deadline.assigned",
+    targetType: "deadline_instance",
+    targetId: row.id,
+    payload: {
+      previousOwnerUserId: pre.ownerUserId,
+      newOwnerUserId: parsed.ownerUserId,
+    },
+  });
+
+  return row;
+}
+
+// ---------------------------------------------------------------------------
+// File extension — marks the deadline as extended (is_extended=true) and
+// stores the new effective due date. Workflow status is preserved: the
+// CPA still has to progress pending → in_progress → completed against
+// the new extensionDueDate. Before the 4-status refactor this used to
+// flip status to "extended", which conflated date-shift with workflow.
 // ---------------------------------------------------------------------------
 
 export const FileExtensionInputSchema = z.object({
@@ -189,7 +279,7 @@ export async function fileExtension(input: FileExtensionInput) {
   const [row] = await db
     .update(deadlineInstances)
     .set({
-      status: "extended",
+      isExtended: true,
       extensionFiledAt: new Date(),
       extensionDueDate: finalDueDate,
       notes: parsed.notes,
@@ -219,7 +309,8 @@ export async function fileExtension(input: FileExtensionInput) {
     payload: {
       originalDueDate: row.dueDate,
       previousExtensionDueDate: pre.extensionDueDate, // null on first extension
-      previousStatus: pre.status, // "pending" first time, "extended" if stacking
+      previousStatus: pre.status,
+      previousIsExtended: pre.isExtended,
       // newDueDate captures what's actually stored. requestedDueDate
       // is what the CPA typed — when they differ, businessDayShift
       // tells the timeline the IRS-rule shift kicked in.
@@ -227,7 +318,7 @@ export async function fileExtension(input: FileExtensionInput) {
       requestedDueDate: parsed.newDueDate,
       businessDayShift: shift.shifted ? shift.reason : null,
       extensionFiledAt: row.extensionFiledAt?.toISOString(),
-      isReExtension: pre.status === "extended",
+      isReExtension: pre.isExtended === true,
     },
   });
 
@@ -366,21 +457,19 @@ export async function reopenDeadline(input: MarkCompletedInput) {
 // ---------------------------------------------------------------------------
 // Workflow-status setter — for the "soft" states that aren't tied to
 // a concrete event (mark-completed / file-extension are their own
-// actions). Currently used by:
+// actions). Used by:
+//   - pending             "Not started yet"
 //   - waiting_on_client   "I'm blocked on the client sending docs"
 //   - in_progress         "I'm working on it"
-//   - ready_to_file       "Done my work, awaiting signature/e-file ack"
 //
-// Refuses to set terminal states (completed/extended/missed) — those
-// have richer event-bearing actions (markCompleted / fileExtension)
-// that the caller should use instead.
+// Refuses to set "completed" — that has the richer markCompleted action
+// (which captures completedAt + actor metadata).
 // ---------------------------------------------------------------------------
 
 const WORKFLOW_STATUSES = [
   "pending",
   "waiting_on_client",
   "in_progress",
-  "ready_to_file",
 ] as const;
 
 export const SetDeadlineStatusInputSchema = z.object({
@@ -412,15 +501,13 @@ export async function setDeadlineStatus(input: SetDeadlineStatusInput) {
     );
   }
 
-  // Defensive: don't let this back-track from completed/extended into a
-  // workflow state silently. The caller should use reopenDeadline first.
-  if (
-    pre.status === "completed" ||
-    pre.status === "extended" ||
-    pre.status === "missed"
-  ) {
+  // Defensive: don't let this back-track from completed silently. Caller
+  // should use reopenDeadline. Extended deadlines stay workable — the
+  // CPA still has to file against the new extensionDueDate, and missed
+  // is computed at query time so it never appears as a stored status.
+  if (pre.status === "completed") {
     throw new Error(
-      `Cannot set workflow status on a ${pre.status} deadline. Reopen first.`,
+      "Cannot set workflow status on a completed deadline. Reopen first.",
     );
   }
 
@@ -472,6 +559,10 @@ export async function getDeadlineDetail(
     completed_by_actor_type: string | null;
     extension_filed_at: string | null;
     extension_due_date: string | null;
+    is_extended: boolean;
+    owner_user_id: string | null;
+    owner_full_name: string | null;
+    owner_email: string | null;
     notes: string | null;
     created_at: string;
     updated_at: string;
@@ -503,6 +594,10 @@ export async function getDeadlineDetail(
       di.completed_by_actor_type,
       di.extension_filed_at,
       di.extension_due_date,
+      di.is_extended,
+      di.owner_user_id,
+      ow.full_name AS owner_full_name,
+      ow.email AS owner_email,
       di.notes,
       di.created_at,
       di.updated_at,
@@ -524,6 +619,7 @@ export async function getDeadlineDetail(
     INNER JOIN deadline_rules r ON r.id = di.rule_id
     INNER JOIN entities e ON e.id = di.entity_id
     INNER JOIN clients c ON c.id = e.client_id
+    LEFT JOIN users ow ON ow.id = di.owner_user_id
     WHERE di.id = ${deadlineInstanceId}
       AND di.org_id = ${orgId}
     LIMIT 1
@@ -556,6 +652,7 @@ export type ClientDeadlineRow = {
   dueDate: string;
   effectiveDueDate: string;
   status: string;
+  isExtended: boolean;
   notes: string | null;
   formCode: string;
   ruleTitle: string;
@@ -587,15 +684,14 @@ export async function listDeadlinesForClient(args: {
   const includeFiled = args.includeFiled ?? false;
   const withinDays = args.withinDays;
 
-  // The five "open" statuses must match the count on /clients (the
-  // listing page). When Round A added waiting_on_client and
-  // ready_to_file, this filter wasn't updated and the two pages
-  // disagreed on what "open" meant — a client with deadlines in
-  // waiting_on_client showed N on /clients but N - (those) on the
-  // detail page. Keep all five in lock-step here.
+  // The 3 "open" workflow statuses — must match the count on /clients
+  // (the listing page) so both views agree on what "open" means. After
+  // the 4-status refactor, extended deadlines are inside in_progress
+  // (with isExtended=true), missed is computed, and ready_to_file is
+  // gone. Three values cover everything that's not "completed".
   const statusFilter = includeFiled
     ? sql``
-    : sql`AND di.status IN ('pending', 'waiting_on_client', 'in_progress', 'ready_to_file', 'extended')`;
+    : sql`AND di.status IN ('pending', 'waiting_on_client', 'in_progress')`;
 
   // Window only applies when a caller explicitly opts in. No cap by
   // default — the open count is a true portfolio metric, not a
@@ -614,6 +710,7 @@ export async function listDeadlinesForClient(args: {
     due_date: string;
     effective_due_date: string;
     status: string;
+    is_extended: boolean;
     notes: string | null;
     form_code: string;
     rule_title: string;
@@ -629,6 +726,7 @@ export async function listDeadlinesForClient(args: {
       di.due_date::text AS due_date,
       COALESCE(di.extension_due_date, di.due_date)::text AS effective_due_date,
       di.status::text AS status,
+      di.is_extended,
       di.notes,
       r.form_code,
       r.title AS rule_title,
@@ -655,6 +753,7 @@ export async function listDeadlinesForClient(args: {
     dueDate: r.due_date,
     effectiveDueDate: r.effective_due_date,
     status: r.status,
+    isExtended: r.is_extended,
     notes: r.notes,
     formCode: r.form_code,
     ruleTitle: r.rule_title,
@@ -683,6 +782,7 @@ export type OrgIcalDeadlineRow = {
   id: string;
   effectiveDueDate: string;
   status: string;
+  isExtended: boolean;
   notes: string | null;
   formCode: string;
   ruleTitle: string;
@@ -700,6 +800,7 @@ export async function listDeadlinesForOrgIcal(args: {
     id: string;
     effective_due_date: string;
     status: string;
+    is_extended: boolean;
     notes: string | null;
     form_code: string;
     rule_title: string;
@@ -712,6 +813,7 @@ export async function listDeadlinesForOrgIcal(args: {
       di.id,
       COALESCE(di.extension_due_date, di.due_date)::text AS effective_due_date,
       di.status::text AS status,
+      di.is_extended,
       di.notes,
       r.form_code,
       r.title AS rule_title,
@@ -726,7 +828,6 @@ export async function listDeadlinesForOrgIcal(args: {
     WHERE di.org_id = ${args.orgId}
       AND e.archived_at IS NULL
       AND c.archived_at IS NULL
-      AND di.status NOT IN ('not_applicable', 'missed')
       AND COALESCE(di.extension_due_date, di.due_date)
           BETWEEN (CURRENT_DATE - INTERVAL '14 days')
           AND     (CURRENT_DATE + INTERVAL '365 days')
@@ -741,6 +842,7 @@ export async function listDeadlinesForOrgIcal(args: {
     id: r.id,
     effectiveDueDate: r.effective_due_date,
     status: r.status,
+    isExtended: r.is_extended,
     notes: r.notes,
     formCode: r.form_code,
     ruleTitle: r.rule_title,

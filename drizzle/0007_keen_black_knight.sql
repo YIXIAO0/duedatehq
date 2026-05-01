@@ -1,0 +1,3 @@
+ALTER TABLE "deadline_instances" ADD COLUMN "owner_user_id" text;--> statement-breakpoint
+ALTER TABLE "deadline_instances" ADD CONSTRAINT "deadline_instances_owner_user_id_users_id_fk" FOREIGN KEY ("owner_user_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "deadline_instances_org_owner_idx" ON "deadline_instances" USING btree ("org_id","owner_user_id");

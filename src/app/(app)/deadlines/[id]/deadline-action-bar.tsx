@@ -55,11 +55,6 @@ const WORKFLOW_OPTIONS: { value: WorkflowStatus; label: string; hint: string }[]
     hint: "Blocked on docs or signature",
   },
   { value: "in_progress", label: "In progress", hint: "Actively working on it" },
-  {
-    value: "ready_to_file",
-    label: "Ready to file",
-    hint: "Done — awaiting e-file acknowledgement",
-  },
 ];
 
 function isWorkflowStatus(s: string): s is WorkflowStatus {
@@ -118,9 +113,9 @@ export function DeadlineActionBar({
   }
 
   // Workflow status dropdown only makes sense for non-terminal states.
-  // For "extended" we still allow the CPA to move through pending →
-  // waiting_on_client → ... so we render it; we just exclude completed
-  // (which already early-returned above).
+  // Completed already early-returned above. Extended deadlines (now an
+  // is_extended flag, not a status) flow through the same pending →
+  // waiting_on_client → in_progress workflow against their new due date.
   const currentWorkflow: WorkflowStatus | null = isWorkflowStatus(status)
     ? status
     : null;

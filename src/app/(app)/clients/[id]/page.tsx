@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Fragment, Suspense } from "react";
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { and, eq } from "drizzle-orm";
 import { Button } from "@/components/ui/button";
@@ -12,13 +12,20 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
   ArrowLeft,
   Building2,
   User as UserIcon,
   CheckCircle2,
   AlertTriangle,
   Calendar,
+  ChevronRight,
   Clock,
+  StickyNote,
 } from "lucide-react";
 import { getCurrentContext } from "@/lib/auth/current-org";
 import { getDb } from "@/lib/db";
@@ -148,7 +155,7 @@ async function ClientDetail({
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">{client.name}</h1>
-          <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+          <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
             {client.primaryContactEmail ? (
               <span>{client.primaryContactEmail}</span>
             ) : null}
@@ -156,12 +163,31 @@ async function ClientDetail({
               <span>{client.primaryContactPhone}</span>
             ) : null}
             <span>Added {new Date(client.createdAt).toLocaleDateString()}</span>
+            {client.notes ? (
+              // Plain text-link in the metadata row — same visual
+              // weight as email / phone, dotted underline signals it
+              // resolves more on click. Lucide icon (not emoji) keeps
+              // the row consistent with the rest of the app's chrome.
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className="inline-flex cursor-pointer items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    <StickyNote className="h-3.5 w-3.5" aria-hidden />
+                    <span className="underline decoration-dotted underline-offset-4">
+                      Note
+                    </span>
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent align="start" className="w-80 p-3">
+                  <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+                    {client.notes}
+                  </p>
+                </PopoverContent>
+              </Popover>
+            ) : null}
           </div>
-          {client.notes ? (
-            <p className="mt-3 max-w-2xl rounded border border-border bg-muted/30 p-3 text-sm">
-              {client.notes}
-            </p>
-          ) : null}
         </div>
         {/* Single ⋯ menu — Edit / Calendar PDF / Archive all live in there.
             Cleaner header now that deadlines are the prominent section. */}
@@ -315,50 +341,113 @@ function DeadlinesSection({
           Earliest first · filed history not shown
         </span>
       </div>
-      <div className="overflow-hidden rounded-lg border border-border">
-        <div className="divide-y divide-border">
-          {nearStreaks.map((streak) => (
-            <Fragment key={streak.date}>
-              <DateSubheader
+      {/* Timeline-rail layout (T4 "floating card stations"): every date
+          is a self-contained card hanging off a left-side vertical rail.
+          The rail provides time-sequence continuity between dates;
+          spacing between cards lets each due date feel like a discrete
+          event rather than a row in a table.
+
+          The rail is rendered in two segments per node (above-dot and
+          below-dot) instead of a single section-spanning absolute line.
+          That keeps the rail terminating exactly at the first and last
+          dot centers — no dangling "tail" lines past the outermost
+          events — and uses Tailwind's group-first / group-last variants
+          to suppress the segments that would otherwise dangle. */}
+      <div className="relative">
+        {nearStreaks.map((streak) => (
+          <DateCard
+            key={streak.date}
+            date={streak.date}
+            rows={streak.rows}
+            showEntityCol={showEntityCol}
+          />
+        ))}
+        {farStreaks.length > 0 ? (
+          <DeadlinesCollapse
+            trailingCount={farRowCount}
+            trailingLabel={farLabel}
+          >
+            {farStreaks.map((streak) => (
+              <DateCard
+                key={streak.date}
                 date={streak.date}
-                count={streak.rows.length}
+                rows={streak.rows}
+                showEntityCol={showEntityCol}
               />
-              {streak.rows.map((d) => (
-                <DeadlineRow
-                  key={d.id}
-                  d={d}
-                  showEntityCol={showEntityCol}
-                />
-              ))}
-            </Fragment>
-          ))}
-          {farStreaks.length > 0 ? (
-            <DeadlinesCollapse
-              trailingCount={farRowCount}
-              trailingLabel={farLabel}
-            >
-              <div className="divide-y divide-border">
-                {farStreaks.map((streak) => (
-                  <Fragment key={streak.date}>
-                    <DateSubheader
-                      date={streak.date}
-                      count={streak.rows.length}
-                    />
-                    {streak.rows.map((d) => (
-                      <DeadlineRow
-                        key={d.id}
-                        d={d}
-                        showEntityCol={showEntityCol}
-                      />
-                    ))}
-                  </Fragment>
-                ))}
-              </div>
-            </DeadlinesCollapse>
-          ) : null}
-        </div>
+            ))}
+          </DeadlinesCollapse>
+        ) : null}
       </div>
     </section>
+  );
+}
+
+/**
+ * A single date "station" hanging off the timeline rail.
+ *
+ *   ●━━━┐
+ *       │ APR 30, 2026 THU                Today
+ *       │ ─────────────────────────────────
+ *       │ 941-Q1  US Federal · ...                ›
+ *
+ * The colored ribbon at the top of the card carries the date + relative
+ * time + (when applicable) deadline count. Solid urgency color when
+ * within the alarm window (≤3d / today / overdue), tinted otherwise so
+ * the eye still picks up far-future urgency tiers without the entire
+ * card screaming.
+ */
+function DateCard({
+  date,
+  rows,
+  showEntityCol,
+}: {
+  date: string;
+  rows: ClientDeadlineRow[];
+  showEntityCol: boolean;
+}) {
+  const { label, ribbonClass, dotClass } = relativeTimeRibbon(date);
+  return (
+    <div className="group/rn relative pb-4 pl-10 last:pb-0">
+      {/* Rail segment above the dot — covered by the dot's bg-ring
+          where they overlap (y=8-12 of this wrapper), visible y=0-8.
+          Hidden on the very first node so the rail doesn't dangle
+          above the earliest deadline. */}
+      <span
+        className="absolute left-[7px] top-0 h-3 w-px bg-border group-first/rn:hidden"
+        aria-hidden
+      />
+      <span
+        className={`absolute left-0 top-3 size-4 rounded-full ring-4 ring-background ${dotClass}`}
+        aria-hidden
+      />
+      {/* Rail segment below the dot — covered by ring (y=28-32),
+          visible y=32 down to wrapper bottom. Hidden on the very
+          last node so the rail terminates exactly at the last dot. */}
+      <span
+        className="absolute left-[7px] top-7 bottom-0 w-px bg-border group-last/rn:hidden"
+        aria-hidden
+      />
+      <div className="overflow-hidden rounded-md border border-border bg-card shadow-xs">
+        <div
+          className={`flex items-center gap-2 px-4 py-2 text-[11px] font-bold uppercase tracking-wider ${ribbonClass}`}
+        >
+          <span>{formatShortDate(date)}</span>
+          <span className="ml-auto font-semibold">{label}</span>
+          {rows.length > 1 ? (
+            <span className="font-medium opacity-75">· {rows.length}</span>
+          ) : null}
+        </div>
+        <div className="divide-y divide-border">
+          {rows.map((d) => (
+            <DeadlineRow
+              key={d.id}
+              d={d}
+              showEntityCol={showEntityCol}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -388,32 +477,6 @@ function humanDateShort(iso: string): string {
  *   - uppercase + tracking-wider date so the typography contrasts
  *     with the title-case form codes in the rows below
  */
-function DateSubheader({ date, count }: { date: string; count: number }) {
-  const { label, text, dot } = relativeTime(date);
-  return (
-    // `relative` + absolutely-positioned dot is intentional: keeping the
-    // dot inline (with gap-x) shifts the date text ~18px to the right,
-    // so JUN 15, 2026 in the subheader no longer aligns with the form
-    // codes in the rows below. Pulling the dot into the left padding
-    // zone restores a clean vertical column down the table.
-    <div className="relative flex items-center gap-2 bg-muted px-4 py-1.5">
-      <span
-        className={`absolute left-1.5 top-1/2 size-1.5 -translate-y-1/2 rounded-full ${dot}`}
-        aria-hidden
-      />
-      <span className="text-[11px] font-bold uppercase tracking-wider">
-        {formatShortDate(date)}
-      </span>
-      <span className={`text-[11px] font-medium ${text}`}>{label}</span>
-      {count > 1 ? (
-        <span className="ml-auto text-[10px] uppercase tracking-wider text-muted-foreground">
-          {count} deadlines
-        </span>
-      ) : null}
-    </div>
-  );
-}
-
 function DeadlineRow({
   d,
   showEntityCol,
@@ -430,15 +493,21 @@ function DeadlineRow({
   const isOverdue = days < 0;
 
   // No more dedicated date column — the DateSubheader carries it. Row
-  // just shows form code, title, optional entity sub-line, and status.
+  // just shows form code, title, optional entity sub-line, status, and
+  // a chevron telegraphing "this is clickable, drills into the deadline".
+  // hover:bg-accent uses the SF blue tint that's already in the brand —
+  // unlike hover:bg-muted (which collapses into the page background
+  // because --muted and --background are the same value).
   return (
     <Link
       href={`/deadlines/${d.id}`}
-      className="flex items-center gap-3 px-4 py-2 transition-colors hover:bg-muted/40"
+      className="group flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-foreground/5 focus-visible:bg-foreground/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
     >
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-          <span className="font-mono text-sm font-semibold">{d.formCode}</span>
+          <span className="font-mono text-sm font-semibold tracking-tight group-hover:text-accent-foreground">
+            {d.formCode}
+          </span>
           {d.irrevocable ? (
             <Badge className="bg-[var(--color-priority-urgent-bg)] text-[10px] text-[var(--color-priority-urgent)] hover:bg-[var(--color-priority-urgent-bg)]">
               Irrevocable
@@ -469,33 +538,51 @@ function DeadlineRow({
           </div>
         ) : null}
       </div>
-      <StatusBadge status={d.status} isOverdue={isOverdue} />
+      <StatusBadge
+        status={d.status}
+        isOverdue={isOverdue}
+        isExtended={d.isExtended}
+      />
+      {/* Chevron is the explicit "this row is a link" affordance.
+          Subtle by default (text-muted-foreground/40) so it doesn't
+          compete with the status badge; on hover it darkens AND
+          translates 2px right — small motion that confirms the click
+          target without being a cartoon. */}
+      <ChevronRight
+        className="h-4 w-4 shrink-0 text-muted-foreground/40 transition-all group-hover:translate-x-0.5 group-hover:text-foreground"
+        aria-hidden
+      />
     </Link>
   );
 }
 
 /**
- * Relative-time label + urgency colors for a future or past date.
+ * Relative-time label + ribbon/dot styling for the timeline-rail's
+ * DateCard.
  *
- * Returns three things so callers can pick where they want color to
- * land: `text` for the relative chip, `dot` for an indicator dot.
+ * Returns three things:
+ *   - `label` — "Today" / "Tomorrow" / "in 7w" / "5d overdue"
+ *   - `ribbonClass` — bg + text classes for the date card's top ribbon
+ *   - `dotClass` — bg color class for the rail node circle
  *
- * Two tier groups:
- *   - Urgent zone (≤30d): uses the existing priority tokens — these
- *     are the ones the CPA reacts to.
- *   - Calm zone (>30d): emerald → sky → muted as the date drifts
- *     into the future. The previous palette was muted-gray for
- *     everything past 30 days, which made urgency layers invisible
- *     when looking at a long-horizon list (e.g. all of 2027).
+ * Tier strategy:
+ *   - Alarm zone (≤3d / today / overdue): solid urgent fill, white
+ *     text — the loudest possible cell so it can't be missed when
+ *     scrolling through a long list.
+ *   - Soft zones (>3d): tinted background + matched text color.
+ *     Reads as "this exists, here's its tier" without screaming.
+ *   - Far zones (>30d): emerald → sky → muted as the date drifts
+ *     out. Previously >30d was a single muted gray, which collapsed
+ *     all future urgency layers into one undifferentiated blob.
  *
  * Day-precision is kept for ≤30d because filing crunch is measured
  * in days. Past that we switch to weeks (31-90), months (91-365),
  * and years (>365) so "in 12mo" reads naturally instead of "in 354d".
  */
-function relativeTime(iso: string): {
+function relativeTimeRibbon(iso: string): {
   label: string;
-  text: string;
-  dot: string;
+  ribbonClass: string;
+  dotClass: string;
 } {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -513,41 +600,51 @@ function relativeTime(iso: string): {
   else if (days <= 365) label = `in ${Math.round(days / 30)}mo`;
   else label = `in ${Math.round(days / 365)}y`;
 
-  let text: string;
-  let dot: string;
+  let ribbonClass: string;
+  let dotClass: string;
   if (days <= 3) {
-    text = "text-[var(--color-priority-urgent)]";
-    dot = "bg-[var(--color-priority-urgent)]";
+    // Solid alarm fill — the only tier that goes white-on-color.
+    ribbonClass =
+      "bg-[var(--color-priority-urgent)] text-white";
+    dotClass = "bg-[var(--color-priority-urgent)]";
   } else if (days <= 14) {
-    text = "text-[var(--color-priority-high)]";
-    dot = "bg-[var(--color-priority-high)]";
+    ribbonClass =
+      "bg-[var(--color-priority-high-bg)] text-[var(--color-priority-high)]";
+    dotClass = "bg-[var(--color-priority-high)]";
   } else if (days <= 30) {
-    text = "text-[var(--color-priority-medium)]";
-    dot = "bg-[var(--color-priority-medium)]";
+    ribbonClass =
+      "bg-[var(--color-priority-medium-bg)] text-[var(--color-priority-medium)]";
+    dotClass = "bg-[var(--color-priority-medium)]";
   } else if (days <= 90) {
-    // Calm green = "you have runway, don't panic"
-    text = "text-emerald-600 dark:text-emerald-400";
-    dot = "bg-emerald-500";
+    ribbonClass =
+      "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300";
+    dotClass = "bg-emerald-500";
   } else if (days <= 180) {
-    // Sky blue = "future planning bucket"
-    text = "text-sky-600 dark:text-sky-400";
-    dot = "bg-sky-500";
+    ribbonClass =
+      "bg-sky-50 text-sky-700 dark:bg-sky-950 dark:text-sky-300";
+    dotClass = "bg-sky-500";
   } else {
-    text = "text-muted-foreground";
-    dot = "bg-muted-foreground/40";
+    ribbonClass = "bg-muted text-muted-foreground";
+    dotClass = "bg-muted-foreground/40";
   }
 
-  return { label, text, dot };
+  return { label, ribbonClass, dotClass };
 }
 
 function StatusBadge({
   status,
   isOverdue,
+  isExtended,
 }: {
   status: string;
   isOverdue: boolean;
+  isExtended: boolean;
 }) {
-  if (status === "extended") {
+  // "Extended" is a date-shifted flag, not a workflow stage. It rides
+  // alongside whatever workflow status the deadline is in. Render it
+  // first so the CPA notices the date-moved signal before the workflow
+  // sub-state — it's higher-priority context for the calendar.
+  if (isExtended && status !== "completed") {
     return (
       <Badge variant="outline" className="shrink-0 text-[10px]">
         <Calendar className="mr-1 h-2.5 w-2.5" /> Extended
@@ -568,16 +665,6 @@ function StatusBadge({
     return (
       <Badge variant="outline" className="shrink-0 text-[10px]">
         <Clock className="mr-1 h-2.5 w-2.5" /> In progress
-      </Badge>
-    );
-  }
-  if (status === "ready_to_file") {
-    return (
-      <Badge
-        variant="outline"
-        className="shrink-0 text-[10px] text-[var(--color-priority-done)]"
-      >
-        <CheckCircle2 className="mr-1 h-2.5 w-2.5" /> Ready to file
       </Badge>
     );
   }

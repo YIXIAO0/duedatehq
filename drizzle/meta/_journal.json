@@ -36,6 +36,27 @@
       "when": 1777315255722,
       "tag": "0004_thankful_cerise",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1777562956237,
+      "tag": "0005_yellow_revanche",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1777580418361,
+      "tag": "0006_chilly_warhawk",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1777594857465,
+      "tag": "0007_keen_black_knight",
+      "breakpoints": true
     }
   ]
 }

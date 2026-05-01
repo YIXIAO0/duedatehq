@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>C · Desktop pro-tool style</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: "Segoe UI", Tahoma, -apple-system, sans-serif; font-size: 13px; }
+  /* Drake/UltraTax/desktop-Windows palette: heavy borders, neutral grays,
+     navy accent, very dense type. NOT trying to be 1995 — just dense
+     and clearly delineated. */
+  :root {
+    --d-text: #1A1A1A;
+    --d-muted: #5A5A5A;
+    --d-line: #A6A6A6;
+    --d-line-light: #D8D8D8;
+    --d-canvas: #ECEDEE;
+    --d-surface: #FFFFFF;
+    --d-stripe: #F5F6F7;
+    --d-navy: #1A4A7A;
+    --d-navy-bg: #DCE6F0;
+    --d-amber: #8B6500;
+    --d-amber-bg: #FFF4D0;
+    --d-green: #1F6B2E;
+  }
+  body { color: var(--d-text); background: var(--d-canvas); }
+  .d-frame { background: var(--d-surface); border: 1px solid var(--d-line); }
+  .d-titlebar { background: var(--d-navy); color: white; padding: 4px 10px; font-weight: 600; font-size: 12px; letter-spacing: 0.02em; }
+  .d-group { border: 1px solid var(--d-line); margin: 6px; }
+  .d-group-head { background: var(--d-stripe); border-bottom: 1px solid var(--d-line-light); padding: 4px 10px; font-size: 11px; font-weight: 700; color: var(--d-muted); text-transform: uppercase; letter-spacing: 0.06em; display: flex; align-items: center; }
+  .d-row { border-bottom: 1px solid var(--d-line-light); padding: 4px 10px; }
+  .d-row:nth-child(even) { background: #FAFAFB; }
+  .d-row:hover { background: #FFF8DC; }
+  .d-pill { font-size: 10px; padding: 1px 5px; border: 1px solid var(--d-line); background: white; }
+  .d-btn { padding: 3px 10px; border: 1px solid var(--d-line); background: linear-gradient(white, #F1F2F3); font-size: 12px; font-weight: 500; }
+  .d-btn-primary { padding: 3px 10px; border: 1px solid var(--d-navy); background: linear-gradient(#3B6FA0, var(--d-navy)); color: white; font-size: 12px; font-weight: 500; }
+</style>
+</head>
+<body class="p-6">
+
+<div class="max-w-5xl mx-auto">
+  <div class="flex items-center gap-1 mb-4">
+    <a href="index.html" class="text-xs px-2 py-1" style="color: var(--d-navy)">← Samples</a>
+    <span class="text-xs ml-auto" style="color: var(--d-muted)">Direction C · Drake / Desktop pro-tool style</span>
+  </div>
+
+  <!-- main "window frame" -->
+  <div class="d-frame">
+
+    <!-- title bar like a desktop window -->
+    <div class="d-titlebar flex items-center">
+      <span>Client Detail — Anderson Family Holdings</span>
+      <span class="ml-auto text-xs opacity-80">F2 Edit · F4 Add Entity · F5 Refresh · ESC Close</span>
+    </div>
+
+    <!-- toolbar strip -->
+    <div class="flex items-center gap-1.5 px-2 py-1.5" style="border-bottom: 1px solid var(--d-line-light); background: var(--d-stripe)">
+      <button class="d-btn">📄 Export</button>
+      <button class="d-btn">✏ Edit</button>
+      <button class="d-btn-primary">+ Add Entity</button>
+      <span class="ml-auto text-xs" style="color: var(--d-muted)">2 entities · 16 open</span>
+    </div>
+
+    <!-- top group: client info, very Windows form-feeling -->
+    <div class="d-group">
+      <div class="d-group-head">Client Information</div>
+      <div class="grid grid-cols-2 gap-x-4 px-3 py-2 text-xs">
+        <div class="flex justify-between py-0.5"><span style="color: var(--d-muted)">Client name:</span><span class="font-semibold">Anderson Family Holdings</span></div>
+        <div class="flex justify-between py-0.5"><span style="color: var(--d-muted)">Client #:</span><span class="font-mono">812345</span></div>
+        <div class="flex justify-between py-0.5"><span style="color: var(--d-muted)">Primary contact:</span><span>Carol Anderson</span></div>
+        <div class="flex justify-between py-0.5"><span style="color: var(--d-muted)">Phone:</span><span class="font-mono">(415) 555-0182</span></div>
+        <div class="flex justify-between py-0.5"><span style="color: var(--d-muted)">Email:</span><span>carol@andersonfh.com</span></div>
+        <div class="flex justify-between py-0.5"><span style="color: var(--d-muted)">Year added:</span><span>2024</span></div>
+      </div>
+    </div>
+
+    <!-- deadlines table — super dense, alternating rows, all-caps headers -->
+    <div class="d-group">
+      <div class="d-group-head flex items-center">
+        <span>Open Deadlines (16)</span>
+        <span class="ml-auto text-xs font-normal capitalize tracking-normal" style="color: var(--d-muted); letter-spacing: 0">3 due ≤ 7d · 1 waiting on client</span>
+      </div>
+      <table class="w-full text-xs" style="border-collapse: collapse">
+        <thead>
+          <tr style="background: var(--d-stripe); border-bottom: 1px solid var(--d-line-light)">
+            <th class="text-left px-3 py-1.5 font-semibold" style="width: 110px">DUE</th>
+            <th class="text-left px-3 py-1.5 font-semibold" style="width: 90px">DOW</th>
+            <th class="text-left px-3 py-1.5 font-semibold" style="width: 100px">FORM</th>
+            <th class="text-left px-3 py-1.5 font-semibold">DESCRIPTION</th>
+            <th class="text-left px-3 py-1.5 font-semibold" style="width: 130px">ENTITY</th>
+            <th class="text-left px-3 py-1.5 font-semibold" style="width: 90px">STATUS</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="d-row">
+            <td class="px-3 py-1 font-mono">04/15/2026</td>
+            <td class="px-3 py-1" style="color: var(--d-muted)">Wed</td>
+            <td class="px-3 py-1 font-mono font-semibold">1040</td>
+            <td class="px-3 py-1">Individual Income Tax Return</td>
+            <td class="px-3 py-1" style="color: var(--d-muted)">Carol A.</td>
+            <td class="px-3 py-1"><span class="d-pill" style="background: var(--d-amber-bg); color: var(--d-amber); border-color: var(--d-amber)">WAITING</span></td>
+          </tr>
+          <tr class="d-row">
+            <td class="px-3 py-1 font-mono">04/15/2026</td>
+            <td class="px-3 py-1" style="color: var(--d-muted)">Wed</td>
+            <td class="px-3 py-1 font-mono font-semibold">CA-540</td>
+            <td class="px-3 py-1">CA Personal Income Tax</td>
+            <td class="px-3 py-1" style="color: var(--d-muted)">Carol A.</td>
+            <td class="px-3 py-1"></td>
+          </tr>
+          <tr class="d-row">
+            <td class="px-3 py-1 font-mono">04/30/2026</td>
+            <td class="px-3 py-1" style="color: var(--d-muted)">Thu</td>
+            <td class="px-3 py-1 font-mono font-semibold">941-Q1</td>
+            <td class="px-3 py-1">Quarterly Employer Payroll Tax</td>
+            <td class="px-3 py-1" style="color: var(--d-muted)">Holdings LLC</td>
+            <td class="px-3 py-1"></td>
+          </tr>
+          <tr class="d-row">
+            <td class="px-3 py-1 font-mono">06/15/2026</td>
+            <td class="px-3 py-1" style="color: var(--d-muted)">Mon</td>
+            <td class="px-3 py-1 font-mono font-semibold">1040-ES-Q2</td>
+            <td class="px-3 py-1">Individual Estimated Tax</td>
+            <td class="px-3 py-1" style="color: var(--d-muted)">Carol A.</td>
+            <td class="px-3 py-1"></td>
+          </tr>
+          <tr class="d-row">
+            <td class="px-3 py-1 font-mono">07/31/2026</td>
+            <td class="px-3 py-1" style="color: var(--d-muted)">Fri</td>
+            <td class="px-3 py-1 font-mono font-semibold">941-Q2</td>
+            <td class="px-3 py-1">Quarterly Employer Payroll Tax</td>
+            <td class="px-3 py-1" style="color: var(--d-muted)">Holdings LLC</td>
+            <td class="px-3 py-1"></td>
+          </tr>
+          <tr class="d-row">
+            <td class="px-3 py-1 font-mono">09/15/2026</td>
+            <td class="px-3 py-1" style="color: var(--d-muted)">Tue</td>
+            <td class="px-3 py-1 font-mono font-semibold">1040-ES-Q3</td>
+            <td class="px-3 py-1">Individual Estimated Tax</td>
+            <td class="px-3 py-1" style="color: var(--d-muted)">Carol A.</td>
+            <td class="px-3 py-1"></td>
+          </tr>
+          <tr class="d-row">
+            <td class="px-3 py-1 font-mono">10/15/2026</td>
+            <td class="px-3 py-1" style="color: var(--d-muted)">Thu</td>
+            <td class="px-3 py-1 font-mono font-semibold">7004</td>
+            <td class="px-3 py-1">Extended Partnership Return (1065)</td>
+            <td class="px-3 py-1" style="color: var(--d-muted)">Holdings LLC</td>
+            <td class="px-3 py-1"></td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="text-xs px-3 py-1.5 text-center cursor-pointer hover:bg-yellow-50" style="background: var(--d-stripe); color: var(--d-navy)">
+        + Show 9 more (after Oct 2026)
+      </div>
+    </div>
+
+    <!-- entities — list with key/value rows -->
+    <div class="d-group">
+      <div class="d-group-head">Tax Entities (2)</div>
+      <table class="w-full text-xs" style="border-collapse: collapse">
+        <thead>
+          <tr style="background: var(--d-stripe); border-bottom: 1px solid var(--d-line-light)">
+            <th class="text-left px-3 py-1.5 font-semibold">ENTITY NAME</th>
+            <th class="text-left px-3 py-1.5 font-semibold" style="width: 100px">TYPE</th>
+            <th class="text-left px-3 py-1.5 font-semibold" style="width: 100px">FYE</th>
+            <th class="text-left px-3 py-1.5 font-semibold" style="width: 130px">STATES</th>
+            <th class="text-left px-3 py-1.5 font-semibold">SERVICES</th>
+            <th class="text-right px-3 py-1.5 font-semibold" style="width: 70px">DDLS</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="d-row">
+            <td class="px-3 py-1 font-semibold">Carol Anderson</td>
+            <td class="px-3 py-1">Individual</td>
+            <td class="px-3 py-1 font-mono">12-31</td>
+            <td class="px-3 py-1">CA</td>
+            <td class="px-3 py-1" style="color: var(--d-muted)">Personal Tax</td>
+            <td class="px-3 py-1 text-right font-mono">8</td>
+          </tr>
+          <tr class="d-row">
+            <td class="px-3 py-1 font-semibold">Anderson Holdings LLC</td>
+            <td class="px-3 py-1">LLC</td>
+            <td class="px-3 py-1 font-mono">12-31</td>
+            <td class="px-3 py-1">CA, NV, WA</td>
+            <td class="px-3 py-1" style="color: var(--d-muted)">Partnership Tax · Quarterly Payroll</td>
+            <td class="px-3 py-1 text-right font-mono">14</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- status bar at the bottom, like a desktop app -->
+    <div style="background: var(--d-stripe); border-top: 1px solid var(--d-line); padding: 3px 10px;" class="text-xs flex items-center" >
+      <span style="color: var(--d-muted)">Last sync: 2026-04-29 09:14 · Tax year: 2025 · Records 1–7 of 16</span>
+      <span class="ml-auto" style="color: var(--d-green)">● Connected</span>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

@@ -26,6 +26,8 @@ import {
 } from "@/lib/services/deadlines";
 import { DeadlineActionBar } from "./deadline-action-bar";
 import { NotesForm } from "./notes-form";
+import { OwnerPicker } from "./owner-picker";
+import { listMembers } from "@/lib/services/team";
 
 type Params = Promise<{ id: string }>;
 
@@ -54,12 +56,21 @@ async function DeadlineDetail({ params }: { params: Params }) {
 
   // History timeline pulled from audit_events. Cheap query (indexed),
   // and rendered below Notes so the primary actions stay above the fold.
-  const history = await getDeadlineHistory(d.id, ctx.organization.id);
+  const [history, members] = await Promise.all([
+    getDeadlineHistory(d.id, ctx.organization.id),
+    listMembers(ctx.organization.id),
+  ]);
+  const isMultiUser = members.length > 1;
+  const ownerOptions = members.map((m) => ({
+    userId: m.user.id,
+    fullName: m.user.fullName,
+    email: m.user.email,
+  }));
 
   const effectiveDueDate = d.extension_due_date ?? d.due_date;
   const status = d.status;
   const isCompleted = status === "completed";
-  const isExtended = status === "extended";
+  const isExtended = d.is_extended === true;
   const isOverdue =
     !isCompleted && new Date(effectiveDueDate + "T00:00:00") < new Date();
 
@@ -96,6 +107,11 @@ async function DeadlineDetail({ params }: { params: Params }) {
             </Badge>
           ) : null}
           <StatusBadge status={status} isOverdue={isOverdue} />
+          {isExtended ? (
+            <Badge variant="outline" className="ml-2">
+              <Calendar className="mr-1 h-3 w-3" /> Extension filed
+            </Badge>
+          ) : null}
         </div>
         <h1 className="mt-2 text-2xl font-semibold tracking-tight">
           {d.rule_title}
@@ -150,6 +166,16 @@ async function DeadlineDetail({ params }: { params: Params }) {
               </p>
             ) : null}
           </div>
+
+          {isMultiUser ? (
+            <div className="border-t border-border pt-5">
+              <OwnerPicker
+                deadlineId={d.id}
+                currentOwnerUserId={d.owner_user_id}
+                members={ownerOptions}
+              />
+            </div>
+          ) : null}
 
           <div className="border-t border-border pt-5">
             <p className="text-xs uppercase tracking-wider text-muted-foreground">
@@ -394,17 +420,17 @@ function describeHistory(entry: DeadlineHistoryEntry): {
     }
     case "deadline.status_changed": {
       // Workflow-stage transitions: pending → waiting_on_client →
-      // in_progress → ready_to_file (in any direction). Show the human
-      // labels so the timeline reads "Status: Waiting on client → In
-      // progress" rather than raw enum values.
+      // in_progress (in any direction). Show the human labels so the
+      // timeline reads "Status: Waiting on client → In progress" rather
+      // than raw enum values.
       const prev = (p.previousStatus ?? null) as string | null;
       const next = (p.newStatus ?? null) as string | null;
       const fmt = (s: string | null) => (s ? statusLabel(s) : "—");
       // Color the dot to match the destination state so a quick scan of
       // the timeline communicates progress visually.
       const accent =
-        next === "ready_to_file"
-          ? "bg-[var(--color-priority-done)]"
+        next === "in_progress"
+          ? "bg-[var(--color-priority-medium)]"
           : next === "waiting_on_client"
           ? "bg-[var(--color-priority-high)]"
           : "bg-muted-foreground";
@@ -443,11 +469,7 @@ function statusLabel(s: string): string {
     pending: "Pending",
     waiting_on_client: "Waiting on client",
     in_progress: "In progress",
-    ready_to_file: "Ready to file",
     completed: "Filed",
-    extended: "Extended",
-    missed: "Missed",
-    not_applicable: "N/A",
   };
   return map[s] ?? s;
 }
@@ -466,16 +488,11 @@ function StatusBadge({
       </Badge>
     );
   }
-  if (status === "extended") {
-    return (
-      <Badge variant="outline">
-        <Calendar className="mr-1 h-3 w-3" /> Extension filed
-      </Badge>
-    );
-  }
   // Surface workflow states explicitly so the CPA can scan the page
   // header and know "where in the process" each deadline is. Overdue
   // still wins visually (urgent red) — being late beats stage info.
+  // The "Extension filed" indicator is rendered separately by the
+  // caller (it's a flag, not a workflow status).
   if (isOverdue) {
     return (
       <Badge className="bg-[var(--color-priority-urgent-bg)] text-[var(--color-priority-urgent)] hover:bg-[var(--color-priority-urgent-bg)]">
@@ -494,13 +511,6 @@ function StatusBadge({
     return (
       <Badge variant="outline">
         <Clock className="mr-1 h-3 w-3" /> In progress
-      </Badge>
-    );
-  }
-  if (status === "ready_to_file") {
-    return (
-      <Badge variant="outline" className="text-[var(--color-priority-done)]">
-        <CheckCircle2 className="mr-1 h-3 w-3" /> Ready to file
       </Badge>
     );
   }

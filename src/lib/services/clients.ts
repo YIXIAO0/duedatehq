@@ -332,6 +332,26 @@ export type ClientWithEntityCount = {
   entityCount: number;
   /** Open deadlines: pending + in_progress + extended (not completed/missed). */
   activeDeadlineCount: number;
+  /**
+   * Earliest effective due date among open deadlines (YYYY-MM-DD).
+   * null when the client has no open work — used by the list UI to
+   * decide between rendering the urgency block or a calm "all clear".
+   */
+  nextDueDate: string | null;
+  /**
+   * Open deadlines whose effective due date is within 3 days
+   * (overdue / today / next 3 days). The threshold matches the
+   * "urgent" tier used everywhere else in the UI.
+   */
+  urgentCount: number;
+  /**
+   * The first (oldest by created_at) entity's type / home_state. Used
+   * as a quick visual marker on the row — for clients with multiple
+   * entities the UI also shows a "+N more" pill so we don't pretend
+   * one type/state covers a multi-entity client.
+   */
+  primaryEntityType: string | null;
+  primaryHomeState: string | null;
 };
 
 export async function listClientsWithEntityCount(
@@ -344,13 +364,15 @@ export async function listClientsWithEntityCount(
     ? sql``
     : sql`AND c.archived_at IS NULL`;
 
-  // Scalar subqueries (not LEFT JOINs) for both counts — avoids the
+  // Scalar subqueries (not LEFT JOINs) for every metric — avoids the
   // Cartesian-product bug you'd get from joining clients × entities ×
   // deadline_instances and then needing COUNT(DISTINCT ...) gymnastics.
-  // Both subqueries hit existing indexes:
-  //   - entity count:  entities_client_idx + entities.archived_at IS NULL
-  //   - deadline count: deadline_instances_org_status_idx (org_id, status)
-  //                     + the join back via entities.client_id
+  // All subqueries hit existing indexes:
+  //   - entity count / primary entity:  entities_client_idx
+  //   - deadline counts / next due:     deadline_instances_org_status_idx
+  //                                     + join via entities.client_id
+  // At <100 clients the per-row subquery cost is negligible; if book
+  // size grows we can switch to a single CTE with GROUP BY.
   const rows = await db.execute<{
     id: string;
     name: string;
@@ -358,6 +380,10 @@ export async function listClientsWithEntityCount(
     created_at: Date;
     entity_count: number;
     active_deadline_count: number;
+    next_due_date: string | null;
+    urgent_count: number;
+    primary_entity_type: string | null;
+    primary_home_state: string | null;
   }>(sql`
     SELECT c.id,
            c.name,
@@ -381,8 +407,41 @@ export async function listClientsWithEntityCount(
              INNER JOIN entities e2 ON e2.id = di.entity_id
              WHERE e2.client_id = c.id
                AND e2.archived_at IS NULL
-               AND di.status IN ('pending', 'waiting_on_client', 'in_progress', 'ready_to_file', 'extended')
-           ) AS active_deadline_count
+               AND di.status IN ('pending', 'waiting_on_client', 'in_progress')
+           ) AS active_deadline_count,
+           (
+             SELECT MIN(COALESCE(di.extension_due_date, di.due_date))::text
+             FROM deadline_instances di
+             INNER JOIN entities e3 ON e3.id = di.entity_id
+             WHERE e3.client_id = c.id
+               AND e3.archived_at IS NULL
+               AND di.status IN ('pending', 'waiting_on_client', 'in_progress')
+           ) AS next_due_date,
+           (
+             SELECT COUNT(*)::int
+             FROM deadline_instances di
+             INNER JOIN entities e4 ON e4.id = di.entity_id
+             WHERE e4.client_id = c.id
+               AND e4.archived_at IS NULL
+               AND di.status IN ('pending', 'waiting_on_client', 'in_progress')
+               AND COALESCE(di.extension_due_date, di.due_date) <= CURRENT_DATE + INTERVAL '3 days'
+           ) AS urgent_count,
+           (
+             SELECT e5.entity_type
+             FROM entities e5
+             WHERE e5.client_id = c.id
+               AND e5.archived_at IS NULL
+             ORDER BY e5.created_at ASC
+             LIMIT 1
+           ) AS primary_entity_type,
+           (
+             SELECT e6.home_state
+             FROM entities e6
+             WHERE e6.client_id = c.id
+               AND e6.archived_at IS NULL
+             ORDER BY e6.created_at ASC
+             LIMIT 1
+           ) AS primary_home_state
     FROM clients c
     WHERE c.org_id = ${parsed.orgId}
       ${archivedFilter}
@@ -398,5 +457,9 @@ export async function listClientsWithEntityCount(
     createdAt: new Date(r.created_at),
     entityCount: Number(r.entity_count),
     activeDeadlineCount: Number(r.active_deadline_count),
+    nextDueDate: r.next_due_date,
+    urgentCount: Number(r.urgent_count),
+    primaryEntityType: r.primary_entity_type,
+    primaryHomeState: r.primary_home_state,
   }));
 }

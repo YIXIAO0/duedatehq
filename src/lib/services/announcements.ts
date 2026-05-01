@@ -218,7 +218,7 @@ export async function listAnnouncementsWithImpact(
                 INNER JOIN deadline_rules r ON r.id = di.rule_id
                 WHERE e2.client_id = c.id
                   AND e2.archived_at IS NULL
-                  AND di.status IN ('pending', 'waiting_on_client', 'in_progress', 'ready_to_file', 'extended')
+                  AND di.status IN ('pending', 'waiting_on_client', 'in_progress')
                   AND (
                     jsonb_array_length(a.affected_form_codes) = 0
                     OR a.affected_form_codes ? r.form_code
@@ -584,7 +584,7 @@ export async function getAnnouncementReview(
         INNER JOIN entities e2 ON e2.id = di.entity_id
         WHERE e2.client_id = c.id
           AND e2.archived_at IS NULL
-          AND di.status IN ('pending', 'waiting_on_client', 'in_progress', 'ready_to_file', 'extended')
+          AND di.status IN ('pending', 'waiting_on_client', 'in_progress')
       ) AS open_deadline_count,
       -- Affected deadlines list. Only populated when AI narrowed the
       -- scope — without a form-code filter or a date range we don't
@@ -630,7 +630,7 @@ export async function getAnnouncementReview(
           ) applied ON true
           WHERE e3.client_id = c.id
             AND e3.archived_at IS NULL
-            AND di.status IN ('pending', 'waiting_on_client', 'in_progress', 'ready_to_file', 'extended')
+            AND di.status IN ('pending', 'waiting_on_client', 'in_progress')
             AND (
               jsonb_array_length((${formCodesJsonb}::jsonb)) = 0
               OR (${formCodesJsonb}::jsonb) ? r.form_code

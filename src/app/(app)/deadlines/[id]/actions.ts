@@ -9,6 +9,7 @@ import {
   updateDeadlineNotes,
   reopenDeadline,
   setDeadlineStatus,
+  assignDeadline,
 } from "@/lib/services/deadlines";
 
 const IdSchema = z.string().min(1);
@@ -20,7 +21,6 @@ const WorkflowStatusSchema = z.enum([
   "pending",
   "waiting_on_client",
   "in_progress",
-  "ready_to_file",
 ]);
 export type WorkflowStatus = z.infer<typeof WorkflowStatusSchema>;
 
@@ -61,6 +61,28 @@ export async function setStatusAction(
     deadlineInstanceId: IdSchema.parse(deadlineId),
     orgId: ctx.organization.id,
     status: WorkflowStatusSchema.parse(newStatus),
+    actorType: "user",
+    actorId: ctx.user.id,
+  });
+  revalidatePath("/dashboard");
+  revalidatePath(`/deadlines/${deadlineId}`);
+}
+
+/**
+ * Assign / unassign a deadline owner. Pass null to clear the assignment
+ * (= move back to "unassigned, in queue"). Membership validation lives
+ * in the service so a tampered request can't pin ownership outside the
+ * caller's org.
+ */
+export async function assignDeadlineAction(
+  deadlineId: string,
+  ownerUserId: string | null,
+) {
+  const ctx = await getCurrentContext();
+  await assignDeadline({
+    deadlineInstanceId: IdSchema.parse(deadlineId),
+    orgId: ctx.organization.id,
+    ownerUserId: ownerUserId === null ? null : IdSchema.parse(ownerUserId),
     actorType: "user",
     actorId: ctx.user.id,
   });

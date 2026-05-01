@@ -26,7 +26,7 @@ import {
 import { AnnouncementDismissButton } from "@/components/announcement-dismiss-button";
 
 export const metadata = {
-  title: "IRS Updates · DueDateHQ",
+  title: "Tax updates · DueDateHQ",
 };
 
 type SearchParams = Promise<{ view?: string }>;
@@ -45,7 +45,7 @@ export default function AnnouncementsPage({
       </Button>
 
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">IRS updates</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Tax updates</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Pulled daily from the IRS Newsroom feed. Each item is classified by
           AI for relevance — score 5 means a real deadline or filing
@@ -85,13 +85,28 @@ async function Feed({ searchParams }: { searchParams: SearchParams }) {
   // / form changes are 4-5; routine useful reminders are 3.
   // …WithImpact intersects each item's affected_jurisdictions with the
   // org's clients' home_state so we can show "Affects N of your clients".
-  const items = await listAnnouncementsWithImpact(ctx.organization.id, {
+  const rawItems = await listAnnouncementsWithImpact(ctx.organization.id, {
     sinceDays: 30,
     minScore: 3,
     userId: ctx.user.id,
     showDismissed,
   });
   const dismissedCount = await countDismissedAnnouncements(ctx.user.id);
+
+  // Relevance gate — DueDateHQ is a deadline product, so federal-level
+  // policy news that doesn't impact any client AND isn't a real
+  // deadline change is just newsroom noise. Two ways to qualify:
+  //   1. At least one of the org's clients matches the announcement's
+  //      jurisdiction + form-code + date scope (affectedClients.length).
+  //   2. Score 5 — the AI flagged this as a real deadline / filing
+  //      requirement change. Even with no current client match the
+  //      CPA may want to know (e.g. a brand-new federal deadline that
+  //      they'll need next quarter).
+  // Items satisfying neither (e.g. "Treasury issues proposed
+  // regulations on remittance transfer tax") are dropped.
+  const items = rawItems.filter(
+    (i) => i.affectedClients.length > 0 || i.relevanceScore >= 5,
+  );
 
   // Sort high-relevance to the top so eyes land on what matters. Only
   // applies to the active view; dismissed view shows whatever's there.
@@ -216,15 +231,19 @@ function AnnouncementRow({
 
   return (
     <article
-      className={`rounded-lg border p-4 transition-colors ${
-        // Highlight tone: switched from urgent-red to calm sky-blue.
-        // Announcements are "FYI affecting your book", not "fire".
-        // Keep the highlight visible but informational, not alarming.
-        highlight
-          ? "border-sky-200 bg-sky-50/60 dark:border-sky-900/50 dark:bg-sky-950/30"
-          : "border-border bg-card hover:bg-muted/30"
-      }`}
+      className="relative overflow-hidden rounded-lg border border-border bg-card p-4 transition-colors hover:bg-muted/30"
     >
+      {/* High-priority items get a 3px colored left stripe instead of
+          flooding the card with a tint. Color matches the category's
+          icon chip so the stripe + chip + section header read as one
+          coordinated signal. Cuts the page's overall blue saturation
+          without losing the "this one matters more" cue. */}
+      {highlight ? (
+        <span
+          className={`absolute inset-y-0 left-0 w-1 ${categoryStripeClass(a.category)}`}
+          aria-hidden
+        />
+      ) : null}
       <div className="flex items-start gap-3">
         <CategoryIcon category={a.category} />
         <div className="min-w-0 flex-1">
@@ -262,7 +281,7 @@ function AnnouncementRow({
               className={`mt-2 flex items-center gap-3 rounded-md border px-3 py-2 transition-colors ${
                 allReviewed
                   ? "border-[var(--color-priority-done)]/40 bg-[var(--color-priority-done-bg)]/40 hover:bg-[var(--color-priority-done-bg)]/70"
-                  : "border-sky-300 bg-background/60 hover:bg-sky-50 dark:border-sky-800 dark:hover:bg-sky-950/40"
+                  : "border-border bg-muted/30 hover:bg-muted/60"
               }`}
             >
               <div className="min-w-0 flex-1">
@@ -270,7 +289,7 @@ function AnnouncementRow({
                   className={`text-[12px] font-semibold ${
                     allReviewed
                       ? "text-[var(--color-priority-done)]"
-                      : "text-sky-800 dark:text-sky-300"
+                      : "text-foreground"
                   }`}
                 >
                   {allReviewed
@@ -281,7 +300,7 @@ function AnnouncementRow({
                       }`
                     : `${pendingCount} more to review (${ackedCount}/${matchCount} done)`}
                 </div>
-                <div className="mt-0.5 truncate text-[11px] text-foreground/65">
+                <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
                   {a.affectedClients
                     .slice(0, 6)
                     .map((c) => c.name)
@@ -289,7 +308,15 @@ function AnnouncementRow({
                   {matchCount > 6 ? ` · +${matchCount - 6} more` : ""}
                 </div>
               </div>
-              <span className="text-sm font-semibold">→</span>
+              <span
+                className={`text-sm font-semibold ${
+                  allReviewed
+                    ? "text-[var(--color-priority-done)]"
+                    : "text-primary"
+                }`}
+              >
+                →
+              </span>
             </Link>
           ) : null}
 
@@ -354,6 +381,26 @@ function CategoryIcon({ category }: { category: string }) {
       {cfg.icon}
     </div>
   );
+}
+
+/**
+ * The 3px left-stripe color for a high-priority card. Matches the
+ * category icon's tone so the stripe + icon read as one signal rather
+ * than two disconnected color choices. Kept slightly desaturated (the
+ * 500-weight Tailwind color) so cards stacked together don't look
+ * stripey-circus.
+ */
+function categoryStripeClass(category: string): string {
+  switch (category) {
+    case "disaster_relief":
+      return "bg-amber-500";
+    case "form_change":
+      return "bg-sky-500";
+    case "procedural":
+      return "bg-slate-400";
+    default:
+      return "bg-muted-foreground/40";
+  }
 }
 
 function CategoryBadge({ category }: { category: string }) {

@@ -26,7 +26,18 @@ import type { SearchHit } from "@/lib/services/search";
  * Header exposes a compact "Search" button that also opens it (so mouse
  * users don't have to know the shortcut).
  */
-export function GlobalSearch() {
+export function GlobalSearch({
+  variant = "pill",
+}: {
+  /**
+   * "pill" — full-width search bar with label + ⌘K kbd hint. Used in
+   * spacious header areas (was the only option pre-2026-05).
+   * "icon" — compact 28px round icon-only button. Sits in dense header
+   * rows alongside other icon buttons (collapse toggle, etc.) without
+   * competing visually with the nav items below.
+   */
+  variant?: "pill" | "icon";
+} = {}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -90,18 +101,29 @@ export function GlobalSearch() {
 
   return (
     <>
-      {/* Trigger — visible in header */}
+      {/* Trigger — pill (full-width header bar) or icon (compact 28px
+          round button for the sidebar logo row). Both open the same
+          CommandDialog. ⌘K binding works regardless of variant. */}
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-border bg-muted/30 px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        aria-label="Search"
+        className={
+          variant === "icon"
+            ? "w-7 h-7 rounded-full bg-white/50 hover:bg-white flex items-center justify-center text-foreground/70 transition-colors cursor-pointer"
+            : "flex w-full cursor-pointer items-center gap-2 rounded-xl bg-white/70 backdrop-blur px-3 py-1.5 text-[13.5px] text-foreground/60 shadow-sm transition hover:bg-white hover:text-foreground"
+        }
+        aria-label={variant === "icon" ? "Search (⌘K)" : "Search"}
+        title={variant === "icon" ? "Search · ⌘K" : undefined}
       >
         <SearchIcon className="h-3.5 w-3.5" />
-        <span className="hidden sm:inline">Search</span>
-        <kbd className="ml-2 hidden rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground sm:inline">
-          ⌘K
-        </kbd>
+        {variant === "pill" ? (
+          <>
+            <span className="flex-1 text-left">Search</span>
+            <kbd className="hidden rounded-md bg-white/80 px-1.5 py-0.5 font-mono text-[10.5px] text-foreground/50 shadow-sm sm:inline">
+              ⌘K
+            </kbd>
+          </>
+        ) : null}
       </button>
 
       <CommandDialog

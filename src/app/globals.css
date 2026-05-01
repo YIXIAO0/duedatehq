@@ -8,11 +8,13 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
 
-  /* Literal font names — avoid circular var() references.
-     Font variables are wired on <html> via next/font. */
-  --font-sans: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
-  --font-heading: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
+  /* Söhne — Klim Type Foundry. Wired on <html> via next/font/local in
+     src/app/layout.tsx; the --font-sohne / --font-sohne-mono CSS
+     variables resolve to the actual font-family value Next assigns.
+     Locked typography per Dify brand skill (LangGenius license). */
+  --font-sans: var(--font-sohne), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-sohne-mono), ui-monospace, "SF Mono", monospace;
+  --font-heading: var(--font-sohne), ui-sans-serif, system-ui, -apple-system, sans-serif;
 
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -54,105 +56,169 @@
   --color-priority-medium-bg: var(--priority-medium-bg);
   --color-priority-done-bg: var(--priority-done-bg);
 
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
+  /* Per-client palette — rotated by client_id hash. Each client gets a
+     ring/dot color, a soft background, and a deep text color used for
+     avatars, calendar dots, mini-cal pile-ups, and chip tints. Locked
+     2026-04-30 with the Arc DNA direction. */
+  --color-client-rose: var(--client-rose);
+  --color-client-rose-bg: var(--client-rose-bg);
+  --color-client-rose-text: var(--client-rose-text);
+  --color-client-amber: var(--client-amber);
+  --color-client-amber-bg: var(--client-amber-bg);
+  --color-client-amber-text: var(--client-amber-text);
+  --color-client-green: var(--client-green);
+  --color-client-green-bg: var(--client-green-bg);
+  --color-client-green-text: var(--client-green-text);
+  --color-client-blue: var(--client-blue);
+  --color-client-blue-bg: var(--client-blue-bg);
+  --color-client-blue-text: var(--client-blue-text);
+  --color-client-violet: var(--client-violet);
+  --color-client-violet-bg: var(--client-violet-bg);
+  --color-client-violet-text: var(--client-violet-text);
+
+  --radius-sm: calc(var(--radius) * 0.4);
+  --radius-md: calc(var(--radius) * 0.6);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+  --radius-xl: calc(var(--radius) * 1.2);
+  --radius-2xl: calc(var(--radius) * 1.4);
+  --radius-3xl: calc(var(--radius) * 1.7);
+  --radius-4xl: calc(var(--radius) * 2);
 }
 
 :root {
-  /* Light theme (default — matches CPA tools like Excel/QuickBooks) */
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  /* Arc Browser DNA — "Playful Precision". Warm cream canvas, soft
+     hairline borders, large 18px corners, single coral accent for
+     "today / urgent" emphasis. Per-client color carries through avatars,
+     calendar dots, and chip tints — see --client-* below.
+
+     Direction locked 2026-04-30 after reviewing 6 directions in
+     ui-samples/k-redesign-directions.html. The deadline list itself is
+     the visual hero, not chrome. See memory project_duedatehq_design.md
+     for full rationale. */
+  --background: oklch(1 0 0);               /* pure white canvas */
+  --foreground: oklch(0.205 0.005 290);     /* near-black warm #1B1B1F */
+  --card: oklch(1 0 0);                     /* pure white surfaces */
+  --card-foreground: oklch(0.205 0.005 290);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
+  --popover-foreground: oklch(0.205 0.005 290);
 
-  /* DueDateHQ brand: deep blue #1E40AF approx → oklch */
-  --primary: oklch(0.42 0.17 258);
-  --primary-foreground: oklch(0.985 0 0);
+  /* Coral primary — used for "Today" emphasis and primary CTAs.
+     Pairs with the gradient on hero today-state (#FF7B7B → #FF6B6B). */
+  --primary: oklch(0.205 0.005 290);        /* solid black for + Add client buttons */
+  --primary-foreground: oklch(1 0 0);
 
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.42 0.17 258);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.42 0.17 258);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.42 0.17 258);
+  --secondary: oklch(0.96 0.005 70);
+  --secondary-foreground: oklch(0.205 0.005 290);
+  --muted: oklch(0.95 0.005 70);
+  --muted-foreground: oklch(0.45 0.005 60); /* #5C5A5C */
+  /* Hover/selected chrome — neutral warm-gray, NOT coral. The coral
+     emphasis is reserved for "Today" (KPI card + calendar today cell)
+     so generic UI states don't all read as "urgent". */
+  --accent: oklch(0.96 0.005 60);           /* near-invisible warm gray */
+  --accent-foreground: oklch(0.205 0.005 290); /* same as foreground */
+  --destructive: oklch(0.58 0.22 25);       /* urgent red #D9444B */
+  --border: oklch(0.92 0.005 60);           /* near-invisible warm hairline */
+  --input: oklch(0.92 0.005 60);
+  /* Focus ring — light warm gray. Coral was too "girly", charcoal was
+     too heavy. This sits between: a soft halo that says "this field is
+     focused" without screaming. Coral stays available via --client-rose
+     for truly urgent/today emphasis only. */
+  --ring: oklch(0.78 0.005 60);
+  --chart-1: oklch(0.71 0.20 22);           /* coral */
+  --chart-2: oklch(0.78 0.14 75);           /* amber */
+  --chart-3: oklch(0.72 0.13 155);          /* green */
+  --chart-4: oklch(0.70 0.10 250);          /* blue */
+  --chart-5: oklch(0.70 0.13 305);          /* violet */
 
-  /* Deadline priority colors — high contrast, WCAG AA */
-  --priority-urgent: oklch(0.52 0.22 25);       /* red-600 */
-  --priority-high: oklch(0.62 0.18 50);         /* orange-600 */
-  --priority-medium: oklch(0.70 0.14 80);       /* amber-600 */
-  --priority-done: oklch(0.55 0.15 150);        /* green-600 */
-  --priority-urgent-bg: oklch(0.96 0.04 25);    /* red-50 */
-  --priority-high-bg: oklch(0.97 0.04 50);      /* orange-50 */
-  --priority-medium-bg: oklch(0.98 0.04 80);    /* amber-50 */
-  --priority-done-bg: oklch(0.96 0.03 150);     /* green-50 */
+  /* 18px radius — Arc-style soft corners. Cards inherit via radius-lg;
+     pills/avatars use rounded-full directly. */
+  --radius: 1.125rem;
+
+  --sidebar: oklch(0.96 0.02 30);           /* fallback color; gradient applied inline in layout shell */
+  --sidebar-foreground: oklch(0.205 0.005 290);
+  --sidebar-primary: oklch(0.71 0.20 22);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(1 0 0 / 70%);
+  --sidebar-accent-foreground: oklch(0.205 0.005 290);
+  --sidebar-border: oklch(0.92 0.005 60);
+  --sidebar-ring: oklch(0.71 0.20 22);
+
+  /* Deadline priority — Arc-warm tones, AA-contrast against white card. */
+  --priority-urgent: oklch(0.55 0.22 25);       /* #B83A3A */
+  --priority-high: oklch(0.60 0.16 60);         /* #A56A1F */
+  --priority-medium: oklch(0.68 0.14 80);       /* warm amber */
+  --priority-done: oklch(0.55 0.13 155);        /* #1F6B41-ish */
+  --priority-urgent-bg: oklch(0.94 0.04 25);    /* #FFE3E3 */
+  --priority-high-bg: oklch(0.95 0.04 70);      /* #FFEFD0 */
+  --priority-medium-bg: oklch(0.97 0.04 80);
+  --priority-done-bg: oklch(0.94 0.04 155);     /* #D8EFE2 */
+
+  /* Per-client palette. Order = preferred rotation when assigning a
+     fresh client. Use clientPaletteFor(client_id) in code to pick. */
+  --client-rose: #FF7B7B;
+  --client-rose-bg: #FFD0D0;
+  --client-rose-text: #8A2B2B;
+
+  --client-amber: #FFB85C;
+  --client-amber-bg: #FFE0B0;
+  --client-amber-text: #8A6420;
+
+  --client-green: #5EBD8C;
+  --client-green-bg: #C5E8D6;
+  --client-green-text: #1F6B41;
+
+  --client-blue: #6FA9DD;
+  --client-blue-bg: #C9DEF7;
+  --client-blue-text: #1F4F87;
+
+  --client-violet: #B68FE0;
+  --client-violet-bg: #DDD2F4;
+  --client-violet-text: #553B91;
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.65 0.17 258);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.65 0.17 258);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.65 0.17 258);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.65 0.17 258);
+  /* Dark mode — warmer than the previous neutral grey; not the primary
+     focus of the Arc direction but kept functional. */
+  --background: oklch(0.165 0.005 290);
+  --foreground: oklch(0.96 0.005 70);
+  --card: oklch(0.215 0.005 290);
+  --card-foreground: oklch(0.96 0.005 70);
+  --popover: oklch(0.215 0.005 290);
+  --popover-foreground: oklch(0.96 0.005 70);
+  --primary: oklch(0.96 0.005 70);
+  --primary-foreground: oklch(0.205 0.005 290);
+  --secondary: oklch(0.27 0.005 290);
+  --secondary-foreground: oklch(0.96 0.005 70);
+  --muted: oklch(0.27 0.005 290);
+  --muted-foreground: oklch(0.72 0.005 60);
+  --accent: oklch(0.27 0.04 25);
+  --accent-foreground: oklch(0.85 0.10 25);
+  --destructive: oklch(0.70 0.19 22);
+  --border: oklch(1 0 0 / 9%);
+  --input: oklch(1 0 0 / 14%);
+  --ring: oklch(0.71 0.20 22);
+  --chart-1: oklch(0.71 0.20 22);
+  --chart-2: oklch(0.78 0.14 75);
+  --chart-3: oklch(0.72 0.13 155);
+  --chart-4: oklch(0.70 0.10 250);
+  --chart-5: oklch(0.70 0.13 305);
+  --sidebar: oklch(0.215 0.005 290);
+  --sidebar-foreground: oklch(0.96 0.005 70);
+  --sidebar-primary: oklch(0.71 0.20 22);
+  --sidebar-primary-foreground: oklch(0.96 0.005 70);
+  --sidebar-accent: oklch(0.27 0.005 290);
+  --sidebar-accent-foreground: oklch(0.96 0.005 70);
+  --sidebar-border: oklch(1 0 0 / 9%);
+  --sidebar-ring: oklch(0.71 0.20 22);
 
-  --priority-urgent: oklch(0.70 0.20 25);
-  --priority-high: oklch(0.75 0.17 50);
-  --priority-medium: oklch(0.80 0.14 80);
-  --priority-done: oklch(0.72 0.17 150);
-  --priority-urgent-bg: oklch(0.25 0.06 25);
-  --priority-high-bg: oklch(0.25 0.06 50);
-  --priority-medium-bg: oklch(0.25 0.06 80);
-  --priority-done-bg: oklch(0.25 0.06 150);
+  --priority-urgent: oklch(0.72 0.20 25);
+  --priority-high: oklch(0.78 0.16 60);
+  --priority-medium: oklch(0.82 0.14 80);
+  --priority-done: oklch(0.74 0.16 150);
+  --priority-urgent-bg: oklch(0.27 0.06 25);
+  --priority-high-bg: oklch(0.27 0.06 60);
+  --priority-medium-bg: oklch(0.27 0.06 80);
+  --priority-done-bg: oklch(0.27 0.06 150);
 }
 
 @layer base {
@@ -161,49 +227,33 @@
   }
   body {
     @apply bg-background text-foreground;
-    /* Persona is 50+ CPAs. They've been using Excel and QuickBooks for
-       20+ years and expect dense, readable typography — not a 14px
-       SaaS dashboard. We bump the base substantially:
-         - 17px body — comfortable read-ahead, still feels like a desk
-           app and not a marketing page
-         - 1.55 line-height — slight tightening from default because
-           larger font sizes already give visual breathing room
-       Tailwind's `text-sm` / `text-xs` etc. cascade off the rem unit
-       which is set on <html> below — bumping html to 17px scales
-       every Tailwind size class proportionally without touching each
-       component.
-       (We tried 18px briefly, but it felt slightly too marketing-heavy
-       and the spacing rems got airy. 17 is the comfortable middle.) */
+    /* CPA persona is 50+. Bumped baseline of 17px gives comfortable
+       read-ahead vs. the typical 14px SaaS dashboard. Keep this even
+       under the new Arc design — components specify their own px sizes
+       (chips, hero 44px, card body 14-15px) where they need to deviate
+       from the inherited scale. */
     font-size: 17px;
     line-height: 1.55;
   }
   html {
     @apply font-sans;
-    /* Anchor rem to the same 17px so Tailwind's text-* and spacing
-       scales (gap, padding, etc.) inherit the larger baseline. This
-       is what gets the "everything is bigger" effect across the app
-       without us having to audit every component. */
     font-size: 17px;
   }
-  /* Bump the smallest text floors. We had a lot of `text-[10px]` and
-     `text-[11px]` literals scattered around for badges, sub-labels,
-     and uppercase headers. At 17px base + the original 10/11 absolute
-     pixels they read fine, but for a 50+ user under reading-glasses
-     conditions, anything below 12px is a strain. These selectors
-     promote those literals globally without us editing every file. */
+  /* Promote micro-type literals (text-[10px], text-[11px]) to 12-13px
+     so reading-glasses age can still scan badges and uppercase labels. */
   [class*="text-[10px]"] {
     font-size: 12px !important;
   }
   [class*="text-[11px]"] {
     font-size: 13px !important;
   }
-  /* Note: previously had a global `[data-slot="button"] { min-height: 2.25rem }`
-     rule meant to give older CPAs a larger click target. It silently caused
-     visible wobble in action rows because Radix Slot (the engine behind
-     `<DialogTrigger asChild>`, etc.) OVERWRITES the child Button's
-     data-slot="button" with the trigger's own slot — so a bare Button got
-     36px while the same Button wrapped in a trigger stayed at the variant's
-     h-8 (32px). All button sizing now lives in `buttonVariants` (h-7 sm,
-     h-8 default, h-9 lg). Use `size="lg"` if you specifically need a
-     larger tap target. */
+  /* Soft drop shadow used on white cards across the new design. The
+     hairline `0 0 0 1px` ring keeps card edges visible on a pure-white
+     canvas without needing an actual border (which would shift layout). */
+  .shadow-card {
+    box-shadow:
+      0 0 0 1px rgba(27, 27, 31, 0.05),
+      0 1px 0 rgba(27, 27, 31, 0.02),
+      0 8px 28px -16px rgba(27, 27, 31, 0.12);
+  }
 }

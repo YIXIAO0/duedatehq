@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>E · Calendar-led</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  body { font-family: "Inter", -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+  .mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
+  :root {
+    --accent: #0891B2;
+    --accent-bg: #ECFEFF;
+    --accent-deep: #155E75;
+    --text: #0F172A;
+    --muted: #64748B;
+    --muted-soft: #94A3B8;
+    --line: #E2E8F0;
+    --line-strong: #CBD5E1;
+    --canvas: #F1F5F9;
+    --surface: #FFFFFF;
+    --red: #DC2626;
+    --red-bg: #FEE2E2;
+    --amber: #B45309;
+    --amber-bg: #FEF3C7;
+    --amber-pill: #92400E;
+    --green: #15803D;
+    --green-bg: #D1FAE5;
+    --blue: #1D4ED8;
+    --blue-bg: #DBEAFE;
+    --purple: #7C3AED;
+    --purple-bg: #EDE9FE;
+  }
+  body { background: var(--canvas); color: var(--text); }
+
+  /* Calendar grid */
+  .month-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    background: var(--line);
+    gap: 1px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .weekday-head {
+    background: var(--canvas);
+    padding: 6px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    text-align: left;
+  }
+  .day-cell {
+    background: white;
+    min-height: 110px;
+    padding: 6px 7px;
+    cursor: pointer;
+    transition: background 0.1s;
+    position: relative;
+  }
+  .day-cell:hover { background: var(--accent-bg); }
+  .day-cell.muted { background: #FAFBFC; }
+  .day-cell.muted .day-num { color: var(--muted-soft); }
+  .day-cell.today { background: #FFFDF6; }
+  .day-cell.today .day-num {
+    background: var(--accent);
+    color: white;
+    border-radius: 999px;
+    width: 22px; height: 22px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-weight: 700;
+  }
+  .day-cell.selected {
+    box-shadow: inset 0 0 0 2px var(--accent);
+  }
+  .day-num {
+    font-size: 12.5px;
+    font-weight: 600;
+    margin-bottom: 4px;
+    display: inline-block;
+  }
+  .day-pill {
+    display: block;
+    font-size: 10.5px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    margin-bottom: 2px;
+    font-weight: 500;
+    line-height: 1.3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    border-left: 2px solid;
+  }
+  .pill-blue   { background: var(--blue-bg);   color: var(--blue);   border-left-color: var(--blue); }
+  .pill-amber  { background: var(--amber-bg);  color: var(--amber-pill);  border-left-color: var(--amber); }
+  .pill-purple { background: var(--purple-bg); color: var(--purple); border-left-color: var(--purple); }
+  .pill-green  { background: var(--green-bg);  color: var(--green);  border-left-color: var(--green); }
+  .pill-red    { background: var(--red-bg);    color: var(--red);    border-left-color: var(--red); }
+  .more-pill {
+    font-size: 10px;
+    color: var(--muted);
+    padding: 1px 4px;
+    font-weight: 500;
+  }
+  .legend-dot { width: 10px; height: 10px; border-radius: 2px; }
+</style>
+</head>
+<body class="p-6">
+
+<div class="max-w-7xl mx-auto">
+  <div class="flex items-center gap-1 mb-4">
+    <a href="index.html" class="text-xs px-2 py-1" style="color: var(--accent)">← Samples</a>
+    <span class="text-xs ml-auto" style="color: var(--muted)">Direction E · Calendar-led (Fantastical style)</span>
+  </div>
+
+  <!-- Page header -->
+  <div class="flex items-center justify-between mb-5">
+    <div class="flex items-center gap-4">
+      <h1 class="text-2xl font-semibold tracking-tight">April 2026</h1>
+      <div class="flex items-center gap-1">
+        <button class="text-base px-2 py-1 rounded hover:bg-white border" style="border-color: transparent; color: var(--muted)">‹</button>
+        <button class="text-xs px-2.5 py-1 rounded border bg-white font-medium" style="border-color: var(--line-strong)">Today</button>
+        <button class="text-base px-2 py-1 rounded hover:bg-white border" style="border-color: transparent; color: var(--muted)">›</button>
+      </div>
+    </div>
+    <div class="flex items-center gap-2">
+      <div class="flex items-center bg-white rounded-md border" style="border-color: var(--line-strong)">
+        <button class="text-xs px-3 py-1.5 font-medium rounded-l-md" style="background: var(--accent-bg); color: var(--accent-deep)">Month</button>
+        <button class="text-xs px-3 py-1.5" style="color: var(--muted)">Week</button>
+        <button class="text-xs px-3 py-1.5 rounded-r-md" style="color: var(--muted)">Agenda</button>
+      </div>
+      <button class="text-sm px-3 py-1.5 rounded-md font-medium text-white" style="background: var(--accent)">+ New Deadline</button>
+    </div>
+  </div>
+
+  <!-- Stat strip -->
+  <div class="grid grid-cols-4 gap-3 mb-5">
+    <div class="bg-white rounded-lg p-3 border" style="border-color: var(--line)">
+      <div class="text-[10.5px] font-bold uppercase tracking-wider" style="color: var(--muted)">Due This Month</div>
+      <div class="text-2xl font-semibold mt-1 mono">8</div>
+    </div>
+    <div class="bg-white rounded-lg p-3 border" style="border-color: var(--line)">
+      <div class="text-[10.5px] font-bold uppercase tracking-wider" style="color: var(--muted)">Waiting on Client</div>
+      <div class="text-2xl font-semibold mt-1 mono" style="color: var(--amber)">3</div>
+    </div>
+    <div class="bg-white rounded-lg p-3 border" style="border-color: var(--line)">
+      <div class="text-[10.5px] font-bold uppercase tracking-wider" style="color: var(--muted)">Filed</div>
+      <div class="text-2xl font-semibold mt-1 mono" style="color: var(--green)">12</div>
+    </div>
+    <div class="bg-white rounded-lg p-3 border" style="border-color: var(--line)">
+      <div class="text-[10.5px] font-bold uppercase tracking-wider" style="color: var(--muted)">Heaviest Day</div>
+      <div class="text-base font-semibold mt-1.5">Apr 15 <span class="mono text-xs font-normal" style="color: var(--muted)">· 4 deadlines</span></div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-[1fr_320px] gap-5">
+
+    <!-- BIG CALENDAR -->
+    <div>
+      <div class="month-grid">
+        <!-- weekday headers -->
+        <div class="weekday-head">Sun</div>
+        <div class="weekday-head">Mon</div>
+        <div class="weekday-head">Tue</div>
+        <div class="weekday-head">Wed</div>
+        <div class="weekday-head">Thu</div>
+        <div class="weekday-head">Fri</div>
+        <div class="weekday-head">Sat</div>
+
+        <!-- Week 1: Mar 29 - Apr 4 -->
+        <div class="day-cell muted"><span class="day-num">29</span></div>
+        <div class="day-cell muted"><span class="day-num">30</span></div>
+        <div class="day-cell muted"><span class="day-num">31</span></div>
+        <div class="day-cell"><span class="day-num">1</span><span class="day-pill pill-blue">CA-100 Anderson</span></div>
+        <div class="day-cell"><span class="day-num">2</span></div>
+        <div class="day-cell"><span class="day-num">3</span><span class="day-pill pill-purple">P&amp;L review Patel</span></div>
+        <div class="day-cell"><span class="day-num">4</span></div>
+
+        <!-- Week 2: Apr 5 - 11 -->
+        <div class="day-cell"><span class="day-num">5</span></div>
+        <div class="day-cell"><span class="day-num">6</span><span class="day-pill pill-amber">Q1 close prep</span></div>
+        <div class="day-cell"><span class="day-num">7</span></div>
+        <div class="day-cell"><span class="day-num">8</span></div>
+        <div class="day-cell"><span class="day-num">9</span><span class="day-pill pill-green">1099 Sigma</span></div>
+        <div class="day-cell"><span class="day-num">10</span></div>
+        <div class="day-cell"><span class="day-num">11</span></div>
+
+        <!-- Week 3: Apr 12 - 18 (Apr 15 is THE big day) -->
+        <div class="day-cell"><span class="day-num">12</span></div>
+        <div class="day-cell"><span class="day-num">13</span><span class="day-pill pill-purple">Patel docs</span></div>
+        <div class="day-cell"><span class="day-num">14</span><span class="day-pill pill-amber">Final review</span></div>
+        <div class="day-cell">
+          <span class="day-num">15</span>
+          <span class="day-pill pill-red">1040 Carol A.</span>
+          <span class="day-pill pill-red">CA-540 Carol A.</span>
+          <span class="day-pill pill-red">1040 Patel</span>
+          <span class="more-pill">+1 more</span>
+        </div>
+        <div class="day-cell"><span class="day-num">16</span></div>
+        <div class="day-cell"><span class="day-num">17</span></div>
+        <div class="day-cell"><span class="day-num">18</span></div>
+
+        <!-- Week 4: Apr 19 - 25 -->
+        <div class="day-cell"><span class="day-num">19</span></div>
+        <div class="day-cell"><span class="day-num">20</span><span class="day-pill pill-green">Sales tax CA</span></div>
+        <div class="day-cell"><span class="day-num">21</span></div>
+        <div class="day-cell"><span class="day-num">22</span><span class="day-pill pill-purple">Quarterly call</span></div>
+        <div class="day-cell"><span class="day-num">23</span></div>
+        <div class="day-cell"><span class="day-num">24</span></div>
+        <div class="day-cell"><span class="day-num">25</span></div>
+
+        <!-- Week 5: Apr 26 - May 2 (Apr 29 today, Apr 30 selected) -->
+        <div class="day-cell"><span class="day-num">26</span></div>
+        <div class="day-cell"><span class="day-num">27</span></div>
+        <div class="day-cell"><span class="day-num">28</span></div>
+        <div class="day-cell today">
+          <span class="day-num">29</span>
+          <span class="day-pill pill-amber">1040 follow-up</span>
+          <span class="day-pill pill-blue">Q1 close mtg</span>
+        </div>
+        <div class="day-cell selected">
+          <span class="day-num">30</span>
+          <span class="day-pill pill-amber">941-Q1 Anderson</span>
+          <span class="day-pill pill-amber">941-Q1 Sigma</span>
+        </div>
+        <div class="day-cell muted">
+          <span class="day-num">1</span>
+          <span class="day-pill pill-green">1099 corrections</span>
+        </div>
+        <div class="day-cell muted">
+          <span class="day-num">2</span>
+          <span class="day-pill pill-blue">NYC-3L Patel</span>
+        </div>
+      </div>
+
+      <!-- Legend -->
+      <div class="flex items-center gap-4 mt-3 px-1 text-xs" style="color: var(--muted)">
+        <div class="flex items-center gap-1.5"><span class="legend-dot" style="background: var(--blue)"></span>Corporate</div>
+        <div class="flex items-center gap-1.5"><span class="legend-dot" style="background: var(--purple)"></span>Partnership</div>
+        <div class="flex items-center gap-1.5"><span class="legend-dot" style="background: var(--amber)"></span>Payroll</div>
+        <div class="flex items-center gap-1.5"><span class="legend-dot" style="background: var(--green)"></span>Sales / 1099</div>
+        <div class="flex items-center gap-1.5"><span class="legend-dot" style="background: var(--red)"></span>Individual / Big day</div>
+        <div class="ml-auto text-[11px]" style="color: var(--muted-soft)">Drag any item to reschedule · Click to expand</div>
+      </div>
+    </div>
+
+    <!-- RIGHT: SELECTED DAY DETAIL -->
+    <aside>
+      <div class="bg-white rounded-lg border overflow-hidden" style="border-color: var(--line)">
+        <div class="px-4 py-3" style="background: var(--accent); color: white">
+          <div class="text-[11px] font-semibold uppercase tracking-wider opacity-90">Selected day</div>
+          <div class="text-xl font-semibold mt-0.5">Thursday, Apr 30</div>
+          <div class="text-xs mt-1 opacity-90">2 deadlines · 1 day to today</div>
+        </div>
+        <div class="p-3">
+          <div class="border rounded-md p-3 mb-2" style="border-color: var(--line); border-left: 3px solid var(--amber)">
+            <div class="flex items-center gap-2 mb-1">
+              <span class="mono text-[11px] font-semibold">941-Q1</span>
+              <span class="pill" style="background: var(--amber-bg); color: var(--amber-pill); font-size: 9.5px; padding: 1px 6px; border-radius: 8px; font-weight: 600">IRS · DUE</span>
+            </div>
+            <div class="text-sm font-semibold">Quarterly Employer Payroll Tax</div>
+            <div class="text-xs mt-1" style="color: var(--muted)">Anderson Family Holdings · Holdings LLC</div>
+            <div class="flex items-center gap-2 mt-2">
+              <button class="text-[11px] px-2 py-1 rounded border" style="border-color: var(--line-strong)">Open</button>
+              <button class="text-[11px] px-2 py-1 rounded text-white" style="background: var(--accent)">Mark filed</button>
+            </div>
+          </div>
+          <div class="border rounded-md p-3" style="border-color: var(--line); border-left: 3px solid var(--amber)">
+            <div class="flex items-center gap-2 mb-1">
+              <span class="mono text-[11px] font-semibold">941-Q1</span>
+              <span class="pill" style="background: var(--amber-bg); color: var(--amber-pill); font-size: 9.5px; padding: 1px 6px; border-radius: 8px; font-weight: 600">IRS · DUE</span>
+            </div>
+            <div class="text-sm font-semibold">Quarterly Employer Payroll Tax</div>
+            <div class="text-xs mt-1" style="color: var(--muted)">Sigma Studios · Sigma Studios LLC</div>
+            <div class="flex items-center gap-2 mt-2">
+              <button class="text-[11px] px-2 py-1 rounded border" style="border-color: var(--line-strong)">Open</button>
+              <button class="text-[11px] px-2 py-1 rounded text-white" style="background: var(--accent)">Mark filed</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Today's items -->
+      <div class="bg-white rounded-lg border mt-4 overflow-hidden" style="border-color: var(--line)">
+        <div class="px-4 py-2.5 flex items-center justify-between" style="border-bottom: 1px solid var(--line)">
+          <div>
+            <div class="text-[10.5px] font-bold uppercase tracking-wider" style="color: var(--muted)">Today</div>
+            <div class="text-sm font-semibold mt-0.5">Wed, Apr 29</div>
+          </div>
+          <span class="mono text-xs font-semibold" style="color: var(--accent)">2 items</span>
+        </div>
+        <div class="p-3 space-y-2">
+          <div class="text-sm flex items-start gap-2">
+            <span class="mono text-[10.5px] font-semibold mt-0.5 px-1.5 py-0.5 rounded" style="background: var(--amber-bg); color: var(--amber-pill)">1040</span>
+            <div>
+              <div class="font-medium">Individual Income Tax Return follow-up</div>
+              <div class="text-[11px]" style="color: var(--muted)">Anderson FH · Carol A. <span style="color: var(--muted-soft)">·</span> waiting on docs</div>
+            </div>
+          </div>
+          <div class="text-sm flex items-start gap-2">
+            <span class="mono text-[10.5px] font-semibold mt-0.5 px-1.5 py-0.5 rounded" style="background: var(--blue-bg); color: var(--blue)">Q1</span>
+            <div>
+              <div class="font-medium">Q1 close-out review meeting</div>
+              <div class="text-[11px]" style="color: var(--muted)">Anderson FH · Holdings LLC <span style="color: var(--muted-soft)">·</span> 15:00</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pressure -->
+      <div class="bg-white rounded-lg border mt-4 p-4" style="border-color: var(--line)">
+        <div class="text-[10.5px] font-bold uppercase tracking-wider mb-2" style="color: var(--muted)">Workload by week</div>
+        <div class="space-y-1.5">
+          <div>
+            <div class="flex justify-between text-xs mb-1"><span>Apr 26 – May 2 (this)</span><span class="mono font-semibold">5</span></div>
+            <div class="h-1.5 rounded-full" style="background: var(--line)"><div class="h-full rounded-full" style="background: var(--accent); width: 50%"></div></div>
+          </div>
+          <div>
+            <div class="flex justify-between text-xs mb-1" style="color: var(--muted)"><span>May 3 – 9</span><span class="mono font-semibold">3</span></div>
+            <div class="h-1.5 rounded-full" style="background: var(--line)"><div class="h-full rounded-full" style="background: var(--muted-soft); width: 30%"></div></div>
+          </div>
+          <div>
+            <div class="flex justify-between text-xs mb-1" style="color: var(--muted)"><span>May 10 – 16</span><span class="mono font-semibold">2</span></div>
+            <div class="h-1.5 rounded-full" style="background: var(--line)"><div class="h-full rounded-full" style="background: var(--muted-soft); width: 20%"></div></div>
+          </div>
+          <div>
+            <div class="flex justify-between text-xs mb-1" style="color: var(--muted)"><span>May 17 – 23</span><span class="mono font-semibold">1</span></div>
+            <div class="h-1.5 rounded-full" style="background: var(--line)"><div class="h-full rounded-full" style="background: var(--muted-soft); width: 10%"></div></div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+  </div>
+</div>
+</body>
+</html>

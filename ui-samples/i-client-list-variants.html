@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Client list — 4 layout variants</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  :root {
+    --sf-blue: #0176D3;
+    --sf-blue-dark: #014486;
+    --sf-blue-soft: #E8F4FB;
+    --sf-text: #181818;
+    --sf-muted: #444444;
+    --sf-line: #C9C9C9;
+    --sf-line-soft: #E5E5E5;
+    --sf-canvas: #F3F3F3;
+    --sf-urgent: #BA4106;
+    --sf-urgent-bg: #FEF1ED;
+    --sf-high: #C76A0E;
+    --sf-medium: #B77B00;
+    --sf-done: #2E844A;
+    --sf-emerald: #047857;
+    --sf-sky: #0284C7;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Geist", "Inter", sans-serif;
+    color: var(--sf-text);
+    background: var(--sf-canvas);
+    font-size: 16px;
+  }
+  .mono { font-family: "Geist Mono", "SF Mono", ui-monospace, monospace; font-feature-settings: "ss01"; }
+  .pill { font-size: 11px; padding: 1px 6px; border-radius: 3px; font-weight: 500; display: inline-flex; align-items: center; gap: 3px; }
+  .row-link { transition: background 120ms; cursor: pointer; }
+  .chev { transition: all 150ms; }
+  .row-link:hover .chev { transform: translateX(2px); color: var(--sf-text); }
+  .variant-frame { background: white; border: 1px solid var(--sf-line); border-radius: 4px; }
+
+  /* Avatar bg palette — semi-saturated for legibility on white */
+  .av-blue   { background: #DBEAFE; color: #1E40AF; }
+  .av-purple { background: #EDE9FE; color: #6D28D9; }
+  .av-green  { background: #DCFCE7; color: #166534; }
+  .av-amber  { background: #FEF3C7; color: #92400E; }
+  .av-rose   { background: #FFE4E6; color: #9F1239; }
+  .av-slate  { background: #E2E8F0; color: #334155; }
+  .av-teal   { background: #CCFBF1; color: #115E59; }
+</style>
+</head>
+<body class="p-8">
+
+<div class="max-w-5xl mx-auto space-y-16 pb-24">
+
+<header class="space-y-2">
+  <a href="index.html" class="text-xs" style="color: var(--sf-blue)">← All samples</a>
+  <h1 class="text-2xl font-semibold">Client list — 4 layout variants</h1>
+  <p class="text-sm" style="color: var(--sf-muted)">
+    Same 6 clients, four different rendering approaches. The current production
+    layout shows generic people icons + a stark "16 OPEN" red number — these
+    variants explore richer per-row information (next deadline, entity type,
+    state, urgency) and different density / scan strategies.
+  </p>
+</header>
+
+<!-- ================================================================ -->
+<!-- I1 — Refined list                                                 -->
+<!-- ================================================================ -->
+<section class="space-y-3">
+  <div>
+    <h2 class="text-base font-semibold">I1 · Refined list <span class="text-xs font-normal" style="color: var(--sf-muted)">(closest to current, much richer)</span></h2>
+    <p class="text-sm" style="color: var(--sf-muted)">
+      Initials avatar (colored per client) replaces the identical-looking generic people icon. Right column carries <strong>next deadline date</strong> + days-until (with urgency color) — far more useful than just "16 OPEN". Entity type and state as small inline chips next to the name. The same row height as today but with 3× the per-client information.
+    </p>
+  </div>
+
+  <div class="variant-frame divide-y" style="border-color: var(--sf-line); --tw-divide-opacity: 1; border-collapse: separate;">
+    <a class="row-link flex items-center gap-3 px-4 py-3 hover:bg-slate-50">
+      <div class="h-10 w-10 shrink-0 rounded-full flex items-center justify-center font-semibold text-sm av-rose">VK</div>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="font-semibold text-sm">Victor Kovalenko</span>
+          <span class="pill" style="background: var(--sf-canvas); color: var(--sf-muted); border: 1px solid var(--sf-line-soft)">Individual</span>
+          <span class="pill" style="background: var(--sf-canvas); color: var(--sf-muted); border: 1px solid var(--sf-line-soft)">CA</span>
+        </div>
+        <div class="text-xs mt-0.5" style="color: var(--sf-muted)">victor@example.com</div>
+      </div>
+      <div class="text-right shrink-0">
+        <div class="mono text-[11px] font-bold uppercase tracking-wider" style="color: var(--sf-urgent)">Today</div>
+        <div class="text-[11px]" style="color: var(--sf-muted)">Apr 30 · <span style="color: var(--sf-urgent); font-weight: 600">1 urgent</span> of 16</div>
+      </div>
+    </a>
+    <a class="row-link flex items-center gap-3 px-4 py-3 hover:bg-slate-50" style="border-top: 1px solid var(--sf-line-soft)">
+      <div class="h-10 w-10 shrink-0 rounded-full flex items-center justify-center font-semibold text-sm av-purple">PT</div>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="font-semibold text-sm">Pacific Trading Corp</span>
+          <span class="pill" style="background: var(--sf-canvas); color: var(--sf-muted); border: 1px solid var(--sf-line-soft)">C-Corp</span>
+          <span class="pill" style="background: var(--sf-canvas); color: var(--sf-muted); border: 1px solid var(--sf-line-soft)">WA</span>
+        </div>
+        <div class="text-xs mt-0.5" style="color: var(--sf-muted)">controller@pactrading.example.com</div>
+      </div>
+      <div class="text-right shrink-0">
+        <div class="mono text-[11px] font-bold uppercase tracking-wider" style="color: var(--sf-urgent)">Today</div>
+        <div class="text-[11px]" style="color: var(--sf-muted)">Apr 30 · <span style="color: var(--sf-urgent); font-weight: 600">1 urgent</span> of 14</div>
+      </div>
+    </a>
+    <a class="row-link flex items-center gap-3 px-4 py-3 hover:bg-slate-50" style="border-top: 1px solid var(--sf-line-soft)">
+      <div class="h-10 w-10 shrink-0 rounded-full flex items-center justify-center font-semibold text-sm av-green">GV</div>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="font-semibold text-sm">Green Valley Foundation</span>
+          <span class="pill" style="background: var(--sf-canvas); color: var(--sf-muted); border: 1px solid var(--sf-line-soft)">Nonprofit</span>
+          <span class="pill" style="background: var(--sf-canvas); color: var(--sf-muted); border: 1px solid var(--sf-line-soft)">CA</span>
+        </div>
+        <div class="text-xs mt-0.5" style="color: var(--sf-muted)">director@greenvalley.example.org</div>
+      </div>
+      <div class="text-right shrink-0">
+        <div class="mono text-[11px] font-bold uppercase tracking-wider" style="color: var(--sf-emerald)">in 2w</div>
+        <div class="text-[11px]" style="color: var(--sf-muted)">May 15 · 13 open</div>
+      </div>
+    </a>
+    <a class="row-link flex items-center gap-3 px-4 py-3 hover:bg-slate-50" style="border-top: 1px solid var(--sf-line-soft)">
+      <div class="h-10 w-10 shrink-0 rounded-full flex items-center justify-center font-semibold text-sm av-amber">CR</div>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="font-semibold text-sm">Chen Revocable Trust</span>
+          <span class="pill" style="background: var(--sf-canvas); color: var(--sf-muted); border: 1px solid var(--sf-line-soft)">Trust</span>
+          <span class="pill" style="background: var(--sf-canvas); color: var(--sf-muted); border: 1px solid var(--sf-line-soft)">NY</span>
+        </div>
+        <div class="text-xs mt-0.5" style="color: var(--sf-muted)">rachel.chen@example.com</div>
+      </div>
+      <div class="text-right shrink-0">
+        <div class="mono text-[11px] font-bold uppercase tracking-wider" style="color: var(--sf-emerald)">in 7w</div>
+        <div class="text-[11px]" style="color: var(--sf-muted)">Jun 17 · 2 open</div>
+      </div>
+    </a>
+    <a class="row-link flex items-center gap-3 px-4 py-3 hover:bg-slate-50" style="border-top: 1px solid var(--sf-line-soft)">
+      <div class="h-10 w-10 shrink-0 rounded-full flex items-center justify-center font-semibold text-sm av-blue">SF</div>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="font-semibold text-sm">Smith Family Trust</span>
+          <span class="pill" style="background: var(--sf-canvas); color: var(--sf-muted); border: 1px solid var(--sf-line-soft)">Trust</span>
+          <span class="pill" style="background: var(--sf-canvas); color: var(--sf-muted); border: 1px solid var(--sf-line-soft)">TX</span>
+        </div>
+        <div class="text-xs mt-0.5" style="color: var(--sf-muted)">jsmith@example.com</div>
+      </div>
+      <div class="text-right shrink-0">
+        <div class="mono text-[11px] font-bold uppercase tracking-wider" style="color: #94A3B8">in 12mo</div>
+        <div class="text-[11px]" style="color: var(--sf-muted)">Apr 15 2027 · 2 open</div>
+      </div>
+    </a>
+  </div>
+</section>
+
+<!-- ================================================================ -->
+<!-- I2 — Compact data table                                           -->
+<!-- ================================================================ -->
+<section class="space-y-3">
+  <div>
+    <h2 class="text-base font-semibold">I2 · Compact data table <span class="text-xs font-normal" style="color: var(--sf-muted)">(power-user pro tool)</span></h2>
+    <p class="text-sm" style="color: var(--sf-muted)">
+      True tabular layout — column headers, sortable, fixed columns for Client / Type / State / Next due / Urgent / Total. Closest to the desktop CPA software your audience grew up on (Drake, ProSeries). Best when book size grows past ~30 clients and the user wants to scan vertically.
+    </p>
+  </div>
+
+  <div class="variant-frame overflow-hidden">
+    <div class="grid grid-cols-[2fr_120px_60px_140px_70px_70px] gap-3 px-4 py-2 text-[10px] font-bold uppercase tracking-wider" style="background: #FAFAFB; border-bottom: 1px solid var(--sf-line); color: var(--sf-muted)">
+      <div>Client</div>
+      <div>Type</div>
+      <div>State</div>
+      <div>Next due</div>
+      <div class="text-right">Urgent</div>
+      <div class="text-right">Open</div>
+    </div>
+    <a class="row-link grid grid-cols-[2fr_120px_60px_140px_70px_70px] gap-3 px-4 py-2 items-center text-sm hover:bg-slate-50" style="border-bottom: 1px solid var(--sf-line-soft)">
+      <div class="min-w-0">
+        <div class="font-semibold truncate">Victor Kovalenko</div>
+        <div class="text-[11px] truncate" style="color: var(--sf-muted)">victor@example.com</div>
+      </div>
+      <div class="text-xs" style="color: var(--sf-muted)">Individual</div>
+      <div class="mono text-xs" style="color: var(--sf-muted)">CA</div>
+      <div class="text-xs"><span class="font-medium" style="color: var(--sf-urgent)">Today</span> · Apr 30</div>
+      <div class="mono text-right text-sm font-semibold" style="color: var(--sf-urgent)">1</div>
+      <div class="mono text-right text-sm" style="color: var(--sf-muted)">16</div>
+    </a>
+    <a class="row-link grid grid-cols-[2fr_120px_60px_140px_70px_70px] gap-3 px-4 py-2 items-center text-sm hover:bg-slate-50" style="border-bottom: 1px solid var(--sf-line-soft)">
+      <div class="min-w-0">
+        <div class="font-semibold truncate">Pacific Trading Corp</div>
+        <div class="text-[11px] truncate" style="color: var(--sf-muted)">controller@pactrading.example.com</div>
+      </div>
+      <div class="text-xs" style="color: var(--sf-muted)">C-Corp</div>
+      <div class="mono text-xs" style="color: var(--sf-muted)">WA</div>
+      <div class="text-xs"><span class="font-medium" style="color: var(--sf-urgent)">Today</span> · Apr 30</div>
+      <div class="mono text-right text-sm font-semibold" style="color: var(--sf-urgent)">1</div>
+      <div class="mono text-right text-sm" style="color: var(--sf-muted)">14</div>
+    </a>
+    <a class="row-link grid grid-cols-[2fr_120px_60px_140px_70px_70px] gap-3 px-4 py-2 items-center text-sm hover:bg-slate-50" style="border-bottom: 1px solid var(--sf-line-soft)">
+      <div class="min-w-0">
+        <div class="font-semibold truncate">Green Valley Foundation</div>
+        <div class="text-[11px] truncate" style="color: var(--sf-muted)">director@greenvalley.example.org</div>
+      </div>
+      <div class="text-xs" style="color: var(--sf-muted)">Nonprofit</div>
+      <div class="mono text-xs" style="color: var(--sf-muted)">CA</div>
+      <div class="text-xs"><span class="font-medium" style="color: var(--sf-emerald)">in 2w</span> · May 15</div>
+      <div class="mono text-right text-sm" style="color: var(--sf-muted)">—</div>
+      <div class="mono text-right text-sm" style="color: var(--sf-muted)">13</div>
+    </a>
+    <a class="row-link grid grid-cols-[2fr_120px_60px_140px_70px_70px] gap-3 px-4 py-2 items-center text-sm hover:bg-slate-50" style="border-bottom: 1px solid var(--sf-line-soft)">
+      <div class="min-w-0">
+        <div class="font-semibold truncate">Chen Revocable Trust</div>
+        <div class="text-[11px] truncate" style="color: var(--sf-muted)">rachel.chen@example.com</div>
+      </div>
+      <div class="text-xs" style="color: var(--sf-muted)">Trust</div>
+      <div class="mono text-xs" style="color: var(--sf-muted)">NY</div>
+      <div class="text-xs"><span class="font-medium" style="color: var(--sf-emerald)">in 7w</span> · Jun 17</div>
+      <div class="mono text-right text-sm" style="color: var(--sf-muted)">—</div>
+      <div class="mono text-right text-sm" style="color: var(--sf-muted)">2</div>
+    </a>
+    <a class="row-link grid grid-cols-[2fr_120px_60px_140px_70px_70px] gap-3 px-4 py-2 items-center text-sm hover:bg-slate-50">
+      <div class="min-w-0">
+        <div class="font-semibold truncate">Smith Family Trust</div>
+        <div class="text-[11px] truncate" style="color: var(--sf-muted)">jsmith@example.com</div>
+      </div>
+      <div class="text-xs" style="color: var(--sf-muted)">Trust</div>
+      <div class="mono text-xs" style="color: var(--sf-muted)">TX</div>
+      <div class="text-xs"><span class="font-medium" style="color: #94A3B8">in 12mo</span> · Apr 15 '27</div>
+      <div class="mono text-right text-sm" style="color: var(--sf-muted)">—</div>
+      <div class="mono text-right text-sm" style="color: var(--sf-muted)">2</div>
+    </a>
+  </div>
+</section>
+
+<!-- ================================================================ -->
+<!-- I3 — Card grid                                                    -->
+<!-- ================================================================ -->
+<section class="space-y-3">
+  <div>
+    <h2 class="text-base font-semibold">I3 · Card grid <span class="text-xs font-normal" style="color: var(--sf-muted)">(visual scan, less list-y)</span></h2>
+    <p class="text-sm" style="color: var(--sf-muted)">
+      2-column grid of mini cards. Each card carries the next-deadline pill prominently, with avatar + name + entity at the top. Less scanning effort per client (full card content is in your eye-line) but harder to compare across many clients quickly. Best for ~10-30 client books where browsing is easier than searching.
+    </p>
+  </div>
+
+  <div class="grid grid-cols-2 gap-3">
+    <a class="row-link variant-frame p-4 space-y-3 hover:bg-slate-50">
+      <div class="flex items-start gap-3">
+        <div class="h-11 w-11 shrink-0 rounded-full flex items-center justify-center font-semibold text-base av-rose">VK</div>
+        <div class="min-w-0 flex-1">
+          <div class="font-semibold text-sm truncate">Victor Kovalenko</div>
+          <div class="text-xs mt-0.5" style="color: var(--sf-muted)">Individual · CA</div>
+        </div>
+        <div class="mono text-sm font-bold shrink-0" style="color: var(--sf-urgent)">16</div>
+      </div>
+      <div class="flex items-center justify-between text-xs pt-2" style="border-top: 1px solid var(--sf-line-soft)">
+        <span style="color: var(--sf-muted)">Next due</span>
+        <span class="font-medium" style="color: var(--sf-urgent)">Today · Apr 30</span>
+      </div>
+    </a>
+    <a class="row-link variant-frame p-4 space-y-3 hover:bg-slate-50">
+      <div class="flex items-start gap-3">
+        <div class="h-11 w-11 shrink-0 rounded-full flex items-center justify-center font-semibold text-base av-purple">PT</div>
+        <div class="min-w-0 flex-1">
+          <div class="font-semibold text-sm truncate">Pacific Trading Corp</div>
+          <div class="text-xs mt-0.5" style="color: var(--sf-muted)">C-Corp · WA</div>
+        </div>
+        <div class="mono text-sm font-bold shrink-0" style="color: var(--sf-urgent)">14</div>
+      </div>
+      <div class="flex items-center justify-between text-xs pt-2" style="border-top: 1px solid var(--sf-line-soft)">
+        <span style="color: var(--sf-muted)">Next due</span>
+        <span class="font-medium" style="color: var(--sf-urgent)">Today · Apr 30</span>
+      </div>
+    </a>
+    <a class="row-link variant-frame p-4 space-y-3 hover:bg-slate-50">
+      <div class="flex items-start gap-3">
+        <div class="h-11 w-11 shrink-0 rounded-full flex items-center justify-center font-semibold text-base av-green">GV</div>
+        <div class="min-w-0 flex-1">
+          <div class="font-semibold text-sm truncate">Green Valley Foundation</div>
+          <div class="text-xs mt-0.5" style="color: var(--sf-muted)">Nonprofit · CA</div>
+        </div>
+        <div class="mono text-sm font-bold shrink-0" style="color: var(--sf-text)">13</div>
+      </div>
+      <div class="flex items-center justify-between text-xs pt-2" style="border-top: 1px solid var(--sf-line-soft)">
+        <span style="color: var(--sf-muted)">Next due</span>
+        <span class="font-medium" style="color: var(--sf-emerald)">in 2w · May 15</span>
+      </div>
+    </a>
+    <a class="row-link variant-frame p-4 space-y-3 hover:bg-slate-50">
+      <div class="flex items-start gap-3">
+        <div class="h-11 w-11 shrink-0 rounded-full flex items-center justify-center font-semibold text-base av-amber">CR</div>
+        <div class="min-w-0 flex-1">
+          <div class="font-semibold text-sm truncate">Chen Revocable Trust</div>
+          <div class="text-xs mt-0.5" style="color: var(--sf-muted)">Trust · NY</div>
+        </div>
+        <div class="mono text-sm font-bold shrink-0" style="color: var(--sf-text)">2</div>
+      </div>
+      <div class="flex items-center justify-between text-xs pt-2" style="border-top: 1px solid var(--sf-line-soft)">
+        <span style="color: var(--sf-muted)">Next due</span>
+        <span class="font-medium" style="color: var(--sf-emerald)">in 7w · Jun 17</span>
+      </div>
+    </a>
+    <a class="row-link variant-frame p-4 space-y-3 hover:bg-slate-50">
+      <div class="flex items-start gap-3">
+        <div class="h-11 w-11 shrink-0 rounded-full flex items-center justify-center font-semibold text-base av-blue">SF</div>
+        <div class="min-w-0 flex-1">
+          <div class="font-semibold text-sm truncate">Smith Family Trust</div>
+          <div class="text-xs mt-0.5" style="color: var(--sf-muted)">Trust · TX</div>
+        </div>
+        <div class="mono text-sm font-bold shrink-0" style="color: var(--sf-text)">2</div>
+      </div>
+      <div class="flex items-center justify-between text-xs pt-2" style="border-top: 1px solid var(--sf-line-soft)">
+        <span style="color: var(--sf-muted)">Next due</span>
+        <span class="font-medium" style="color: #94A3B8">in 12mo · Apr 15 '27</span>
+      </div>
+    </a>
+    <a class="row-link variant-frame p-4 space-y-3 hover:bg-slate-50">
+      <div class="flex items-start gap-3">
+        <div class="h-11 w-11 shrink-0 rounded-full flex items-center justify-center font-semibold text-base av-teal">AC</div>
+        <div class="min-w-0 flex-1">
+          <div class="font-semibold text-sm truncate">Ambiguous Client</div>
+          <div class="text-xs mt-0.5" style="color: var(--sf-muted)">Individual · CA</div>
+        </div>
+        <div class="mono text-sm font-bold shrink-0" style="color: var(--sf-urgent)">16</div>
+      </div>
+      <div class="flex items-center justify-between text-xs pt-2" style="border-top: 1px solid var(--sf-line-soft)">
+        <span style="color: var(--sf-muted)">Next due</span>
+        <span class="font-medium" style="color: var(--sf-urgent)">Today · Apr 30</span>
+      </div>
+    </a>
+  </div>
+</section>
+
+<!-- ================================================================ -->
+<!-- I4 — Urgency-bucketed list                                        -->
+<!-- ================================================================ -->
+<section class="space-y-3">
+  <div>
+    <h2 class="text-base font-semibold">I4 · Urgency-bucketed sections <span class="text-xs font-normal" style="color: var(--sf-muted)">(action-first, default sort)</span></h2>
+    <p class="text-sm" style="color: var(--sf-muted)">
+      Splits the same list into <strong>"Action needed"</strong> (next deadline ≤7d), <strong>"This month"</strong> (≤30d), and <strong>"On track"</strong>. The CPA's working set sits at the top by default. Tradeoffs: alphabetical scan is harder; needs a filter/search bar above to recover that. Best when the user mostly cares about <em>what's about to break</em>, not <em>everyone in the book</em>.
+    </p>
+  </div>
+
+  <div class="space-y-5">
+    <!-- Bucket 1 -->
+    <div>
+      <div class="flex items-center gap-2 mb-2 px-1">
+        <span class="h-2 w-2 rounded-full" style="background: var(--sf-urgent)"></span>
+        <span class="text-[11px] font-bold uppercase tracking-wider" style="color: var(--sf-urgent)">Action needed</span>
+        <span class="text-[11px]" style="color: var(--sf-muted)">3 clients · ≤7 days</span>
+      </div>
+      <div class="variant-frame divide-y" style="border-color: var(--sf-line)">
+        <a class="row-link flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50" style="border-left: 3px solid var(--sf-urgent)">
+          <div class="h-9 w-9 shrink-0 rounded-full flex items-center justify-center font-semibold text-sm av-rose">VK</div>
+          <div class="flex-1 min-w-0">
+            <div class="font-semibold text-sm">Victor Kovalenko <span class="font-normal text-xs" style="color: var(--sf-muted)">· Individual · CA</span></div>
+            <div class="text-xs mt-0.5" style="color: var(--sf-urgent)"><span class="font-semibold">Today</span> · 941-Q1 + 15 more open</div>
+          </div>
+          <span class="chev" style="color: #94A3B8">›</span>
+        </a>
+        <a class="row-link flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50" style="border-top: 1px solid var(--sf-line-soft); border-left: 3px solid var(--sf-urgent)">
+          <div class="h-9 w-9 shrink-0 rounded-full flex items-center justify-center font-semibold text-sm av-purple">PT</div>
+          <div class="flex-1 min-w-0">
+            <div class="font-semibold text-sm">Pacific Trading Corp <span class="font-normal text-xs" style="color: var(--sf-muted)">· C-Corp · WA</span></div>
+            <div class="text-xs mt-0.5" style="color: var(--sf-urgent)"><span class="font-semibold">Today</span> · 941-Q1 + 13 more open</div>
+          </div>
+          <span class="chev" style="color: #94A3B8">›</span>
+        </a>
+        <a class="row-link flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50" style="border-top: 1px solid var(--sf-line-soft); border-left: 3px solid var(--sf-urgent)">
+          <div class="h-9 w-9 shrink-0 rounded-full flex items-center justify-center font-semibold text-sm av-teal">AC</div>
+          <div class="flex-1 min-w-0">
+            <div class="font-semibold text-sm">Ambiguous Client <span class="font-normal text-xs" style="color: var(--sf-muted)">· Individual · CA</span></div>
+            <div class="text-xs mt-0.5" style="color: var(--sf-urgent)"><span class="font-semibold">Today</span> · 941-Q1 + 15 more open</div>
+          </div>
+          <span class="chev" style="color: #94A3B8">›</span>
+        </a>
+      </div>
+    </div>
+
+    <!-- Bucket 2 -->
+    <div>
+      <div class="flex items-center gap-2 mb-2 px-1">
+        <span class="h-2 w-2 rounded-full" style="background: var(--sf-emerald)"></span>
+        <span class="text-[11px] font-bold uppercase tracking-wider" style="color: var(--sf-emerald)">This month</span>
+        <span class="text-[11px]" style="color: var(--sf-muted)">1 client · ≤30 days</span>
+      </div>
+      <div class="variant-frame divide-y" style="border-color: var(--sf-line)">
+        <a class="row-link flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50" style="border-left: 3px solid var(--sf-emerald)">
+          <div class="h-9 w-9 shrink-0 rounded-full flex items-center justify-center font-semibold text-sm av-green">GV</div>
+          <div class="flex-1 min-w-0">
+            <div class="font-semibold text-sm">Green Valley Foundation <span class="font-normal text-xs" style="color: var(--sf-muted)">· Nonprofit · CA</span></div>
+            <div class="text-xs mt-0.5" style="color: var(--sf-muted)"><span class="font-semibold" style="color: var(--sf-emerald)">in 2w</span> · Form 990 + 12 more open</div>
+          </div>
+          <span class="chev" style="color: #94A3B8">›</span>
+        </a>
+      </div>
+    </div>
+
+    <!-- Bucket 3 -->
+    <div>
+      <div class="flex items-center gap-2 mb-2 px-1">
+        <span class="h-2 w-2 rounded-full" style="background: #94A3B8"></span>
+        <span class="text-[11px] font-bold uppercase tracking-wider" style="color: var(--sf-muted)">On track</span>
+        <span class="text-[11px]" style="color: var(--sf-muted)">2 clients · &gt;30 days</span>
+      </div>
+      <div class="variant-frame divide-y" style="border-color: var(--sf-line)">
+        <a class="row-link flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50">
+          <div class="h-9 w-9 shrink-0 rounded-full flex items-center justify-center font-semibold text-sm av-amber">CR</div>
+          <div class="flex-1 min-w-0">
+            <div class="font-semibold text-sm">Chen Revocable Trust <span class="font-normal text-xs" style="color: var(--sf-muted)">· Trust · NY</span></div>
+            <div class="text-xs mt-0.5" style="color: var(--sf-muted)">in 7w · Jun 17 · 2 open</div>
+          </div>
+          <span class="chev" style="color: #94A3B8">›</span>
+        </a>
+        <a class="row-link flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50" style="border-top: 1px solid var(--sf-line-soft)">
+          <div class="h-9 w-9 shrink-0 rounded-full flex items-center justify-center font-semibold text-sm av-blue">SF</div>
+          <div class="flex-1 min-w-0">
+            <div class="font-semibold text-sm">Smith Family Trust <span class="font-normal text-xs" style="color: var(--sf-muted)">· Trust · TX</span></div>
+            <div class="text-xs mt-0.5" style="color: var(--sf-muted)">in 12mo · Apr 15 2027 · 2 open</div>
+          </div>
+          <span class="chev" style="color: #94A3B8">›</span>
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer class="pt-8 border-t text-sm space-y-2" style="border-color: var(--sf-line-soft); color: var(--sf-muted)">
+  <p><strong style="color: var(--sf-text)">My picks:</strong></p>
+  <p><strong>I1</strong> — safest upgrade. Same row shape as today, three times the info per row.</p>
+  <p><strong>I2</strong> — the right call once book size grows past ~30. Drake / desktop-tax-software DNA.</p>
+  <p><strong>I3</strong> — most "designed", but doesn't scale to 50+ clients. Fine for a small practitioner.</p>
+  <p><strong>I4</strong> — strongest workflow alignment ("show me what's on fire"). Riskier because alphabetical scan goes away — needs a search bar above to compensate.</p>
+  <p class="pt-2"><em>If forced to pick one: <strong>I1</strong> for now (lowest disruption, biggest information gain), then revisit I2 once you have users with 30+ client books.</em></p>
+</footer>
+
+</div>
+</body>
+</html>

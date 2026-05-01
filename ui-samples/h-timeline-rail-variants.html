@@ -1,0 +1,539 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Timeline rail — 5 style variants</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  :root {
+    --sf-blue: #0176D3;
+    --sf-blue-dark: #014486;
+    --sf-blue-soft: #E8F4FB;
+    --sf-text: #181818;
+    --sf-muted: #444444;
+    --sf-line: #C9C9C9;
+    --sf-line-soft: #E5E5E5;
+    --sf-canvas: #F3F3F3;
+    --sf-urgent: #BA4106;
+    --sf-urgent-bg: #FEF1ED;
+    --sf-high: #C76A0E;
+    --sf-medium: #B77B00;
+    --sf-done: #2E844A;
+    --sf-emerald: #047857;
+    --sf-sky: #0284C7;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Geist", "Inter", sans-serif;
+    color: var(--sf-text);
+    background: var(--sf-canvas);
+    font-size: 16px;
+  }
+  .mono { font-family: "Geist Mono", "SF Mono", ui-monospace, monospace; font-feature-settings: "ss01"; }
+  .pill { font-size: 11px; padding: 1px 6px; border-radius: 3px; font-weight: 500; display: inline-flex; align-items: center; gap: 3px; }
+  .row-link { transition: background 120ms; cursor: pointer; }
+  .chev { transition: all 150ms; }
+  .row-link:hover .chev { transform: translateX(2px); color: var(--sf-text); }
+  .variant-frame { background: white; border: 1px solid var(--sf-line); border-radius: 4px; }
+</style>
+</head>
+<body class="p-8">
+
+<div class="max-w-3xl mx-auto space-y-20 pb-24">
+
+<header class="space-y-2">
+  <a href="index.html" class="text-xs" style="color: var(--sf-blue)">← All samples</a>
+  <h1 class="text-2xl font-semibold">Timeline rail — 5 style variants</h1>
+  <p class="text-sm" style="color: var(--sf-muted)">
+    Same data, same vertical-rail structure, 5 different aesthetic treatments.
+    All within the SF Lightning palette.
+  </p>
+</header>
+
+<!-- ================================================================ -->
+<!-- T1 — Editorial minimal                                            -->
+<!-- ================================================================ -->
+<section class="space-y-3">
+  <div>
+    <h2 class="text-base font-semibold">T1 · Editorial minimal</h2>
+    <p class="text-sm" style="color: var(--sf-muted)">
+      1px hairline rail, 8px solid dots, generous whitespace. Most restrained — reads like a New York Times timeline graphic. Zero chrome, all content. Best when this list is the focal element on the page.
+    </p>
+  </div>
+
+  <div class="variant-frame px-8 py-7">
+    <div class="relative">
+      <div class="absolute left-[3.5px] top-2 bottom-2 w-px" style="background: var(--sf-line)"></div>
+
+      <!-- Apr 30 -->
+      <div class="relative pl-8 pb-8">
+        <div class="absolute left-0 top-1.5 w-2 h-2 rounded-full" style="background: var(--sf-urgent)"></div>
+        <div class="text-[13px] font-bold tracking-tight">Apr 30, 2026 <span class="font-normal" style="color: var(--sf-muted)">· Thu</span></div>
+        <div class="text-[11px] font-semibold mb-2 mono" style="color: var(--sf-urgent)">TODAY</div>
+        <a class="row-link block py-1.5 flex items-center gap-3">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="mono text-[13px] font-semibold">941-Q1</span>
+              <span class="text-[13px]">Form 941 Q1 — Quarterly Employer Payroll Tax</span>
+              <span class="text-xs" style="color: var(--sf-muted)">· US Federal</span>
+            </div>
+          </div>
+          <span class="chev text-base" style="color: #94A3B8">›</span>
+        </a>
+      </div>
+
+      <!-- Jun 15 -->
+      <div class="relative pl-8 pb-8">
+        <div class="absolute left-0 top-1.5 w-2 h-2 rounded-full" style="background: var(--sf-emerald)"></div>
+        <div class="text-[13px] font-bold tracking-tight">Jun 15, 2026 <span class="font-normal" style="color: var(--sf-muted)">· Mon</span></div>
+        <div class="text-[11px] font-semibold mb-2 mono" style="color: var(--sf-emerald)">in 7w</div>
+        <a class="row-link block py-1.5 flex items-center gap-3">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="mono text-[13px] font-semibold">1040-ES-Q2</span>
+              <span class="text-[13px]">Form 1040-ES Q2 — Individual Estimated Tax</span>
+              <span class="text-xs" style="color: var(--sf-muted)">· US Federal</span>
+            </div>
+          </div>
+          <span class="chev text-base" style="color: #94A3B8">›</span>
+        </a>
+        <a class="row-link block py-1.5 flex items-center gap-3">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="mono text-[13px] font-semibold">CA-3893</span>
+              <span class="pill" style="background: var(--sf-urgent-bg); color: var(--sf-urgent)">Irrevocable</span>
+              <span class="text-[13px]">CA Form 3893 — PTE Elective Tax Prepayment</span>
+              <span class="text-xs" style="color: var(--sf-muted)">· CA</span>
+            </div>
+          </div>
+          <span class="chev text-base" style="color: #94A3B8">›</span>
+        </a>
+      </div>
+
+      <!-- Sep 15 -->
+      <div class="relative pl-8 pb-2">
+        <div class="absolute left-0 top-1.5 w-2 h-2 rounded-full" style="background: var(--sf-sky)"></div>
+        <div class="text-[13px] font-bold tracking-tight">Sep 15, 2026 <span class="font-normal" style="color: var(--sf-muted)">· Tue</span></div>
+        <div class="text-[11px] font-semibold mb-2 mono" style="color: var(--sf-sky)">in 5mo</div>
+        <a class="row-link block py-1.5 flex items-center gap-3">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="mono text-[13px] font-semibold">1040-ES-Q3</span>
+              <span class="text-[13px]">Form 1040-ES Q3 — Individual Estimated Tax</span>
+              <span class="text-xs" style="color: var(--sf-muted)">· US Federal</span>
+            </div>
+          </div>
+          <span class="chev text-base" style="color: #94A3B8">›</span>
+        </a>
+      </div>
+
+      <div class="relative pl-8 pt-4 mt-2 border-t" style="border-color: var(--sf-line-soft)">
+        <button class="text-xs font-medium hover:underline" style="color: var(--sf-blue)">
+          Show 5 more deadlines (after Jan 15, 2027) →
+        </button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================ -->
+<!-- T2 — Station markers                                              -->
+<!-- ================================================================ -->
+<section class="space-y-3">
+  <div>
+    <h2 class="text-base font-semibold">T2 · Station markers</h2>
+    <p class="text-sm" style="color: var(--sf-muted)">
+      Thicker 2px rail, 14px ring-and-dot nodes (like metro stations). Date as a chunky badge with day-of-week + relative chip baked in. Most "structured" of the bunch — every date feels like it's anchored to something solid.
+    </p>
+  </div>
+
+  <div class="variant-frame px-8 py-7">
+    <div class="relative">
+      <div class="absolute left-[6px] top-3 bottom-3 w-[2px]" style="background: var(--sf-line)"></div>
+
+      <!-- Apr 30 -->
+      <div class="relative pl-10 pb-7">
+        <div class="absolute left-0 top-1 w-3.5 h-3.5 rounded-full ring-[3px] ring-white" style="background: var(--sf-urgent); box-shadow: 0 0 0 1.5px var(--sf-urgent)"></div>
+        <div class="flex items-center gap-2 mb-2">
+          <span class="text-[13px] font-bold tracking-tight">Apr 30, 2026 Thu</span>
+          <span class="pill" style="background: var(--sf-urgent-bg); color: var(--sf-urgent); font-weight: 600">● Today</span>
+        </div>
+        <a class="row-link block px-3 py-2 -mx-3 rounded flex items-center gap-3 hover:bg-blue-50">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="mono text-sm font-semibold">941-Q1</span>
+              <span class="text-sm">Form 941 Q1 — Quarterly Employer Payroll Tax</span>
+              <span class="text-xs" style="color: var(--sf-muted)">· US Federal</span>
+            </div>
+          </div>
+          <span class="chev text-base" style="color: #94A3B8">›</span>
+        </a>
+      </div>
+
+      <!-- Jun 15 -->
+      <div class="relative pl-10 pb-7">
+        <div class="absolute left-0 top-1 w-3.5 h-3.5 rounded-full ring-[3px] ring-white" style="background: var(--sf-emerald); box-shadow: 0 0 0 1.5px var(--sf-emerald)"></div>
+        <div class="flex items-center gap-2 mb-2">
+          <span class="text-[13px] font-bold tracking-tight">Jun 15, 2026 Mon</span>
+          <span class="pill" style="background: #ECFDF5; color: var(--sf-emerald); font-weight: 600">in 7w</span>
+        </div>
+        <a class="row-link block px-3 py-2 -mx-3 rounded flex items-center gap-3 hover:bg-blue-50">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="mono text-sm font-semibold">1040-ES-Q2</span>
+              <span class="text-sm">Form 1040-ES Q2 — Individual Estimated Tax</span>
+              <span class="text-xs" style="color: var(--sf-muted)">· US Federal</span>
+            </div>
+          </div>
+          <span class="chev text-base" style="color: #94A3B8">›</span>
+        </a>
+        <a class="row-link block px-3 py-2 -mx-3 rounded flex items-center gap-3 hover:bg-blue-50">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="mono text-sm font-semibold">CA-3893</span>
+              <span class="pill" style="background: var(--sf-urgent-bg); color: var(--sf-urgent)">Irrevocable</span>
+              <span class="text-sm">CA Form 3893 — PTE Elective Tax Prepayment</span>
+              <span class="text-xs" style="color: var(--sf-muted)">· CA</span>
+            </div>
+          </div>
+          <span class="chev text-base" style="color: #94A3B8">›</span>
+        </a>
+      </div>
+
+      <!-- Sep 15 -->
+      <div class="relative pl-10 pb-2">
+        <div class="absolute left-0 top-1 w-3.5 h-3.5 rounded-full ring-[3px] ring-white" style="background: var(--sf-sky); box-shadow: 0 0 0 1.5px var(--sf-sky)"></div>
+        <div class="flex items-center gap-2 mb-2">
+          <span class="text-[13px] font-bold tracking-tight">Sep 15, 2026 Tue</span>
+          <span class="pill" style="background: #F0F9FF; color: var(--sf-sky); font-weight: 600">in 5mo</span>
+        </div>
+        <a class="row-link block px-3 py-2 -mx-3 rounded flex items-center gap-3 hover:bg-blue-50">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="mono text-sm font-semibold">1040-ES-Q3</span>
+              <span class="text-sm">Form 1040-ES Q3 — Individual Estimated Tax</span>
+              <span class="text-xs" style="color: var(--sf-muted)">· US Federal</span>
+            </div>
+          </div>
+          <span class="chev text-base" style="color: #94A3B8">›</span>
+        </a>
+      </div>
+
+      <div class="relative pl-10">
+        <div class="absolute left-1 top-1.5 w-2 h-2 rounded-full ring-[3px] ring-white" style="background: var(--sf-line)"></div>
+        <button class="text-xs font-medium hover:underline" style="color: var(--sf-blue)">
+          Show 5 more deadlines (after Jan 15, 2027) →
+        </button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================ -->
+<!-- T3 — Changelog split                                              -->
+<!-- ================================================================ -->
+<section class="space-y-3">
+  <div>
+    <h2 class="text-base font-semibold">T3 · Changelog split <span class="text-xs font-normal" style="color: var(--sf-muted)">(date on left, content on right)</span></h2>
+    <p class="text-sm" style="color: var(--sf-muted)">
+      Splits dates and content into two columns separated by the rail. Reads like a git log or company changelog. Strongest "story flowing forward in time" feel. Date stack on the left becomes a stable scan column.
+    </p>
+  </div>
+
+  <div class="variant-frame px-6 py-7">
+    <div class="relative">
+      <div class="absolute left-[120px] top-3 bottom-3 w-px" style="background: var(--sf-line)"></div>
+
+      <!-- Apr 30 -->
+      <div class="relative pb-7 grid grid-cols-[112px_1fr] gap-6">
+        <div class="text-right pt-0.5">
+          <div class="mono text-[10px] uppercase tracking-wider font-bold" style="color: var(--sf-urgent)">Apr 30 · Thu</div>
+          <div class="text-2xl font-bold leading-none mt-1" style="color: var(--sf-urgent)">Today</div>
+          <div class="text-[10px] mt-1 mono" style="color: var(--sf-muted)">2026</div>
+        </div>
+        <div class="relative pl-8">
+          <div class="absolute -left-[5px] top-2 w-2.5 h-2.5 rounded-full ring-2 ring-white" style="background: var(--sf-urgent)"></div>
+          <a class="row-link block py-1.5 flex items-center gap-3">
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="mono text-sm font-semibold">941-Q1</span>
+                <span class="text-sm">Form 941 Q1 — Quarterly Employer Payroll Tax</span>
+              </div>
+              <div class="text-xs mt-0.5" style="color: var(--sf-muted)">US Federal</div>
+            </div>
+            <span class="chev text-base" style="color: #94A3B8">›</span>
+          </a>
+        </div>
+      </div>
+
+      <!-- Jun 15 -->
+      <div class="relative pb-7 grid grid-cols-[112px_1fr] gap-6">
+        <div class="text-right pt-0.5">
+          <div class="mono text-[10px] uppercase tracking-wider font-bold">Jun 15 · Mon</div>
+          <div class="text-2xl font-bold leading-none mt-1">15</div>
+          <div class="text-[10px] mt-1 mono font-semibold" style="color: var(--sf-emerald)">in 7w</div>
+        </div>
+        <div class="relative pl-8 space-y-2">
+          <div class="absolute -left-[5px] top-2 w-2.5 h-2.5 rounded-full ring-2 ring-white" style="background: var(--sf-emerald)"></div>
+          <a class="row-link block py-1.5 flex items-center gap-3">
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="mono text-sm font-semibold">1040-ES-Q2</span>
+                <span class="text-sm">Form 1040-ES Q2 — Individual Estimated Tax</span>
+              </div>
+              <div class="text-xs mt-0.5" style="color: var(--sf-muted)">US Federal</div>
+            </div>
+            <span class="chev text-base" style="color: #94A3B8">›</span>
+          </a>
+          <a class="row-link block py-1.5 flex items-center gap-3">
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="mono text-sm font-semibold">CA-3893</span>
+                <span class="pill" style="background: var(--sf-urgent-bg); color: var(--sf-urgent)">Irrevocable</span>
+                <span class="text-sm">PTE Elective Tax Prepayment</span>
+              </div>
+              <div class="text-xs mt-0.5" style="color: var(--sf-muted)">CA · CA Form 3893</div>
+            </div>
+            <span class="chev text-base" style="color: #94A3B8">›</span>
+          </a>
+        </div>
+      </div>
+
+      <!-- Sep 15 -->
+      <div class="relative pb-2 grid grid-cols-[112px_1fr] gap-6">
+        <div class="text-right pt-0.5">
+          <div class="mono text-[10px] uppercase tracking-wider font-bold">Sep 15 · Tue</div>
+          <div class="text-2xl font-bold leading-none mt-1">15</div>
+          <div class="text-[10px] mt-1 mono font-semibold" style="color: var(--sf-sky)">in 5mo</div>
+        </div>
+        <div class="relative pl-8">
+          <div class="absolute -left-[5px] top-2 w-2.5 h-2.5 rounded-full ring-2 ring-white" style="background: var(--sf-sky)"></div>
+          <a class="row-link block py-1.5 flex items-center gap-3">
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="mono text-sm font-semibold">1040-ES-Q3</span>
+                <span class="text-sm">Form 1040-ES Q3 — Individual Estimated Tax</span>
+              </div>
+              <div class="text-xs mt-0.5" style="color: var(--sf-muted)">US Federal</div>
+            </div>
+            <span class="chev text-base" style="color: #94A3B8">›</span>
+          </a>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-[112px_1fr] gap-6 pt-4 border-t" style="border-color: var(--sf-line-soft)">
+        <div></div>
+        <div class="pl-8">
+          <button class="text-xs font-medium hover:underline" style="color: var(--sf-blue)">
+            Show 5 more deadlines (after Jan 15, 2027) →
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================ -->
+<!-- T4 — Floating card stations                                        -->
+<!-- ================================================================ -->
+<section class="space-y-3">
+  <div>
+    <h2 class="text-base font-semibold">T4 · Floating card stations</h2>
+    <p class="text-sm" style="color: var(--sf-muted)">
+      Each date is a card "hanging off" the rail. Date label sits in a colored ribbon at the top-left. Modern SaaS look — most visual weight per date but the breaks between them are very clear. Best when dates are far apart and each is a "moment".
+    </p>
+  </div>
+
+  <div class="px-2 py-4">
+    <div class="relative">
+      <div class="absolute left-[7px] top-2 bottom-2 w-px" style="background: var(--sf-line)"></div>
+
+      <!-- Apr 30 -->
+      <div class="relative pl-10 pb-5">
+        <div class="absolute left-0 top-3 w-4 h-4 rounded-full ring-4 ring-[var(--sf-canvas)]" style="background: var(--sf-urgent)"></div>
+        <div class="bg-white rounded shadow-sm overflow-hidden" style="border: 1px solid var(--sf-line)">
+          <div class="px-4 py-2 flex items-center gap-2 text-[12px] font-bold uppercase tracking-wider text-white" style="background: var(--sf-urgent)">
+            <span>Apr 30, 2026 Thu</span>
+            <span class="ml-auto opacity-90">Today</span>
+          </div>
+          <a class="row-link block px-4 py-3 flex items-center gap-3 hover:bg-blue-50">
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="mono text-sm font-semibold">941-Q1</span>
+                <span class="text-sm">Form 941 Q1 — Quarterly Employer Payroll Tax</span>
+              </div>
+              <div class="text-xs mt-0.5" style="color: var(--sf-muted)">US Federal</div>
+            </div>
+            <span class="chev text-base" style="color: #94A3B8">›</span>
+          </a>
+        </div>
+      </div>
+
+      <!-- Jun 15 -->
+      <div class="relative pl-10 pb-5">
+        <div class="absolute left-0 top-3 w-4 h-4 rounded-full ring-4 ring-[var(--sf-canvas)]" style="background: var(--sf-emerald)"></div>
+        <div class="bg-white rounded shadow-sm overflow-hidden" style="border: 1px solid var(--sf-line)">
+          <div class="px-4 py-2 flex items-center gap-2 text-[12px] font-bold uppercase tracking-wider" style="background: #ECFDF5; color: var(--sf-emerald); border-bottom: 1px solid var(--sf-line-soft)">
+            <span>Jun 15, 2026 Mon</span>
+            <span class="ml-auto">in 7w</span>
+          </div>
+          <a class="row-link block px-4 py-3 flex items-center gap-3 hover:bg-blue-50" style="border-bottom: 1px solid var(--sf-line-soft)">
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="mono text-sm font-semibold">1040-ES-Q2</span>
+                <span class="text-sm">Form 1040-ES Q2 — Individual Estimated Tax</span>
+              </div>
+              <div class="text-xs mt-0.5" style="color: var(--sf-muted)">US Federal</div>
+            </div>
+            <span class="chev text-base" style="color: #94A3B8">›</span>
+          </a>
+          <a class="row-link block px-4 py-3 flex items-center gap-3 hover:bg-blue-50">
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="mono text-sm font-semibold">CA-3893</span>
+                <span class="pill" style="background: var(--sf-urgent-bg); color: var(--sf-urgent)">Irrevocable</span>
+                <span class="text-sm">PTE Elective Tax Prepayment</span>
+              </div>
+              <div class="text-xs mt-0.5" style="color: var(--sf-muted)">CA · CA Form 3893</div>
+            </div>
+            <span class="chev text-base" style="color: #94A3B8">›</span>
+          </a>
+        </div>
+      </div>
+
+      <!-- Sep 15 -->
+      <div class="relative pl-10 pb-5">
+        <div class="absolute left-0 top-3 w-4 h-4 rounded-full ring-4 ring-[var(--sf-canvas)]" style="background: var(--sf-sky)"></div>
+        <div class="bg-white rounded shadow-sm overflow-hidden" style="border: 1px solid var(--sf-line)">
+          <div class="px-4 py-2 flex items-center gap-2 text-[12px] font-bold uppercase tracking-wider" style="background: #F0F9FF; color: var(--sf-sky); border-bottom: 1px solid var(--sf-line-soft)">
+            <span>Sep 15, 2026 Tue</span>
+            <span class="ml-auto">in 5mo</span>
+          </div>
+          <a class="row-link block px-4 py-3 flex items-center gap-3 hover:bg-blue-50">
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="mono text-sm font-semibold">1040-ES-Q3</span>
+                <span class="text-sm">Form 1040-ES Q3 — Individual Estimated Tax</span>
+              </div>
+              <div class="text-xs mt-0.5" style="color: var(--sf-muted)">US Federal</div>
+            </div>
+            <span class="chev text-base" style="color: #94A3B8">›</span>
+          </a>
+        </div>
+      </div>
+
+      <div class="relative pl-10">
+        <div class="absolute left-1.5 top-1 w-2 h-2 rounded-full ring-4 ring-[var(--sf-canvas)]" style="background: var(--sf-line)"></div>
+        <button class="text-xs font-medium hover:underline pt-1" style="color: var(--sf-blue)">
+          Show 5 more deadlines (after Jan 15, 2027) →
+        </button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================ -->
+<!-- T5 — Pressure gradient rail                                        -->
+<!-- ================================================================ -->
+<section class="space-y-3">
+  <div>
+    <h2 class="text-base font-semibold">T5 · Pressure gradient rail</h2>
+    <p class="text-sm" style="color: var(--sf-muted)">
+      The rail itself is a colored gradient — red at the top (urgent) fading through orange/amber/green/sky/gray as you scroll down. Date nodes match the rail color at that point. Strongest "thermometer" feel: you can see urgency just by glancing at the rail's color profile, no need to read dates.
+    </p>
+  </div>
+
+  <div class="variant-frame px-8 py-7">
+    <div class="relative">
+      <!-- Gradient rail: from urgent at top to muted at bottom -->
+      <div class="absolute left-[5px] top-2 bottom-2 w-[3px] rounded-full" style="background: linear-gradient(to bottom, var(--sf-urgent) 0%, var(--sf-urgent) 12%, var(--sf-emerald) 32%, var(--sf-emerald) 52%, var(--sf-sky) 72%, #94A3B8 100%);"></div>
+
+      <!-- Apr 30 -->
+      <div class="relative pl-10 pb-7">
+        <div class="absolute left-0 top-1.5 w-3 h-3 rounded-full ring-[3px] ring-white" style="background: var(--sf-urgent); box-shadow: 0 0 0 1px var(--sf-urgent), 0 0 8px rgba(186,65,6,0.4)"></div>
+        <div class="flex items-baseline gap-2 mb-1.5">
+          <span class="text-[14px] font-bold tracking-tight">Apr 30, 2026 Thu</span>
+          <span class="text-[11px] font-bold mono uppercase tracking-wider" style="color: var(--sf-urgent)">Today</span>
+        </div>
+        <a class="row-link block px-3 py-2 -mx-3 rounded flex items-center gap-3 hover:bg-blue-50">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="mono text-sm font-semibold">941-Q1</span>
+              <span class="text-sm">Form 941 Q1 — Quarterly Employer Payroll Tax</span>
+              <span class="text-xs" style="color: var(--sf-muted)">· US Federal</span>
+            </div>
+          </div>
+          <span class="chev text-base" style="color: #94A3B8">›</span>
+        </a>
+      </div>
+
+      <!-- Jun 15 -->
+      <div class="relative pl-10 pb-7">
+        <div class="absolute left-0 top-1.5 w-3 h-3 rounded-full ring-[3px] ring-white" style="background: var(--sf-emerald); box-shadow: 0 0 0 1px var(--sf-emerald)"></div>
+        <div class="flex items-baseline gap-2 mb-1.5">
+          <span class="text-[14px] font-bold tracking-tight">Jun 15, 2026 Mon</span>
+          <span class="text-[11px] font-bold mono uppercase tracking-wider" style="color: var(--sf-emerald)">in 7w</span>
+        </div>
+        <a class="row-link block px-3 py-2 -mx-3 rounded flex items-center gap-3 hover:bg-blue-50">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="mono text-sm font-semibold">1040-ES-Q2</span>
+              <span class="text-sm">Form 1040-ES Q2 — Individual Estimated Tax</span>
+              <span class="text-xs" style="color: var(--sf-muted)">· US Federal</span>
+            </div>
+          </div>
+          <span class="chev text-base" style="color: #94A3B8">›</span>
+        </a>
+        <a class="row-link block px-3 py-2 -mx-3 rounded flex items-center gap-3 hover:bg-blue-50">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="mono text-sm font-semibold">CA-3893</span>
+              <span class="pill" style="background: var(--sf-urgent-bg); color: var(--sf-urgent)">Irrevocable</span>
+              <span class="text-sm">CA Form 3893 — PTE Elective Tax Prepayment</span>
+              <span class="text-xs" style="color: var(--sf-muted)">· CA</span>
+            </div>
+          </div>
+          <span class="chev text-base" style="color: #94A3B8">›</span>
+        </a>
+      </div>
+
+      <!-- Sep 15 -->
+      <div class="relative pl-10 pb-2">
+        <div class="absolute left-0 top-1.5 w-3 h-3 rounded-full ring-[3px] ring-white" style="background: var(--sf-sky); box-shadow: 0 0 0 1px var(--sf-sky)"></div>
+        <div class="flex items-baseline gap-2 mb-1.5">
+          <span class="text-[14px] font-bold tracking-tight">Sep 15, 2026 Tue</span>
+          <span class="text-[11px] font-bold mono uppercase tracking-wider" style="color: var(--sf-sky)">in 5mo</span>
+        </div>
+        <a class="row-link block px-3 py-2 -mx-3 rounded flex items-center gap-3 hover:bg-blue-50">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="mono text-sm font-semibold">1040-ES-Q3</span>
+              <span class="text-sm">Form 1040-ES Q3 — Individual Estimated Tax</span>
+              <span class="text-xs" style="color: var(--sf-muted)">· US Federal</span>
+            </div>
+          </div>
+          <span class="chev text-base" style="color: #94A3B8">›</span>
+        </a>
+      </div>
+
+      <div class="relative pl-10 pt-4 mt-2 border-t" style="border-color: var(--sf-line-soft)">
+        <button class="text-xs font-medium hover:underline" style="color: var(--sf-blue)">
+          Show 5 more deadlines (after Jan 15, 2027) →
+        </button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer class="pt-8 border-t text-sm space-y-2" style="border-color: var(--sf-line-soft); color: var(--sf-muted)">
+  <p><strong style="color: var(--sf-text)">My picks:</strong></p>
+  <p><strong>T1</strong> if you want quiet and elegant — least chrome, most "content first".</p>
+  <p><strong>T2</strong> if you want the structural feel without going minimal — best baseline upgrade.</p>
+  <p><strong>T3</strong> if dates are the primary scan axis — best for "I know roughly when, find me what".</p>
+  <p><strong>T4</strong> if you want each date to feel like a separate event card — most "designed".</p>
+  <p><strong>T5</strong> if you want urgency to be a felt sensation — the gradient rail is the hook.</p>
+  <p class="pt-2"><em>If forced to pick one: T2 (station markers) is the most balanced — quiet enough for everyday use, structured enough that it doesn't get lost when the list grows long. T5 is the most distinctive if you want this to be a signature element of the product.</em></p>
+</footer>
+
+</div>
+</body>
+</html>

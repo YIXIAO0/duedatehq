@@ -37,6 +37,13 @@ export const membershipRoleEnum = pgEnum("membership_role", [
   "member",
 ]);
 
+export const invitationStatusEnum = pgEnum("invitation_status", [
+  "pending",
+  "accepted",
+  "revoked",
+  "expired",
+]);
+
 export const entityTypeEnum = pgEnum("entity_type", [
   "individual",
   "c_corp",
@@ -48,20 +55,30 @@ export const entityTypeEnum = pgEnum("entity_type", [
   "nonprofit",
 ]);
 
+/**
+ * Deadline workflow status — collapsed to 4 values after the 2026-04-30
+ * CPA interview. The previous 8 values conflated workflow progress with
+ * date/derivability concerns:
+ *
+ *   - "extended"       → now `is_extended` boolean column
+ *   - "missed"         → computed at query time
+ *                        (`effective_due_date < today AND status != completed`)
+ *   - "ready_to_file"  → merged into "in_progress" — the CPA's next
+ *                        action ("review and e-file") is the same as
+ *                        "in progress", so the distinction added clicks
+ *                        without changing behavior
+ *   - "not_applicable" → row deleted instead (this entity doesn't need
+ *                        to file this rule, so it shouldn't exist)
+ *
+ * Postgres enum-altering is awkward when existing rows reference the
+ * dropped values; we run the data backfill (UPDATE / DELETE) before
+ * migrating the enum so no row is orphaned.
+ */
 export const deadlineStatusEnum = pgEnum("deadline_status", [
   "pending",
-  // 🆕 "I'm blocked on the client sending me docs". Most common blocked
-  // state, was hidden under in_progress before. Splitting it out lets
-  // the dashboard answer "what am I blocked on?" vs "what am I working on?".
   "waiting_on_client",
   "in_progress",
-  // 🆕 "I'm done my prep work, just need signature / e-file ack".
-  // Stops the "I thought we filed it" gap.
-  "ready_to_file",
   "completed",
-  "extended",
-  "missed",
-  "not_applicable",
 ]);
 
 export const jurisdictionTypeEnum = pgEnum("jurisdiction_type", [
@@ -433,6 +450,31 @@ export const deadlineInstances = pgTable(
     completedByActorType: actorTypeEnum("completed_by_actor_type"),
     extensionFiledAt: timestamp("extension_filed_at", { withTimezone: true }),
     extensionDueDate: date("extension_due_date"),
+    /**
+     * True when an extension has been filed for this deadline.
+     *
+     * Replaces the old status='extended' enum value. "Extended" is a
+     * date-shifted state, not a workflow stage — the CPA still has to
+     * progress pending → in_progress → completed against the new
+     * extensionDueDate. Storing it as a boolean lets `status` represent
+     * pure workflow progress without conflating the two dimensions.
+     */
+    isExtended: boolean("is_extended").notNull().default(false),
+    /**
+     * Member of the org responsible for this deadline. NULL = unassigned
+     * ("in queue, anyone can pick it up"). ON DELETE SET NULL so removing
+     * a teammate doesn't drop their deadlines — they revert to unassigned
+     * and someone else can claim them.
+     *
+     * Auto-default is intentionally absent: new deadlines start unassigned
+     * even when the entity is created by a specific user, so a 5-person
+     * small firm doesn't auto-dump 80 deadlines onto one person's queue.
+     * The CPA explicitly assigns from the detail page or via a future
+     * bulk-assign tool.
+     */
+    ownerUserId: text("owner_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
     notes: text("notes"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -441,6 +483,9 @@ export const deadlineInstances = pgTable(
     index("deadline_instances_org_due_idx").on(t.orgId, t.dueDate, t.status),
     index("deadline_instances_entity_idx").on(t.entityId),
     index("deadline_instances_org_status_idx").on(t.orgId, t.status),
+    // "Show me my deadlines" is the highest-frequency query for team
+    // users — composite (org, owner) covers it without a full scan.
+    index("deadline_instances_org_owner_idx").on(t.orgId, t.ownerUserId),
     uniqueIndex("deadline_instances_unique_idx").on(t.entityId, t.ruleId, t.taxYear),
   ],
 );
@@ -700,6 +745,64 @@ export const announcementDismissals = pgTable(
 );
 
 // ---------------------------------------------------------------------------
+// Invitations — tokenized email-based invites for the lightweight team tier.
+//
+// V1 flow:
+//   1. Owner/admin creates an invitation with email + role.
+//   2. App generates a tokenized link (/invite/<token>) and shows it copyable.
+//   3. Admin shares the link manually (Slack / email — V1 no email infra).
+//   4. Invitee opens link → sign-up page with token in query string.
+//   5. After Clerk sign-up, ensureUserAndOrg sees the token, finds the pending
+//      invitation, attaches the new user to the target org with the target
+//      role, and marks the invitation accepted.
+//
+// Email-match fallback: if an invited email signs up *without* the token
+// (e.g. they lost the link), bootstrap still attaches them by matching their
+// Clerk email against pending invitations for any org. The token is the
+// canonical link; email match is the safety net.
+// ---------------------------------------------------------------------------
+
+export const invitations = pgTable(
+  "invitations",
+  {
+    id: text("id").primaryKey().$defaultFn(() => `inv_${nanoid(12)}`),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    /** Stored lowercase to match against Clerk's email at signup time. */
+    email: text("email").notNull(),
+    role: membershipRoleEnum("role").notNull().default("member"),
+    /**
+     * URL-safe random. The /invite/<token> link resolves a pending invitation
+     * even before the user has a Clerk session. Unique-indexed so the
+     * unauthenticated lookup is a single B-tree hit.
+     */
+    token: text("token").notNull(),
+    status: invitationStatusEnum("status").notNull().default("pending"),
+    invitedByUserId: text("invited_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+    acceptedByUserId: text("accepted_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("invitations_token_idx").on(t.token),
+    index("invitations_org_status_idx").on(t.orgId, t.status),
+    index("invitations_email_status_idx").on(t.email, t.status),
+  ],
+);
+
+// ---------------------------------------------------------------------------
 // Audit log (Day 1 — invisible to users in MVP, visible in V2 small-firm tier)
 // ---------------------------------------------------------------------------
 
@@ -748,6 +851,8 @@ export type AnnouncementDismissal = typeof announcementDismissals.$inferSelect;
 export type AnnouncementClientAck = typeof announcementClientAcks.$inferSelect;
 export type ClientContact = typeof clientContacts.$inferSelect;
 export type NewClientContact = typeof clientContacts.$inferInsert;
+export type Invitation = typeof invitations.$inferSelect;
+export type NewInvitation = typeof invitations.$inferInsert;
 export type ServiceGroup = typeof serviceGroups.$inferSelect;
 export type NewServiceGroup = typeof serviceGroups.$inferInsert;
 export type EntityService = typeof entityServices.$inferSelect;

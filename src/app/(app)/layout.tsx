@@ -1,17 +1,23 @@
 import { Suspense } from "react";
-import Link from "next/link";
 import { UserButton } from "@clerk/nextjs";
 import { currentUser } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { GlobalSearch } from "@/components/global-search";
 import { getCurrentContext } from "@/lib/auth/current-org";
 import { getAnnouncementsSummary } from "@/lib/services/announcements";
+import { listMembershipsByUserId } from "@/lib/services/organizations";
+import { WorkspaceSwitcher } from "./workspace-switcher";
+import { SidebarNavLinks } from "./sidebar-nav";
+import { AppShell } from "./app-shell";
 
 /**
- * Authenticated app shell. Static chrome + streamed auth-dependent slots.
+ * Authenticated app shell — Arc DNA gradient sidebar + open main column.
  *
- * Cache Components pattern: the layout itself is static/streamable; anything
- * that touches runtime auth data lives inside <Suspense>.
+ * Layout structure stays a Server Component; the AppShell client wrapper
+ * owns the collapse state (so users can fold the sidebar away). The
+ * sidebar contents (logo / search / workspace / nav / user card) are
+ * passed as a `sidebarContent` slot so async server components inside
+ * keep streaming via Suspense without becoming client.
  */
 export default function AppLayout({
   children,
@@ -19,107 +25,121 @@ export default function AppLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex min-h-screen flex-col">
-      {/* Sticky, solid — nav must stay legible over long deadline tables */}
-      <header className="sticky top-0 z-40 border-b border-border bg-background">
-        <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-6 py-3">
-          <div className="flex items-center gap-8">
-            <Link
-              href="/dashboard"
-              className="text-base font-semibold tracking-tight"
-            >
-              DueDateHQ
-            </Link>
-            <nav className="flex items-center gap-1 text-sm">
-              <NavLink href="/dashboard" label="Dashboard" />
-              <NavLink href="/clients" label="Clients" />
-              <Suspense
-                fallback={
-                  <NavLink href="/announcements" label="IRS updates" />
-                }
-              >
-                <UpdatesNavLink />
-              </Suspense>
-              <NavLink href="/settings" label="Settings" />
-            </nav>
-          </div>
-          <div className="flex items-center gap-3">
-            <GlobalSearch />
-            <Suspense fallback={<HeaderUserSkeleton />}>
-              <HeaderUser />
-            </Suspense>
-          </div>
+    <AppShell sidebarContent={<SidebarContent />}>{children}</AppShell>
+  );
+}
+
+function SidebarContent() {
+  return (
+    <>
+      {/* Logo + brand + utility icons (search · collapse). Search lives
+          here as an icon button rather than a separate full-width pill —
+          the old pill competed visually with active nav items below.
+          `pr-9` reserves space for the absolute-positioned collapse
+          button (lives in app-shell, anchored top-4 right-3). */}
+      <div className="flex items-center gap-2 px-2 pr-9">
+        <div className="w-7 h-7 rounded-xl bg-white/60 backdrop-blur flex items-center justify-center text-[12px] font-bold">
+          D
         </div>
-      </header>
-      <main className="flex-1">{children}</main>
+        <div className="font-semibold tracking-tight text-[15px]">DueDateHQ</div>
+        <div className="ml-auto">
+          <GlobalSearch variant="icon" />
+        </div>
+      </div>
+
+      {/* Workspace switcher — only renders when the user has multiple
+          orgs to switch between. Solo users don't need a row that looks
+          like a nav item but does nothing. When multi-org becomes a
+          real case, move this to the logo row (as a dropdown trigger
+          replacing the static brand text) instead of sandwiching it
+          between Search and Nav. */}
+      <Suspense fallback={null}>
+        <SidebarWorkspaceSwitcher />
+      </Suspense>
+
+      {/* Nav with badges */}
+      <Suspense fallback={<NavSkeleton />}>
+        <NavSection />
+      </Suspense>
+
+      {/* Footer: user card */}
+      <div className="mt-auto px-1 pb-1">
+        <Suspense fallback={<UserCardSkeleton />}>
+          <SidebarUserCard />
+        </Suspense>
+      </div>
+    </>
+  );
+}
+
+async function SidebarWorkspaceSwitcher() {
+  // Use getCurrentContext (cached per-request) instead of a separate
+  // query so we don't pay the JOIN twice on every page load.
+  const ctx = await getCurrentContext();
+  const memberships = await listMembershipsByUserId(ctx.user.id);
+  // Solo-org users: render nothing. The static "X's practice" label
+  // confuses (looks like a nav item, but the only thing it can do is
+  // show what you already know). Bring it back at the logo row when
+  // multi-org becomes a real case.
+  if (memberships.length <= 1) return null;
+  const options = memberships.map((m) => ({
+    id: m.organization.id,
+    name: m.organization.name,
+    role: m.membership.role,
+  }));
+  const current = options.find((o) => o.id === ctx.organization.id);
+  if (!current) return null;
+  return (
+    <div className="px-2 mt-2">
+      <WorkspaceSwitcher current={current} options={options} />
     </div>
   );
 }
 
-async function HeaderUser() {
+async function NavSection() {
   // Defense-in-depth: proxy.ts already protects, but verify in layout too.
+  // Pass user id so dismissed announcements drop out of the badge count.
+  const ctx = await getCurrentContext();
+  const summary = await getAnnouncementsSummary(ctx.user.id);
+  return <SidebarNavLinks taxUpdatesUnread={summary.highRelevance7d} />;
+}
+
+function NavSkeleton() {
+  return (
+    <div className="mt-2 space-y-1 px-2.5">
+      {[0, 1, 2, 3].map((i) => (
+        <div key={i} className="h-8 rounded-xl bg-white/30 animate-pulse" />
+      ))}
+    </div>
+  );
+}
+
+async function SidebarUserCard() {
+  // Defense-in-depth: redirect to /sign-in if Clerk session disappeared
+  // mid-flight (proxy.ts is the primary guard).
   const user = await currentUser();
   if (!user) redirect("/sign-in");
 
+  const email = user.emailAddresses[0]?.emailAddress ?? "";
   return (
-    <div className="flex items-center gap-3">
-      <span className="text-sm text-muted-foreground">
-        {user.emailAddresses[0]?.emailAddress}
+    <div className="flex items-center gap-2 px-2 py-1.5 rounded-xl bg-white/50 backdrop-blur">
+      <UserButton appearance={{ elements: { avatarBox: "h-7 w-7" } }} />
+      <span
+        className="text-[12.5px] truncate"
+        style={{ color: "var(--muted-foreground)" }}
+        title={email}
+      >
+        {email}
       </span>
-      <UserButton />
     </div>
   );
 }
 
-function HeaderUserSkeleton() {
+function UserCardSkeleton() {
   return (
-    <div className="flex items-center gap-3">
-      <span className="h-4 w-48 animate-pulse rounded bg-muted" />
-      <span className="h-8 w-8 animate-pulse rounded-full bg-muted" />
+    <div className="flex items-center gap-2 px-2 py-1.5 rounded-xl bg-white/30">
+      <span className="h-7 w-7 rounded-full bg-white/50 animate-pulse" />
+      <span className="h-3 flex-1 rounded bg-white/50 animate-pulse" />
     </div>
   );
-}
-
-function NavLink({
-  href,
-  label,
-  badge,
-}: {
-  href: string;
-  label: string;
-  badge?: React.ReactNode;
-}) {
-  return (
-    <Link
-      href={href}
-      className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-foreground/80 hover:bg-muted hover:text-foreground transition-colors"
-    >
-      {label}
-      {badge}
-    </Link>
-  );
-}
-
-// Live unread-count badge for /announcements. Mirrors the dashboard
-// banner threshold (score≥4 in last 7d) so the two surfaces agree on
-// "what counts as worth your attention". Renders nothing when zero —
-// no badge means no urgent IRS items, which is the default state.
-async function UpdatesNavLink() {
-  // Pass user id so dismissed items drop out of the badge count.
-  // Defense-in-depth: redirect happens in HeaderUser via currentUser(),
-  // so by the time this runs, ctx is guaranteed.
-  const ctx = await getCurrentContext();
-  const summary = await getAnnouncementsSummary(ctx.user.id);
-  const hasUnseen = summary.highRelevance7d > 0;
-  // Subtle sky-blue dot, not a loud red urgency mark — IRS updates is
-  // FYI-grade information, not a fire. The count lives on the page
-  // itself; this just nudges "there's something to look at when you
-  // have a moment".
-  const badge = hasUnseen ? (
-    <span
-      aria-label={`${summary.highRelevance7d} new`}
-      className="inline-flex h-1.5 w-1.5 rounded-full bg-sky-500"
-    />
-  ) : null;
-  return <NavLink href="/announcements" label="IRS updates" badge={badge} />;
 }

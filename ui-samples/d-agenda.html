@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>D · Agenda + mini-calendar</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  body { font-family: "Inter", -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+  .mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
+  :root {
+    --accent: #0891B2;
+    --accent-bg: #ECFEFF;
+    --accent-deep: #155E75;
+    --text: #0F172A;
+    --muted: #64748B;
+    --muted-soft: #94A3B8;
+    --line: #E2E8F0;
+    --line-strong: #CBD5E1;
+    --canvas: #F1F5F9;
+    --surface: #FFFFFF;
+    --red: #DC2626;
+    --red-bg: #FEE2E2;
+    --amber: #B45309;
+    --amber-bg: #FEF3C7;
+    --green: #15803D;
+    --green-bg: #D1FAE5;
+  }
+  body { background: var(--canvas); color: var(--text); }
+
+  /* Mini calendar */
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; }
+  .cal-day {
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    border-radius: 4px;
+    position: relative;
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+  .cal-day:hover { background: var(--accent-bg); }
+  .cal-day.today { background: var(--accent); color: white; font-weight: 700; }
+  .cal-day.has-due::after {
+    content: "";
+    position: absolute;
+    bottom: 4px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+  .cal-day.today.has-due::after { background: white; }
+  .cal-day.has-due-urgent::after { background: var(--red); }
+  .cal-day.muted { color: var(--muted-soft); }
+  .cal-day.selected { box-shadow: 0 0 0 1.5px var(--accent); }
+
+  /* Agenda */
+  .agenda-group-head {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 18px 0 8px;
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .agenda-group-head .label-strong {
+    color: var(--text);
+    font-size: 12px;
+  }
+  .agenda-group-head .count {
+    font-size: 10px;
+    color: var(--muted);
+    font-weight: 600;
+    background: white;
+    border: 1px solid var(--line);
+    padding: 1px 7px;
+    border-radius: 8px;
+  }
+  .agenda-item {
+    display: grid;
+    grid-template-columns: 22px 95px 95px 1fr auto;
+    gap: 12px;
+    align-items: center;
+    padding: 11px 14px;
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    margin-bottom: 6px;
+    transition: all 0.12s;
+    cursor: pointer;
+  }
+  .agenda-item:hover { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); }
+  .agenda-item.urgent { border-left: 3px solid var(--red); }
+  .agenda-item.warn { border-left: 3px solid var(--amber); }
+  .checkbox {
+    width: 18px;
+    height: 18px;
+    border: 1.5px solid var(--line-strong);
+    border-radius: 5px;
+    cursor: pointer;
+    transition: border-color 0.12s;
+  }
+  .checkbox:hover { border-color: var(--accent); }
+  .pill {
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+  }
+  .nav-btn {
+    width: 100%;
+    text-align: left;
+    font-size: 13px;
+    padding: 7px 11px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+  .nav-btn:hover { background: var(--canvas); }
+  .nav-btn.active { background: var(--accent-bg); color: var(--accent-deep); font-weight: 600; }
+</style>
+</head>
+<body class="p-6">
+
+<div class="max-w-6xl mx-auto">
+  <div class="flex items-center gap-1 mb-4">
+    <a href="index.html" class="text-xs px-2 py-1" style="color: var(--accent)">← Samples</a>
+    <span class="text-xs ml-auto" style="color: var(--muted)">Direction D · Agenda + mini-calendar (Things 3 style)</span>
+  </div>
+
+  <!-- Page header -->
+  <div class="flex items-center justify-between mb-6">
+    <div>
+      <h1 class="text-2xl font-semibold tracking-tight">My Deadlines</h1>
+      <p class="text-sm mt-1" style="color: var(--muted)">
+        <span class="font-medium" style="color: var(--text)">Wed, Apr 29</span>
+        <span class="mx-1.5" style="color: var(--muted-soft)">·</span>
+        <span class="font-medium" style="color: var(--red)">2</span> due today
+        <span class="mx-1.5" style="color: var(--muted-soft)">·</span>
+        <span class="font-medium" style="color: var(--amber)">5</span> this week
+        <span class="mx-1.5" style="color: var(--muted-soft)">·</span>
+        16 total open
+      </p>
+    </div>
+    <div class="flex items-center gap-2">
+      <button class="text-sm px-3 py-1.5 rounded-md border bg-white" style="border-color: var(--line-strong)">Filter</button>
+      <button class="text-sm px-3 py-1.5 rounded-md font-medium text-white" style="background: var(--accent)">+ New Deadline</button>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-[280px_1fr] gap-6">
+
+    <!-- LEFT SIDEBAR -->
+    <aside>
+      <!-- Mini cal -->
+      <div class="bg-white rounded-lg p-4 border" style="border-color: var(--line)">
+        <div class="flex items-center justify-between mb-3">
+          <button class="text-base px-2 leading-none" style="color: var(--muted)">‹</button>
+          <div class="text-sm font-semibold">April 2026</div>
+          <button class="text-base px-2 leading-none" style="color: var(--muted)">›</button>
+        </div>
+        <div class="cal-grid mb-1.5">
+          <div class="text-[10px] text-center font-bold py-1" style="color: var(--muted-soft)">S</div>
+          <div class="text-[10px] text-center font-bold py-1" style="color: var(--muted-soft)">M</div>
+          <div class="text-[10px] text-center font-bold py-1" style="color: var(--muted-soft)">T</div>
+          <div class="text-[10px] text-center font-bold py-1" style="color: var(--muted-soft)">W</div>
+          <div class="text-[10px] text-center font-bold py-1" style="color: var(--muted-soft)">T</div>
+          <div class="text-[10px] text-center font-bold py-1" style="color: var(--muted-soft)">F</div>
+          <div class="text-[10px] text-center font-bold py-1" style="color: var(--muted-soft)">S</div>
+        </div>
+        <div class="cal-grid">
+          <div class="cal-day muted">29</div>
+          <div class="cal-day muted">30</div>
+          <div class="cal-day muted">31</div>
+          <div class="cal-day">1</div>
+          <div class="cal-day">2</div>
+          <div class="cal-day">3</div>
+          <div class="cal-day">4</div>
+          <div class="cal-day">5</div>
+          <div class="cal-day">6</div>
+          <div class="cal-day">7</div>
+          <div class="cal-day">8</div>
+          <div class="cal-day">9</div>
+          <div class="cal-day">10</div>
+          <div class="cal-day">11</div>
+          <div class="cal-day">12</div>
+          <div class="cal-day">13</div>
+          <div class="cal-day">14</div>
+          <div class="cal-day has-due-urgent">15</div>
+          <div class="cal-day">16</div>
+          <div class="cal-day">17</div>
+          <div class="cal-day">18</div>
+          <div class="cal-day">19</div>
+          <div class="cal-day">20</div>
+          <div class="cal-day">21</div>
+          <div class="cal-day">22</div>
+          <div class="cal-day">23</div>
+          <div class="cal-day">24</div>
+          <div class="cal-day">25</div>
+          <div class="cal-day">26</div>
+          <div class="cal-day">27</div>
+          <div class="cal-day">28</div>
+          <div class="cal-day today has-due selected">29</div>
+          <div class="cal-day has-due">30</div>
+          <div class="cal-day has-due muted">1</div>
+          <div class="cal-day has-due muted">2</div>
+        </div>
+        <div class="flex items-center gap-3 mt-3 pt-3 text-[10.5px]" style="color: var(--muted); border-top: 1px solid var(--line)">
+          <div class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full" style="background: var(--accent)"></span>Due</div>
+          <div class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full" style="background: var(--red)"></span>Urgent</div>
+          <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded" style="background: var(--accent)"></span>Today</div>
+        </div>
+      </div>
+
+      <!-- Smart lists -->
+      <div class="mt-4 bg-white rounded-lg p-1.5 border" style="border-color: var(--line)">
+        <div class="nav-btn active">
+          <span class="flex items-center gap-2">📥 All Open</span>
+          <span class="mono text-xs">16</span>
+        </div>
+        <div class="nav-btn">
+          <span class="flex items-center gap-2">⭐ Today</span>
+          <span class="mono text-xs" style="color: var(--red)">2</span>
+        </div>
+        <div class="nav-btn">
+          <span class="flex items-center gap-2">📅 This Week</span>
+          <span class="mono text-xs" style="color: var(--amber)">5</span>
+        </div>
+        <div class="nav-btn">
+          <span class="flex items-center gap-2">🔥 Overdue</span>
+          <span class="mono text-xs" style="color: var(--muted-soft)">0</span>
+        </div>
+        <div class="nav-btn">
+          <span class="flex items-center gap-2">⏰ Waiting on Client</span>
+          <span class="mono text-xs" style="color: var(--amber)">3</span>
+        </div>
+      </div>
+
+      <!-- Clients -->
+      <div class="mt-4">
+        <div class="flex items-center justify-between mb-2 px-2">
+          <div class="text-[10.5px] font-bold uppercase tracking-wider" style="color: var(--muted)">Clients</div>
+          <button class="text-xs" style="color: var(--accent)">+ Add</button>
+        </div>
+        <div class="bg-white rounded-lg p-1.5 border" style="border-color: var(--line)">
+          <div class="nav-btn">
+            <span class="truncate">Anderson Family Holdings</span>
+            <span class="mono text-xs" style="color: var(--muted)">7</span>
+          </div>
+          <div class="nav-btn">
+            <span class="truncate">Patel &amp; Co</span>
+            <span class="mono text-xs" style="color: var(--muted)">4</span>
+          </div>
+          <div class="nav-btn">
+            <span class="truncate">Sigma Studios</span>
+            <span class="mono text-xs" style="color: var(--muted)">3</span>
+          </div>
+          <div class="nav-btn">
+            <span class="truncate">Hsu Family Trust</span>
+            <span class="mono text-xs" style="color: var(--muted)">2</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- MAIN AGENDA -->
+    <main>
+
+      <!-- TODAY -->
+      <div class="agenda-group-head">
+        <span class="label-strong">Today</span>
+        <span style="color: var(--muted); font-weight: 500">Wed, Apr 29</span>
+        <span class="count">2</span>
+      </div>
+      <div class="agenda-item urgent">
+        <div class="checkbox"></div>
+        <div class="mono text-xs" style="color: var(--red)">04/29 Wed</div>
+        <div class="mono text-xs font-semibold">1040</div>
+        <div>
+          <div class="text-sm font-semibold">Individual Income Tax Return <span class="ml-1 text-xs font-normal" style="color: var(--muted)">(extended)</span></div>
+          <div class="text-xs mt-0.5" style="color: var(--muted)">Anderson Family Holdings <span style="color: var(--muted-soft)">·</span> Carol A.</div>
+        </div>
+        <span class="pill" style="background: var(--amber-bg); color: var(--amber)">WAITING</span>
+      </div>
+      <div class="agenda-item urgent">
+        <div class="checkbox"></div>
+        <div class="mono text-xs" style="color: var(--red)">04/29 Wed</div>
+        <div class="mono text-xs font-semibold">Q1 Close</div>
+        <div>
+          <div class="text-sm font-semibold">Q1 close-out review meeting</div>
+          <div class="text-xs mt-0.5" style="color: var(--muted)">Anderson Family Holdings <span style="color: var(--muted-soft)">·</span> Holdings LLC</div>
+        </div>
+        <span class="text-xs" style="color: var(--muted)">15:00</span>
+      </div>
+
+      <!-- TOMORROW -->
+      <div class="agenda-group-head">
+        <span class="label-strong">Tomorrow</span>
+        <span style="color: var(--muted); font-weight: 500">Thu, Apr 30 <span style="color: var(--muted-soft)">·</span> IRS deadline</span>
+        <span class="count">2</span>
+      </div>
+      <div class="agenda-item warn">
+        <div class="checkbox"></div>
+        <div class="mono text-xs" style="color: var(--amber)">04/30 Thu</div>
+        <div class="mono text-xs font-semibold">941-Q1</div>
+        <div>
+          <div class="text-sm font-semibold">Quarterly Employer Payroll Tax</div>
+          <div class="text-xs mt-0.5" style="color: var(--muted)">Anderson Family Holdings <span style="color: var(--muted-soft)">·</span> Holdings LLC</div>
+        </div>
+        <span class="text-xs" style="color: var(--muted)">in progress</span>
+      </div>
+      <div class="agenda-item warn">
+        <div class="checkbox"></div>
+        <div class="mono text-xs" style="color: var(--amber)">04/30 Thu</div>
+        <div class="mono text-xs font-semibold">941-Q1</div>
+        <div>
+          <div class="text-sm font-semibold">Quarterly Employer Payroll Tax</div>
+          <div class="text-xs mt-0.5" style="color: var(--muted)">Sigma Studios <span style="color: var(--muted-soft)">·</span> Sigma Studios LLC</div>
+        </div>
+        <span class="text-xs" style="color: var(--muted)">not started</span>
+      </div>
+
+      <!-- THIS WEEK -->
+      <div class="agenda-group-head">
+        <span class="label-strong">Rest of this week</span>
+        <span style="color: var(--muted); font-weight: 500">May 1 – May 3</span>
+        <span class="count">2</span>
+      </div>
+      <div class="agenda-item">
+        <div class="checkbox"></div>
+        <div class="mono text-xs">05/01 Fri</div>
+        <div class="mono text-xs font-semibold">1099-NEC</div>
+        <div>
+          <div class="text-sm font-semibold">Non-Employee Compensation corrections</div>
+          <div class="text-xs mt-0.5" style="color: var(--muted)">Sigma Studios <span style="color: var(--muted-soft)">·</span> Sigma Studios LLC</div>
+        </div>
+        <span class="text-xs" style="color: var(--muted)">not started</span>
+      </div>
+      <div class="agenda-item">
+        <div class="checkbox"></div>
+        <div class="mono text-xs">05/02 Sat</div>
+        <div class="mono text-xs font-semibold">NYC-3L</div>
+        <div>
+          <div class="text-sm font-semibold">NYC General Corporation Tax</div>
+          <div class="text-xs mt-0.5" style="color: var(--muted)">Patel &amp; Co <span style="color: var(--muted-soft)">·</span> Patel Holdings Inc</div>
+        </div>
+        <span class="text-xs" style="color: var(--muted)">not started</span>
+      </div>
+
+      <!-- NEXT WEEK -->
+      <div class="agenda-group-head">
+        <span class="label-strong">Next week</span>
+        <span style="color: var(--muted); font-weight: 500">May 4 – May 10</span>
+        <span class="count">3</span>
+      </div>
+      <div class="agenda-item">
+        <div class="checkbox"></div>
+        <div class="mono text-xs">05/06 Wed</div>
+        <div class="mono text-xs font-semibold">CA-100-ES</div>
+        <div>
+          <div class="text-sm font-semibold">CA Corporate Estimated Tax</div>
+          <div class="text-xs mt-0.5" style="color: var(--muted)">Anderson Family Holdings <span style="color: var(--muted-soft)">·</span> Holdings LLC</div>
+        </div>
+        <span class="text-xs" style="color: var(--muted)">not started</span>
+      </div>
+      <div class="agenda-item">
+        <div class="checkbox"></div>
+        <div class="mono text-xs">05/08 Fri</div>
+        <div class="mono text-xs font-semibold">FBAR</div>
+        <div>
+          <div class="text-sm font-semibold">Foreign Bank Account Report (FinCEN 114)</div>
+          <div class="text-xs mt-0.5" style="color: var(--muted)">Hsu Family Trust <span style="color: var(--muted-soft)">·</span> Hsu, J.</div>
+        </div>
+        <span class="text-xs" style="color: var(--muted)">not started</span>
+      </div>
+      <div class="agenda-item">
+        <div class="checkbox"></div>
+        <div class="mono text-xs">05/08 Fri</div>
+        <div class="mono text-xs font-semibold">P&amp;L Q1</div>
+        <div>
+          <div class="text-sm font-semibold">Quarterly P&amp;L review</div>
+          <div class="text-xs mt-0.5" style="color: var(--muted)">Patel &amp; Co <span style="color: var(--muted-soft)">·</span> Patel Holdings Inc</div>
+        </div>
+        <span class="text-xs" style="color: var(--muted)">not started</span>
+      </div>
+
+      <!-- LATER MAY -->
+      <div class="agenda-group-head">
+        <span class="label-strong">Later in May</span>
+        <span style="color: var(--muted); font-weight: 500">May 11 – May 31</span>
+        <span class="count">3</span>
+      </div>
+      <div class="agenda-item">
+        <div class="checkbox"></div>
+        <div class="mono text-xs">05/15 Fri</div>
+        <div class="mono text-xs font-semibold">990</div>
+        <div>
+          <div class="text-sm font-semibold">Tax-Exempt Org Annual Return</div>
+          <div class="text-xs mt-0.5" style="color: var(--muted)">Sigma Studios <span style="color: var(--muted-soft)">·</span> Sigma Foundation</div>
+        </div>
+        <span class="text-xs" style="color: var(--muted)">not started</span>
+      </div>
+
+      <!-- JUNE -->
+      <div class="agenda-group-head">
+        <span class="label-strong">June 2026</span>
+        <span class="count">4</span>
+      </div>
+      <div class="agenda-item">
+        <div class="checkbox"></div>
+        <div class="mono text-xs">06/15 Mon</div>
+        <div class="mono text-xs font-semibold">1040-ES-Q2</div>
+        <div>
+          <div class="text-sm font-semibold">Individual Estimated Tax · Q2</div>
+          <div class="text-xs mt-0.5" style="color: var(--muted)">Anderson Family Holdings <span style="color: var(--muted-soft)">·</span> Carol A.</div>
+        </div>
+        <span class="text-xs" style="color: var(--muted)">not started</span>
+      </div>
+      <div class="agenda-item">
+        <div class="checkbox"></div>
+        <div class="mono text-xs">06/15 Mon</div>
+        <div class="mono text-xs font-semibold">1120-W</div>
+        <div>
+          <div class="text-sm font-semibold">Corporate Estimated Tax · Q2</div>
+          <div class="text-xs mt-0.5" style="color: var(--muted)">Anderson Family Holdings <span style="color: var(--muted-soft)">·</span> Holdings LLC</div>
+        </div>
+        <span class="text-xs" style="color: var(--muted)">not started</span>
+      </div>
+
+      <div class="text-center py-4 text-xs" style="color: var(--muted)">
+        <span class="cursor-pointer hover:underline" style="color: var(--accent)">Load older / future →</span>
+      </div>
+    </main>
+  </div>
+</div>
+</body>
+</html>

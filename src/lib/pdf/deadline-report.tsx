@@ -32,11 +32,8 @@ export type ReportDeadline = {
     | "pending"
     | "waiting_on_client"
     | "in_progress"
-    | "ready_to_file"
-    | "completed"
-    | "extended"
-    | "missed"
-    | "not_applicable";
+    | "completed";
+  isExtended: boolean;
   formCode: string;
   ruleTitle: string;
   jurisdictionCode: string;
@@ -291,13 +288,22 @@ function bucketize(deadlines: ReportDeadline[], asOf: Date): Buckets {
 // Components
 // ---------------------------------------------------------------------------
 
-function StatusBadge({ status }: { status: ReportDeadline["status"] }) {
+function StatusBadge({
+  status,
+  isExtended,
+}: {
+  status: ReportDeadline["status"];
+  isExtended: boolean;
+}) {
   if (status === "completed") {
     return (
       <Text style={[styles.badgeStatus, { color: COLOR.done }]}>FILED</Text>
     );
   }
-  if (status === "extended") {
+  // Date-shifted flag wins over workflow stage in the print summary —
+  // partners doing morning review want to see "this got extended" before
+  // "this is in progress". Only meaningful while still open.
+  if (isExtended) {
     return (
       <Text style={[styles.badgeStatus, { color: COLOR.high }]}>EXT</Text>
     );
@@ -313,11 +319,6 @@ function StatusBadge({ status }: { status: ReportDeadline["status"] }) {
   if (status === "waiting_on_client") {
     return (
       <Text style={[styles.badgeStatus, { color: COLOR.high }]}>WAIT</Text>
-    );
-  }
-  if (status === "ready_to_file") {
-    return (
-      <Text style={[styles.badgeStatus, { color: COLOR.done }]}>READY</Text>
     );
   }
   return null;
@@ -365,7 +366,7 @@ function Row({
         <Text style={styles.cellRule}>{d.ruleTitle}</Text>
       </View>
       <View style={styles.cellMeta}>
-        <StatusBadge status={d.status} />
+        <StatusBadge status={d.status} isExtended={d.isExtended} />
       </View>
     </View>
   );
