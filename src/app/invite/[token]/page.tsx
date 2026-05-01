@@ -21,6 +21,7 @@
  */
 
 import "server-only";
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { auth } from "@clerk/nextjs/server";
@@ -32,18 +33,25 @@ import { getDb } from "@/lib/db";
 import { invitations, organizations, users } from "@/lib/db/schema";
 import { acceptInvitationAction } from "@/app/(app)/workspace-actions";
 
-// Per-token DB lookup + auth() + cookies() — fully dynamic, never
-// prerender. Without this, Cache Components tries to statically generate
-// /invite/[token] at build time and fails because `auth()` requires a
-// real request context.
-export const dynamic = "force-dynamic";
-
 const INVITE_COOKIE_NAME = "dd_invite_token";
 const INVITE_COOKIE_TTL_SECONDS = 10 * 60;
 
 type Params = Promise<{ token: string }>;
 
-export default async function InvitationPage({ params }: { params: Params }) {
+// Cache Components: outer page stays static; the Suspense boundary
+// encapsulates everything dynamic (DB lookup + auth() + cookies()) so
+// the build can prerender the shell without invoking those at build
+// time. `export const dynamic` is forbidden under cacheComponents —
+// Suspense is the right primitive here.
+export default function InvitationPage({ params }: { params: Params }) {
+  return (
+    <Suspense fallback={<InvitationSkeleton />}>
+      <InvitationResolver params={params} />
+    </Suspense>
+  );
+}
+
+async function InvitationResolver({ params }: { params: Params }) {
   const { token } = await params;
 
   const db = getDb();
@@ -86,6 +94,14 @@ export default async function InvitationPage({ params }: { params: Params }) {
       token={token}
       isAuthenticated={isAuthenticated}
     />
+  );
+}
+
+function InvitationSkeleton() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-muted/30 px-4 py-12">
+      <div className="h-[420px] w-full max-w-md animate-pulse rounded-lg bg-card shadow-sm" />
+    </div>
   );
 }
 
