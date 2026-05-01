@@ -32,6 +32,12 @@ import { getDb } from "@/lib/db";
 import { invitations, organizations, users } from "@/lib/db/schema";
 import { acceptInvitationAction } from "@/app/(app)/workspace-actions";
 
+// Per-token DB lookup + auth() + cookies() — fully dynamic, never
+// prerender. Without this, Cache Components tries to statically generate
+// /invite/[token] at build time and fails because `auth()` requires a
+// real request context.
+export const dynamic = "force-dynamic";
+
 const INVITE_COOKIE_NAME = "dd_invite_token";
 const INVITE_COOKIE_TTL_SECONDS = 10 * 60;
 
