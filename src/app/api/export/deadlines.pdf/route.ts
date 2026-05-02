@@ -56,7 +56,7 @@ export async function GET(req: Request) {
     id: string;
     due_date: string;
     effective_due_date: string;
-    status: string;
+    completed_at: string | null;
     is_extended: boolean;
     form_code: string;
     rule_title: string;
@@ -72,7 +72,7 @@ export async function GET(req: Request) {
       di.id,
       di.due_date::text AS due_date,
       COALESCE(di.extension_due_date, di.due_date)::text AS effective_due_date,
-      di.status::text AS status,
+      di.completed_at::text AS completed_at,
       di.is_extended,
       r.form_code,
       r.title AS rule_title,
@@ -91,7 +91,7 @@ export async function GET(req: Request) {
       AND e.archived_at IS NULL
       AND c.archived_at IS NULL
       AND (
-        di.status IN ('pending', 'waiting_on_client', 'in_progress')
+        di.completed_at IS NULL
         OR di.completed_at >= NOW() - INTERVAL '7 days'
       )
       AND COALESCE(di.extension_due_date, di.due_date)
@@ -105,7 +105,7 @@ export async function GET(req: Request) {
       id: r.id,
       effectiveDueDate: r.effective_due_date,
       originalDueDate: r.due_date,
-      status: r.status as ReportDeadline["status"],
+      completedAt: r.completed_at,
       isExtended: r.is_extended,
       formCode: r.form_code,
       ruleTitle: r.rule_title,

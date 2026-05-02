@@ -5,6 +5,7 @@ import { listDashboardDeadlines } from "@/lib/services/deadline-engine";
 import { listClientsWithEntityCount } from "@/lib/services/clients";
 import { listAnnouncementsWithImpact } from "@/lib/services/announcements";
 import { listMembers } from "@/lib/services/team";
+import { listProgressForDeadlines } from "@/lib/services/subtasks";
 import {
   DashboardClient,
   type DashboardDeadline,
@@ -149,9 +150,31 @@ async function UpcomingDeadlines() {
     email: m.user.email,
   }));
 
+  // Subtask progress per row — single bulk query keyed by deadline id.
+  // Most deadlines won't have stages yet (this feature just shipped),
+  // so the map will be small; the row component hides the strip when
+  // total=0 to avoid empty-progress noise.
+  const progressMap = await listProgressForDeadlines(
+    rows.map((r) => r.id),
+    ctx.organization.id,
+  );
+  const rowsWithProgress = (rows as unknown as DashboardDeadline[]).map((r) => {
+    const p = progressMap.get(r.id);
+    if (!p) return r;
+    return {
+      ...r,
+      subtask_progress: {
+        total: p.total,
+        done: p.done,
+        next_label: p.nextOpen?.label ?? null,
+        next_due_date: p.nextOpen?.dueDate ?? null,
+      },
+    };
+  });
+
   return (
     <DashboardClient
-      initialDeadlines={rows as unknown as DashboardDeadline[]}
+      initialDeadlines={rowsWithProgress}
       initialHasMore={hasMore}
       clients={sortedClients}
       currentUserId={ctx.user.id}

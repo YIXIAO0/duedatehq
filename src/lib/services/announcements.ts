@@ -218,7 +218,7 @@ export async function listAnnouncementsWithImpact(
                 INNER JOIN deadline_rules r ON r.id = di.rule_id
                 WHERE e2.client_id = c.id
                   AND e2.archived_at IS NULL
-                  AND di.status IN ('pending', 'waiting_on_client', 'in_progress')
+                  AND di.completed_at IS NULL
                   AND (
                     jsonb_array_length(a.affected_form_codes) = 0
                     OR a.affected_form_codes ? r.form_code
@@ -281,8 +281,14 @@ export async function listAnnouncementsWithImpact(
 }
 
 export type DashboardAnnouncementSummary = {
-  /** Items in last 7 days with score >= 4. The dashboard banner key. */
-  highRelevance7d: number;
+  /**
+   * Active high-priority items in the last 30 days (score >= 4, after
+   * dismissals and the same org-impact filter the /announcements page
+   * applies). Drives the sidebar badge — and the 30-day window matches
+   * the page's "High priority — last 30 days" section so the badge
+   * count never disagrees with what the user sees when they click in.
+   */
+  highRelevance30d: number;
   /** Total in last 30 days. Surfaces whether the feed has any signal. */
   total30d: number;
   /** Most recent high-relevance one — used for the banner blurb. */
@@ -298,6 +304,7 @@ export type DashboardAnnouncementSummary = {
  */
 export async function getAnnouncementsSummary(
   userId?: string,
+  orgId?: string,
 ): Promise<DashboardAnnouncementSummary> {
   const db = getDb();
 
@@ -312,16 +319,70 @@ export async function getAnnouncementsSummary(
       )`
     : sql``;
 
+  // Match /announcements page's visibility rule exactly. A score-4 item
+  // is only counted when at least one of the org's clients actually
+  // appears in the announcement's `affectedClients` set — i.e. there's
+  // an entity whose home_state matches the announcement's jurisdictions
+  // AND (no structured form/date scope, OR there's an open deadline that
+  // satisfies it). Score-5 items always count — they show on the page
+  // regardless of client match.
+  //
+  // Earlier versions of this filter passed any item with `'federal'` in
+  // `affected_jurisdictions` (or an empty list), which over-counted: the
+  // page treats `affected_jurisdictions: ['federal']` as "no client
+  // match" because no entity has home_state="federal". That made the
+  // badge say "2" while the page showed 1.
+  const orgImpactFilter = orgId
+    ? sql`AND (
+        relevance_score >= 5
+        OR EXISTS (
+          SELECT 1 FROM clients c
+          INNER JOIN entities e ON e.client_id = c.id
+          WHERE c.org_id = ${orgId}
+            AND c.archived_at IS NULL
+            AND e.archived_at IS NULL
+            AND e.home_state IS NOT NULL
+            AND announcements.affected_jurisdictions ? e.home_state
+            AND (
+              (
+                jsonb_array_length(announcements.affected_form_codes) = 0
+                AND announcements.original_deadline_start IS NULL
+              )
+              OR EXISTS (
+                SELECT 1 FROM deadline_instances di
+                INNER JOIN entities e2 ON e2.id = di.entity_id
+                INNER JOIN deadline_rules r ON r.id = di.rule_id
+                WHERE e2.client_id = c.id
+                  AND e2.archived_at IS NULL
+                  AND di.completed_at IS NULL
+                  AND (
+                    jsonb_array_length(announcements.affected_form_codes) = 0
+                    OR announcements.affected_form_codes ? r.form_code
+                  )
+                  AND (
+                    announcements.original_deadline_start IS NULL
+                    OR announcements.original_deadline_end IS NULL
+                    OR COALESCE(di.extension_due_date, di.due_date)
+                       BETWEEN announcements.original_deadline_start::date
+                       AND     announcements.original_deadline_end::date
+                  )
+              )
+            )
+        )
+      )`
+    : sql``;
+
   const stats = await db.execute<{
-    high_7d: number;
+    high_30d: number;
     total_30d: number;
   }>(sql`
     SELECT
       COUNT(*) FILTER (
         WHERE relevance_score >= 4
-          AND published_at >= NOW() - INTERVAL '7 days'
+          AND published_at >= NOW() - INTERVAL '30 days'
           ${dismissFilter}
-      )::int AS high_7d,
+          ${orgImpactFilter}
+      )::int AS high_30d,
       COUNT(*) FILTER (
         WHERE published_at >= NOW() - INTERVAL '30 days'
           ${dismissFilter}
@@ -329,16 +390,16 @@ export async function getAnnouncementsSummary(
     FROM announcements
   `);
 
-  const highRelevance7d = Number(stats.rows[0]?.high_7d ?? 0);
+  const highRelevance30d = Number(stats.rows[0]?.high_30d ?? 0);
   const total30d = Number(stats.rows[0]?.total_30d ?? 0);
 
   let topRecent: Announcement | null = null;
-  if (highRelevance7d > 0) {
+  if (highRelevance30d > 0) {
     const conditions = [
       gte(announcements.relevanceScore, 4),
       gte(
         announcements.publishedAt,
-        new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+        new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
       ),
     ];
     if (userId) {
@@ -357,7 +418,7 @@ export async function getAnnouncementsSummary(
     topRecent = rows[0] ?? null;
   }
 
-  return { highRelevance7d, total30d, topRecent };
+  return { highRelevance30d, total30d, topRecent };
 }
 
 // ---------------------------------------------------------------------------
@@ -442,7 +503,7 @@ export type AffectedDeadline = {
    *  original. Shown in the UI alongside originalDueDate so the CPA
    *  sees both "was Apr 15 (extended to Oct 15)" if applicable. */
   currentEffectiveDate: string;
-  status: string;
+  isFiled: boolean;
   /** Already acted on for this announcement? Persisted in audit_events
    *  so we know whether the relief was already applied or skipped. */
   appliedAt: string | null;
@@ -556,7 +617,7 @@ export async function getAnnouncementReview(
       rule_title: string;
       original_due_date: string;
       current_effective_date: string;
-      status: string;
+      is_filed: boolean;
       applied_at: string | null;
       already_covered: boolean;
     }> | null;
@@ -584,7 +645,7 @@ export async function getAnnouncementReview(
         INNER JOIN entities e2 ON e2.id = di.entity_id
         WHERE e2.client_id = c.id
           AND e2.archived_at IS NULL
-          AND di.status IN ('pending', 'waiting_on_client', 'in_progress')
+          AND di.completed_at IS NULL
       ) AS open_deadline_count,
       -- Affected deadlines list. Only populated when AI narrowed the
       -- scope — without a form-code filter or a date range we don't
@@ -603,7 +664,7 @@ export async function getAnnouncementReview(
               'current_effective_date',
                 COALESCE(di.extension_due_date, di.due_date)::text,
               'original_due_date', di.due_date::text,
-              'status', di.status::text,
+              'is_filed', (di.completed_at IS NOT NULL),
               'applied_at', applied.acted_at,
               'already_covered',
                 ${
@@ -630,7 +691,7 @@ export async function getAnnouncementReview(
           ) applied ON true
           WHERE e3.client_id = c.id
             AND e3.archived_at IS NULL
-            AND di.status IN ('pending', 'waiting_on_client', 'in_progress')
+            AND di.completed_at IS NULL
             AND (
               jsonb_array_length((${formCodesJsonb}::jsonb)) = 0
               OR (${formCodesJsonb}::jsonb) ? r.form_code
@@ -693,7 +754,7 @@ export async function getAnnouncementReview(
         ruleTitle: d.rule_title,
         originalDueDate: d.original_due_date,
         currentEffectiveDate: d.current_effective_date,
-        status: d.status,
+        isFiled: Boolean(d.is_filed),
         appliedAt: d.applied_at,
         alreadyCovered: Boolean(d.already_covered),
       })),

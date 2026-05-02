@@ -8,7 +8,11 @@ import { getAnnouncementsSummary } from "@/lib/services/announcements";
 import { listMembershipsByUserId } from "@/lib/services/organizations";
 import { WorkspaceSwitcher } from "./workspace-switcher";
 import { SidebarNavLinks } from "./sidebar-nav";
-import { AppShell } from "./app-shell";
+import { AppShell, SidebarCollapseButton } from "./app-shell";
+import {
+  NotificationsBell,
+  NotificationsBellSkeleton,
+} from "./notifications-bell";
 
 /**
  * Authenticated app shell — Arc DNA gradient sidebar + open main column.
@@ -25,37 +29,37 @@ export default function AppLayout({
   children: React.ReactNode;
 }) {
   return (
-    <AppShell sidebarContent={<SidebarContent />}>{children}</AppShell>
+    <AppShell
+      sidebarContent={<SidebarContent />}
+      topRightContent={
+        <Suspense fallback={<NotificationsBellSkeleton />}>
+          <NotificationsBell />
+        </Suspense>
+      }
+    >
+      {children}
+    </AppShell>
   );
 }
 
 function SidebarContent() {
   return (
     <>
-      {/* Logo + brand + utility icons (search · collapse). Search lives
-          here as an icon button rather than a separate full-width pill —
-          the old pill competed visually with active nav items below.
-          `pr-9` reserves space for the absolute-positioned collapse
-          button (lives in app-shell, anchored top-4 right-3). */}
-      <div className="flex items-center gap-2 px-2 pr-9">
-        <div className="w-7 h-7 rounded-xl bg-white/60 backdrop-blur flex items-center justify-center text-[12px] font-bold">
-          D
+      {/* Header row — the SaaS-standard pattern (Notion / Linear / Slack):
+          workspace identity is the dominant top-left element, not the app
+          name. Search and collapse icons sit on the same horizontal line
+          to the right of the workspace switcher. The app brand "DueDateHQ"
+          intentionally has no inline presence — once you're in the app,
+          the workspace IS the identity that matters. */}
+      <div className="flex items-center gap-1.5 pl-0 pr-2">
+        <div className="min-w-0 flex-1">
+          <Suspense fallback={<WorkspaceHeaderSkeleton />}>
+            <SidebarWorkspaceSwitcher />
+          </Suspense>
         </div>
-        <div className="font-semibold tracking-tight text-[15px]">DueDateHQ</div>
-        <div className="ml-auto">
-          <GlobalSearch variant="icon" />
-        </div>
+        <GlobalSearch variant="icon" />
+        <SidebarCollapseButton />
       </div>
-
-      {/* Workspace switcher — only renders when the user has multiple
-          orgs to switch between. Solo users don't need a row that looks
-          like a nav item but does nothing. When multi-org becomes a
-          real case, move this to the logo row (as a dropdown trigger
-          replacing the static brand text) instead of sandwiching it
-          between Search and Nav. */}
-      <Suspense fallback={null}>
-        <SidebarWorkspaceSwitcher />
-      </Suspense>
 
       {/* Nav with badges */}
       <Suspense fallback={<NavSkeleton />}>
@@ -77,11 +81,6 @@ async function SidebarWorkspaceSwitcher() {
   // query so we don't pay the JOIN twice on every page load.
   const ctx = await getCurrentContext();
   const memberships = await listMembershipsByUserId(ctx.user.id);
-  // Solo-org users: render nothing. The static "X's practice" label
-  // confuses (looks like a nav item, but the only thing it can do is
-  // show what you already know). Bring it back at the logo row when
-  // multi-org becomes a real case.
-  if (memberships.length <= 1) return null;
   const options = memberships.map((m) => ({
     id: m.organization.id,
     name: m.organization.name,
@@ -89,9 +88,14 @@ async function SidebarWorkspaceSwitcher() {
   }));
   const current = options.find((o) => o.id === ctx.organization.id);
   if (!current) return null;
+  return <WorkspaceSwitcher current={current} options={options} />;
+}
+
+function WorkspaceHeaderSkeleton() {
   return (
-    <div className="px-2 mt-2">
-      <WorkspaceSwitcher current={current} options={options} />
+    <div className="flex items-center gap-2 px-1.5 py-0.5">
+      <span className="h-7 w-7 rounded-lg bg-white/40 animate-pulse" />
+      <div className="h-3 flex-1 rounded bg-white/40 animate-pulse" />
     </div>
   );
 }
@@ -100,8 +104,11 @@ async function NavSection() {
   // Defense-in-depth: proxy.ts already protects, but verify in layout too.
   // Pass user id so dismissed announcements drop out of the badge count.
   const ctx = await getCurrentContext();
-  const summary = await getAnnouncementsSummary(ctx.user.id);
-  return <SidebarNavLinks taxUpdatesUnread={summary.highRelevance7d} />;
+  const summary = await getAnnouncementsSummary(
+    ctx.user.id,
+    ctx.organization.id,
+  );
+  return <SidebarNavLinks taxUpdatesUnread={summary.highRelevance30d} />;
 }
 
 function NavSkeleton() {

@@ -22,53 +22,46 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { CheckCircle2, Calendar, Download, RotateCcw, Loader2 } from "lucide-react";
+import {
+  CheckCircle2,
+  Calendar,
+  Download,
+  RotateCcw,
+  Loader2,
+} from "lucide-react";
 import {
   markCompleteAction,
   reopenAction,
   fileExtensionAction,
-  setStatusAction,
-  type WorkflowStatus,
 } from "./actions";
+import { shiftSubtasksAction } from "./subtask-actions";
 
-// Display labels for the four workflow states. Order matters — this is
-// the typical CPA progression: nothing started → blocked on client →
-// actively working → handoff to client. Labels are short on purpose so
-// the trigger stays single-line; hints are shown as a caption below
-// the action row, not inside SelectItem (Radix's SelectValue copies
-// item children into the trigger, so a 2-line item = 2-line trigger).
-const WORKFLOW_OPTIONS: { value: WorkflowStatus; label: string; hint: string }[] = [
-  { value: "pending", label: "Pending", hint: "Not started" },
-  {
-    value: "waiting_on_client",
-    label: "Waiting on client",
-    hint: "Blocked on docs or signature",
-  },
-  { value: "in_progress", label: "In progress", hint: "Actively working on it" },
-];
-
-function isWorkflowStatus(s: string): s is WorkflowStatus {
-  return WORKFLOW_OPTIONS.some((o) => o.value === s);
-}
-
+/**
+ * Action bar for the deadline detail page.
+ *
+ * State model collapsed to binary on 2026-05-01: a deadline is either
+ * Pending (open) or Filed (completed). Workflow nuance moves to:
+ *   - the owner avatar (who's on it)
+ *   - the notes field (what's blocking / where they are)
+ *
+ * So this bar only carries 2 paths:
+ *   - Open: Mark as filed · File extension · Add to calendar
+ *   - Filed: Re-open
+ *
+ * Extension is orthogonal to status (it shifts the date, not the work
+ * stage), so it stays available regardless.
+ */
 export function DeadlineActionBar({
   deadlineId,
-  status,
+  isCompleted,
   defaultNewDueDate,
   currentExtensionDueDate,
 }: {
   deadlineId: string;
-  status: string;
+  isCompleted: boolean;
   /** Pre-fill the extension date input with the rule's canonical extension date */
   defaultNewDueDate: string;
   /** When non-null, this deadline already has an extension. We warn the
@@ -80,22 +73,33 @@ export function DeadlineActionBar({
 }) {
   const [pending, startTransition] = useTransition();
   const [extOpen, setExtOpen] = useState(false);
+  // Two-stage extension flow: file extension → if open stages exist that
+  // would be candidates to shift, surface a follow-up dialog. Default
+  // for that follow-up is "Keep stages as-is" (safer — moving dates
+  // silently is a worse failure mode than leaving stale ones the user
+  // can fix manually).
+  const [shiftPrompt, setShiftPrompt] = useState<null | {
+    candidates: number;
+    originalDueDate: string;
+    newDueDate: string;
+  }>(null);
+  const [shifting, startShift] = useTransition();
 
-  if (status === "completed") {
+  if (isCompleted) {
     return (
       <div className="flex flex-wrap items-center gap-2">
         <AlertDialog>
           <AlertDialogTrigger asChild>
-            <Button variant="outline" disabled={pending}>
-              <RotateCcw className="mr-2 h-4 w-4" /> Re-open
+            <Button variant="outline" disabled={pending} className="gap-1.5">
+              <RotateCcw className="mr-0 h-4 w-4" /> Re-open
             </Button>
           </AlertDialogTrigger>
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>Re-open this deadline?</AlertDialogTitle>
               <AlertDialogDescription>
-                It will return to the pending state so it shows up on your
-                upcoming list again.
+                It will return to the open list and show on your dashboard
+                again.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -112,51 +116,19 @@ export function DeadlineActionBar({
     );
   }
 
-  // Workflow status dropdown only makes sense for non-terminal states.
-  // Completed already early-returned above. Extended deadlines (now an
-  // is_extended flag, not a status) flow through the same pending →
-  // waiting_on_client → in_progress workflow against their new due date.
-  const currentWorkflow: WorkflowStatus | null = isWorkflowStatus(status)
-    ? status
-    : null;
-  const currentHint =
-    currentWorkflow != null
-      ? WORKFLOW_OPTIONS.find((o) => o.value === currentWorkflow)?.hint
-      : null;
-
   return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap items-center gap-2">
-        {/* Workflow status — quick-toggle stage without committing to filed */}
-        {currentWorkflow ? (
-          <Select
-            value={currentWorkflow}
-            disabled={pending}
-            onValueChange={(v) => {
-              if (!isWorkflowStatus(v) || v === currentWorkflow) return;
-              startTransition(() => setStatusAction(deadlineId, v));
-            }}
-          >
-            <SelectTrigger className="w-[180px]" aria-label="Workflow status">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {WORKFLOW_OPTIONS.map((o) => (
-                <SelectItem key={o.value} value={o.value}>
-                  {o.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        ) : null}
-
-        {/* Mark complete */}
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Button disabled={pending}>
-              <CheckCircle2 className="mr-2 h-4 w-4" /> Mark as filed
-            </Button>
-          </AlertDialogTrigger>
+    <div className="flex flex-wrap items-center gap-2">
+      {/* Mark as filed — outline like its siblings. The three actions
+          (Mark as filed / File extension / Add to calendar) are
+          conceptually equal-weight, so visual hierarchy here was a
+          fiction. The dialog's confirm button keeps a sage tint to
+          reassure "yes, you really did file it" — distinct context. */}
+      <AlertDialog>
+        <AlertDialogTrigger asChild>
+          <Button variant="outline" disabled={pending} className="gap-1.5">
+            <CheckCircle2 className="mr-0 h-4 w-4" /> Mark as filed
+          </Button>
+        </AlertDialogTrigger>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Mark this deadline as filed?</AlertDialogTitle>
@@ -171,10 +143,11 @@ export function DeadlineActionBar({
               onClick={() =>
                 startTransition(() => markCompleteAction(deadlineId))
               }
+              className="gap-1.5 !bg-[#4F8B66] !text-white hover:!bg-[#4F8B66]/90"
             >
               {pending ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving…
+                  <Loader2 className="mr-0 h-4 w-4 animate-spin" /> Saving…
                 </>
               ) : (
                 "Mark as filed"
@@ -184,19 +157,30 @@ export function DeadlineActionBar({
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* File extension */}
+      {/* File extension — orthogonal to status (shifts the date) */}
       <Dialog open={extOpen} onOpenChange={setExtOpen}>
         <DialogTrigger asChild>
-          <Button variant="outline" disabled={pending}>
-            <Calendar className="mr-2 h-4 w-4" /> File extension
+          <Button variant="outline" disabled={pending} className="gap-1.5">
+            <Calendar className="mr-0 h-4 w-4" /> File extension
           </Button>
         </DialogTrigger>
 
         <DialogContent>
           <form
             action={async (fd) => {
-              await fileExtensionAction(fd);
+              const result = await fileExtensionAction(fd);
               setExtOpen(false);
+              // Open shift prompt only when there's actually something to
+              // shift — zero candidates means no stages live in the post-
+              // extension window, so the dialog would just ask the user
+              // to confirm a no-op.
+              if (result.shiftCandidates > 0) {
+                setShiftPrompt({
+                  candidates: result.shiftCandidates,
+                  originalDueDate: result.originalDueDate,
+                  newDueDate: result.newDueDate,
+                });
+              }
             }}
           >
             <DialogHeader>
@@ -276,31 +260,96 @@ export function DeadlineActionBar({
         </DialogContent>
       </Dialog>
 
-      {/* Add to calendar — downloads a single .ics. Using `Download`
-          icon rather than `CalendarPlus` because the latter's extra
-          "+" glyph gave it more ink-weight than the Calendar icon on
-          File extension, making the button read as visibly taller
-          even though the box-model height was identical. Download
-          also more accurately describes what happens — the browser
-          gets a file. */}
+      {/* Add to calendar — downloads a single .ics */}
       <Button
         variant="outline"
         disabled={pending}
+        className="gap-1.5"
         onClick={() => {
           window.location.assign(`/api/deadlines/${deadlineId}/ics`);
         }}
       >
-        <Download className="mr-2 h-4 w-4" /> Add to calendar
+        <Download className="mr-0 h-4 w-4" /> Add to calendar
       </Button>
-      </div>
 
-      {/* Caption: explains what the currently-selected workflow status
-          *means*. Lives outside the SelectItem (Radix would copy it
-          into the trigger and break the layout) and outside the row
-          (so it doesn't fight for horizontal space with the buttons). */}
-      {currentHint ? (
-        <p className="text-xs text-muted-foreground">{currentHint}</p>
-      ) : null}
+      {/* Stage-shift follow-up — shown only when filing the extension
+          left open stages dated on/after the pre-extension deadline. */}
+      <Dialog
+        open={shiftPrompt !== null}
+        onOpenChange={(v) => {
+          if (!v) setShiftPrompt(null);
+        }}
+      >
+        <DialogContent>
+          {shiftPrompt ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>Shift prep stages?</DialogTitle>
+                <DialogDescription>
+                  Extension recorded — due date moved{" "}
+                  <span className="font-medium text-foreground">
+                    {humanShortDate(shiftPrompt.originalDueDate)}
+                  </span>{" "}
+                  →{" "}
+                  <span className="font-medium text-foreground">
+                    {humanShortDate(shiftPrompt.newDueDate)}
+                  </span>
+                  . You have{" "}
+                  <span className="font-medium text-foreground">
+                    {shiftPrompt.candidates}
+                  </span>{" "}
+                  open stage{shiftPrompt.candidates === 1 ? "" : "s"} dated on
+                  or after the original due date. Already-completed stages
+                  never shift.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter className="gap-2 sm:gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShiftPrompt(null)}
+                  disabled={shifting}
+                >
+                  Keep stages as-is
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    const target = shiftPrompt;
+                    startShift(async () => {
+                      await shiftSubtasksAction({
+                        deadlineId,
+                        originalDueDate: target.originalDueDate,
+                        newDueDate: target.newDueDate,
+                      });
+                      setShiftPrompt(null);
+                    });
+                  }}
+                  disabled={shifting}
+                >
+                  {shifting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Shifting…
+                    </>
+                  ) : (
+                    `Shift ${shiftPrompt.candidates} stage${shiftPrompt.candidates === 1 ? "" : "s"}`
+                  )}
+                </Button>
+              </DialogFooter>
+            </>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   );
+}
+
+function humanShortDate(iso: string): string {
+  const d = new Date(iso + "T00:00:00");
+  return d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }

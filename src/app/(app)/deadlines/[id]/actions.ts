@@ -8,21 +8,16 @@ import {
   fileExtension,
   updateDeadlineNotes,
   reopenDeadline,
-  setDeadlineStatus,
   assignDeadline,
+  getDeadlineDetail,
 } from "@/lib/services/deadlines";
+import { countShiftableSubtasks } from "@/lib/services/subtasks";
 
 const IdSchema = z.string().min(1);
 
-// Mirror of WORKFLOW_STATUSES from the service. Kept in lock-step manually
-// rather than imported because server-action arg types must be plain
-// JSON-friendly literals to make Next.js's RPC encoding happy.
-const WorkflowStatusSchema = z.enum([
-  "pending",
-  "waiting_on_client",
-  "in_progress",
-]);
-export type WorkflowStatus = z.infer<typeof WorkflowStatusSchema>;
+// (WorkflowStatusSchema + setStatusAction removed 2026-05-01 — state is
+// derived from completed_at, no workflow setter exists. Mark-as-filed
+// and reopen still cover the only state transitions.)
 
 export async function markCompleteAction(
   deadlineId: string,
@@ -45,22 +40,6 @@ export async function reopenAction(deadlineId: string) {
   await reopenDeadline({
     deadlineInstanceId: IdSchema.parse(deadlineId),
     orgId: ctx.organization.id,
-    actorType: "user",
-    actorId: ctx.user.id,
-  });
-  revalidatePath("/dashboard");
-  revalidatePath(`/deadlines/${deadlineId}`);
-}
-
-export async function setStatusAction(
-  deadlineId: string,
-  newStatus: WorkflowStatus,
-) {
-  const ctx = await getCurrentContext();
-  await setDeadlineStatus({
-    deadlineInstanceId: IdSchema.parse(deadlineId),
-    orgId: ctx.organization.id,
-    status: WorkflowStatusSchema.parse(newStatus),
     actorType: "user",
     actorId: ctx.user.id,
   });
@@ -96,7 +75,24 @@ const FileExtensionFormSchema = z.object({
   notes: z.string().max(2000).optional(),
 });
 
-export async function fileExtensionAction(formData: FormData) {
+/**
+ * Returned to the client so the action bar knows whether to follow up
+ * with the "Keep / Shift stages?" prompt. `originalDueDate` is the
+ * pre-extension date — we capture it before fileExtension() mutates
+ * the row so the stage shift uses the right anchor (extension_due_date
+ * the SECOND time around if the deadline was already extended; otherwise
+ * the base due_date).
+ */
+export type FileExtensionResult = {
+  deadlineId: string;
+  originalDueDate: string;
+  newDueDate: string;
+  shiftCandidates: number;
+};
+
+export async function fileExtensionAction(
+  formData: FormData,
+): Promise<FileExtensionResult> {
   const ctx = await getCurrentContext();
 
   const parsed = FileExtensionFormSchema.safeParse({
@@ -109,6 +105,18 @@ export async function fileExtensionAction(formData: FormData) {
     throw new Error(parsed.error.issues[0]?.message ?? "Invalid input");
   }
 
+  // Capture the deadline's effective due date BEFORE filing the
+  // extension — this is the anchor the stage-shift logic uses to
+  // decide which stages to move ("only stages dated on/after the
+  // pre-extension deadline get shifted"). If we read it after, the
+  // extension would have already overwritten extension_due_date and
+  // the comparison would be a no-op.
+  const pre = await getDeadlineDetail(parsed.data.deadlineId, ctx.organization.id);
+  if (!pre) {
+    throw new Error(`Deadline ${parsed.data.deadlineId} not found`);
+  }
+  const originalDueDate = pre.extension_due_date ?? pre.due_date;
+
   await fileExtension({
     deadlineInstanceId: parsed.data.deadlineId,
     orgId: ctx.organization.id,
@@ -118,8 +126,23 @@ export async function fileExtensionAction(formData: FormData) {
     notes: parsed.data.notes,
   });
 
+  // How many open stages would the shift move? Powers the second
+  // dialog. Zero = no prompt, just close the extension dialog.
+  const shiftCandidates = await countShiftableSubtasks({
+    deadlineInstanceId: parsed.data.deadlineId,
+    orgId: ctx.organization.id,
+    originalDueDate,
+  });
+
   revalidatePath("/dashboard");
   revalidatePath(`/deadlines/${parsed.data.deadlineId}`);
+
+  return {
+    deadlineId: parsed.data.deadlineId,
+    originalDueDate,
+    newDueDate: parsed.data.newDueDate,
+    shiftCandidates,
+  };
 }
 
 const UpdateNotesFormSchema = z.object({

@@ -21,6 +21,7 @@ import {
   jsonb,
   index,
   uniqueIndex,
+  unique,
   pgEnum,
   primaryKey,
 } from "drizzle-orm/pg-core";
@@ -55,31 +56,22 @@ export const entityTypeEnum = pgEnum("entity_type", [
   "nonprofit",
 ]);
 
-/**
- * Deadline workflow status — collapsed to 4 values after the 2026-04-30
- * CPA interview. The previous 8 values conflated workflow progress with
- * date/derivability concerns:
- *
- *   - "extended"       → now `is_extended` boolean column
- *   - "missed"         → computed at query time
- *                        (`effective_due_date < today AND status != completed`)
- *   - "ready_to_file"  → merged into "in_progress" — the CPA's next
- *                        action ("review and e-file") is the same as
- *                        "in progress", so the distinction added clicks
- *                        without changing behavior
- *   - "not_applicable" → row deleted instead (this entity doesn't need
- *                        to file this rule, so it shouldn't exist)
- *
- * Postgres enum-altering is awkward when existing rows reference the
- * dropped values; we run the data backfill (UPDATE / DELETE) before
- * migrating the enum so no row is orphaned.
- */
-export const deadlineStatusEnum = pgEnum("deadline_status", [
-  "pending",
-  "waiting_on_client",
-  "in_progress",
-  "completed",
-]);
+// Deadline workflow status was removed 2026-05-01. State is now derived
+// purely from `completed_at` (NULL = pending, NOT NULL = filed). The
+// owner_user_id field tells you who's on it; notes carry "what they're
+// blocked on" detail. Three motivations for the collapse:
+//
+//   1. CPA interviewees consistently said the in-progress / waiting-on-
+//      client / ready-to-file distinctions added clicks without changing
+//      their next action.
+//   2. Status was redundant with completed_at — the two could disagree
+//      after a write race, and we only ever cared about "is it done?".
+//   3. Owner + notes is a simpler, more flexible coordination primitive
+//      for small teams than a fixed workflow enum.
+//
+// The deadlineStatusEnum and `status` column were dropped. Historical
+// audit_events with action="deadline.status_changed" remain valid for
+// timeline display but no new rows are written.
 
 export const jurisdictionTypeEnum = pgEnum("jurisdiction_type", [
   "federal",
@@ -444,7 +436,6 @@ export const deadlineInstances = pgTable(
     ruleId: text("rule_id").notNull().references(() => deadlineRules.id),
     taxYear: integer("tax_year").notNull(), // e.g., 2025 (for returns filed in 2026)
     dueDate: date("due_date").notNull(),
-    status: deadlineStatusEnum("status").notNull().default("pending"),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     completedByUserId: text("completed_by_user_id").references(() => users.id),
     completedByActorType: actorTypeEnum("completed_by_actor_type"),
@@ -480,13 +471,100 @@ export const deadlineInstances = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    index("deadline_instances_org_due_idx").on(t.orgId, t.dueDate, t.status),
+    index("deadline_instances_org_due_idx").on(t.orgId, t.dueDate),
     index("deadline_instances_entity_idx").on(t.entityId),
-    index("deadline_instances_org_status_idx").on(t.orgId, t.status),
+    // Composite (org, completed_at) covers the most common dashboard
+    // query: "open deadlines for this org" → WHERE completed_at IS NULL.
+    index("deadline_instances_org_completed_idx").on(t.orgId, t.completedAt),
     // "Show me my deadlines" is the highest-frequency query for team
     // users — composite (org, owner) covers it without a full scan.
     index("deadline_instances_org_owner_idx").on(t.orgId, t.ownerUserId),
     uniqueIndex("deadline_instances_unique_idx").on(t.entityId, t.ruleId, t.taxYear),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Deadline sub-tasks (prep stages — user-defined timeline nodes)
+//
+// Each row is one stage on the path from "today" to the deadline due
+// date — e.g. "initial meeting", "docs requested", "internal review".
+// Stages are user-defined (no canonical preset list); the deadline
+// owner adds whatever nodes match their workflow for this filing.
+//
+// Why a separate table (vs jsonb on deadline_instances):
+// - Stages are first-class queryable objects: dashboard surfaces "next
+//   up" across deadlines, weekly digest groups by stage owner, badge
+//   counts overdue stages — all of these need indexes, not a json scan.
+// - Per-stage owner_user_id needs a FK with ON DELETE SET NULL so a
+//   teammate leaving doesn't orphan the stage.
+// - Audit history of stage completions wants its own row in
+//   audit_events linked back to a stable id.
+//
+// Calendar / ICS rule: stages NEVER export. Only the parent deadline's
+// due_date appears in the ICS feed. Stages are internal prep work; the
+// deadline is the public commitment. See ui-samples/m-subtimeline-variants.html.
+// ---------------------------------------------------------------------------
+
+export const deadlineSubtasks = pgTable(
+  "deadline_subtasks",
+  {
+    id: text("id").primaryKey().$defaultFn(() => `sub_${nanoid(12)}`),
+    /**
+     * Cascade-delete with the parent deadline so removing a deadline
+     * doesn't leak stage rows. The CPA explicitly archives clients/
+     * entities to clean up; that path already drops deadlines.
+     */
+    deadlineInstanceId: text("deadline_instance_id")
+      .notNull()
+      .references(() => deadlineInstances.id, { onDelete: "cascade" }),
+    /**
+     * Denormalized for cheap row-level org isolation in queries.
+     * Without this every dashboard "show my open stages" query needs
+     * a 3-table join (subtasks → instances → orgs); with it we can
+     * filter directly. Service layer keeps it in sync with the parent.
+     */
+    orgId: text("org_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    label: text("label").notNull(),
+    dueDate: date("due_date").notNull(),
+    /**
+     * Manual ordering for stages on the same date (rare but real:
+     * "send docs request" + "schedule meeting" both due Mon). Service
+     * layer assigns this on insert as MAX(sort_order)+1 within the
+     * parent deadline. Sub-second precision on createdAt would also
+     * work as a tie-breaker, but explicit sort lets the user reorder.
+     */
+    sortOrder: integer("sort_order").notNull().default(0),
+    /**
+     * Per-stage owner. Defaults to inheriting from the parent deadline's
+     * owner_user_id at create time but the user can override per stage
+     * (e.g. preparer does "draft return" / partner does "review").
+     * NULL = inherits from deadline (display falls back to parent owner).
+     */
+    ownerUserId: text("owner_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    completedByUserId: text("completed_by_user_id").references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Primary access pattern: list stages for a deadline (detail page,
+    // dashboard progress bar). Composite (deadline, sort_order) lets us
+    // ORDER BY without a sort step.
+    index("deadline_subtasks_deadline_idx").on(
+      t.deadlineInstanceId,
+      t.sortOrder,
+    ),
+    // "Open stages I own" — for future C-3 notification system + sidebar
+    // badge. Keep it cheap from day one.
+    index("deadline_subtasks_org_owner_open_idx").on(
+      t.orgId,
+      t.ownerUserId,
+      t.completedAt,
+    ),
+    // Dashboard "stages due in next 7 days" — by date, with org gate.
+    index("deadline_subtasks_org_due_idx").on(t.orgId, t.dueDate),
   ],
 );
 
@@ -548,6 +626,117 @@ export const digestSends = pgTable(
       t.digestType,
     ),
     index("digest_sends_org_idx").on(t.orgId),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// In-app notifications — per-user popover feed (C-3).
+//
+// Sits alongside the email reminder pipeline, not in place of it. Every
+// fire of /api/cron/reminders writes one row here AND one to remindersSent
+// (channel="email"). The two tables play different roles:
+//
+//   - notifications powers the bell badge + popover. Per-user, dismissable,
+//     denormalized title/body/link so the popover renders without a join.
+//   - remindersSent is the email idempotency ledger ("did we already send
+//     the T-3 reminder for this deadline?"). Independent so a user can mark
+//     all read in the popover without re-triggering email sends, and an
+//     email-disabled future user still gets the in-app feed.
+//
+// Recipient resolution lives in the cron, not the schema:
+//   deadline_t_minus_{7,3,1}  → deadline.owner_user_id
+//   stage_t_minus_1           → subtask.owner_user_id ?? deadline.owner_user_id
+// (NULL stage owner = "inherits parent" per the deadlineSubtasks design,
+// so reminder logic stays consistent with the display fallback rule.)
+//
+// Retention: no hard cap in v1. The popover query limits to ~50 most
+// recent rows per user; older rows are dead weight but not wrong. A GC
+// cron can be added later (cron tag 'notifications.gc') without touching
+// any read path.
+// ---------------------------------------------------------------------------
+
+export const notificationKindEnum = pgEnum("notification_kind", [
+  "deadline_t_minus_7",
+  "deadline_t_minus_3",
+  "deadline_t_minus_1",
+  "stage_t_minus_1",
+]);
+
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: text("id").primaryKey().$defaultFn(() => `nfn_${nanoid(12)}`),
+    /**
+     * Denormalized for cheap row-level org isolation. Popover queries
+     * filter on (user_id, org_id) directly without joining through
+     * deadline_instances → entities → clients → orgs. Service layer keeps
+     * this in sync with the parent deadline at insert time.
+     */
+    orgId: text("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    /** Recipient. Cascade because deleting a user clears their bell. */
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    kind: notificationKindEnum("kind").notNull(),
+    deadlineInstanceId: text("deadline_instance_id")
+      .notNull()
+      .references(() => deadlineInstances.id, { onDelete: "cascade" }),
+    /**
+     * Set only for stage_t_minus_1 rows; NULL for deadline_t_minus_*.
+     * Cascade with the stage so removing a subtask drops the orphan
+     * notification — a stage that no longer exists shouldn't keep
+     * counting toward the bell badge.
+     */
+    subtaskId: text("subtask_id").references(() => deadlineSubtasks.id, {
+      onDelete: "cascade",
+    }),
+    /**
+     * Denormalized snapshot fields. Popover renders straight from this
+     * row (no join). Renames on the source deadline/stage do not cascade
+     * back into already-delivered notifications — acceptable lag, since
+     * the row links out via linkPath for current state.
+     *
+     *   title     → "1120-S · Rodriguez & Associates"
+     *   body      → "Due in 1 day · You"
+     *   linkPath  → "/deadlines/dl_xxxxx"
+     */
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    linkPath: text("link_path").notNull(),
+    deliveredAt: timestamp("delivered_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    /** NULL = unread (counts toward bell badge); set when user opens popover or "Mark all read". */
+    readAt: timestamp("read_at", { withTimezone: true }),
+  },
+  (t) => [
+    /**
+     * Dedupe — a single (user, deadline, subtask, kind) combo should
+     * only ever produce one row, even if cron retries. nullsNotDistinct
+     * makes (user, deadline, NULL, deadline_t_minus_1) collide on retry
+     * (default Postgres treats two NULLs as distinct, which would
+     * silently allow duplicate deadline-tier rows). Uses unique()
+     * constraint rather than uniqueIndex() because nullsNotDistinct is
+     * only exposed on the constraint API in drizzle-orm 0.45.x.
+     */
+    unique("notifications_dedupe_idx")
+      .on(t.userId, t.deadlineInstanceId, t.subtaskId, t.kind)
+      .nullsNotDistinct(),
+    /**
+     * Bell badge: SELECT COUNT(*) WHERE user_id = ? AND read_at IS NULL.
+     * Partial index keeps it tiny — only unread rows live in it, so the
+     * count query is essentially O(badge_count) per user.
+     */
+    index("notifications_unread_idx")
+      .on(t.userId, t.deliveredAt)
+      .where(sql`${t.readAt} IS NULL`),
+    /**
+     * Popover list: ORDER BY delivered_at DESC LIMIT 50, scoped to user.
+     * Covers both unread + recent-read. Org filter applied in WHERE.
+     */
+    index("notifications_user_recent_idx").on(t.userId, t.deliveredAt),
   ],
 );
 
@@ -857,3 +1046,7 @@ export type ServiceGroup = typeof serviceGroups.$inferSelect;
 export type NewServiceGroup = typeof serviceGroups.$inferInsert;
 export type EntityService = typeof entityServices.$inferSelect;
 export type NewEntityService = typeof entityServices.$inferInsert;
+export type Notification = typeof notifications.$inferSelect;
+export type NewNotification = typeof notifications.$inferInsert;
+/** Discrete notification tiers — keep in sync with notificationKindEnum. */
+export type NotificationKind = (typeof notificationKindEnum.enumValues)[number];

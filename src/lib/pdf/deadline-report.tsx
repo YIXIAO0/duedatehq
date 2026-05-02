@@ -28,11 +28,8 @@ export type ReportDeadline = {
   id: string;
   effectiveDueDate: string; // ISO YYYY-MM-DD
   originalDueDate: string;
-  status:
-    | "pending"
-    | "waiting_on_client"
-    | "in_progress"
-    | "completed";
+  /** ISO timestamp when filed; null = open. */
+  completedAt: string | null;
   isExtended: boolean;
   formCode: string;
   ruleTitle: string;
@@ -289,36 +286,23 @@ function bucketize(deadlines: ReportDeadline[], asOf: Date): Buckets {
 // ---------------------------------------------------------------------------
 
 function StatusBadge({
-  status,
+  isCompleted,
   isExtended,
 }: {
-  status: ReportDeadline["status"];
+  isCompleted: boolean;
   isExtended: boolean;
 }) {
-  if (status === "completed") {
+  if (isCompleted) {
     return (
       <Text style={[styles.badgeStatus, { color: COLOR.done }]}>FILED</Text>
     );
   }
-  // Date-shifted flag wins over workflow stage in the print summary —
-  // partners doing morning review want to see "this got extended" before
-  // "this is in progress". Only meaningful while still open.
+  // Date-shifted flag is the only active-state badge after the status
+  // collapse — partners doing morning review still want to spot the
+  // "this got extended" signal at a glance. Pending = no badge.
   if (isExtended) {
     return (
       <Text style={[styles.badgeStatus, { color: COLOR.high }]}>EXT</Text>
-    );
-  }
-  if (status === "in_progress") {
-    return (
-      <Text style={[styles.badgeStatus, { color: COLOR.primary }]}>WIP</Text>
-    );
-  }
-  // Use a short tag the page can fit in the badge column. "WAIT" reads
-  // clearer than "WOC" when the partner is reviewing print-outs at a
-  // morning huddle.
-  if (status === "waiting_on_client") {
-    return (
-      <Text style={[styles.badgeStatus, { color: COLOR.high }]}>WAIT</Text>
     );
   }
   return null;
@@ -366,7 +350,10 @@ function Row({
         <Text style={styles.cellRule}>{d.ruleTitle}</Text>
       </View>
       <View style={styles.cellMeta}>
-        <StatusBadge status={d.status} isExtended={d.isExtended} />
+        <StatusBadge
+          isCompleted={d.completedAt !== null}
+          isExtended={d.isExtended}
+        />
       </View>
     </View>
   );
@@ -420,9 +407,9 @@ export function DeadlineReport({
 }: ReportProps) {
   const buckets = bucketize(deadlines, asOf);
   const irrevocableCount = deadlines.filter(
-    (d) => d.irrevocable && d.status !== "completed",
+    (d) => d.irrevocable && d.completedAt === null,
   ).length;
-  const filedCount = deadlines.filter((d) => d.status === "completed").length;
+  const filedCount = deadlines.filter((d) => d.completedAt !== null).length;
 
   const generatedStr = generatedAt.toLocaleString("en-US", {
     dateStyle: "medium",

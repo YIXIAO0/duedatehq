@@ -51,7 +51,9 @@ export type DashboardDeadline = {
   id: string;
   due_date: string;
   effective_due_date: string;
-  status: string;
+  /** ISO timestamp when filed; null = open. State (Pending / Filed /
+      Overdue) is computed in the UI. */
+  completed_at: string | null;
   tax_year: number;
   client_id: string;
   client_name: string;
@@ -68,6 +70,19 @@ export type DashboardDeadline = {
   owner_user_id: string | null;
   owner_full_name: string | null;
   owner_email: string | null;
+  /**
+   * Compact prep-stage progress summary. Populated server-side via
+   * listProgressForDeadlines when the dashboard query runs. Absent (or
+   * total=0) means the deadline has no stages yet — row hides the
+   * progress strip entirely. Stages never appear in calendar/ICS so
+   * this is purely an in-app hint of "where the prep work stands".
+   */
+  subtask_progress?: {
+    total: number;
+    done: number;
+    next_label: string | null;
+    next_due_date: string | null;
+  };
 };
 
 type UrgencyFilter = "all" | "urgent" | "irrevocable";
@@ -451,15 +466,11 @@ export function DashboardClient({
       totalBuckets.find((b) => b.id === "tomorrow")?.deadlines.length ?? 0;
     const restOfWeek =
       totalBuckets.find((b) => b.id === "rest-of-week")?.deadlines.length ?? 0;
-    const waiting = deadlines.filter(
-      (d) => d.status === "waiting_on_client",
-    ).length;
     return {
       all: deadlines.length,
       today,
       thisWeek: today + tomorrow + restOfWeek,
       overdue,
-      waiting,
     };
   }, [deadlines]);
 
@@ -492,23 +503,15 @@ export function DashboardClient({
         .filter((b) => b.id === "overdue")
         .filter((b) => b.deadlines.length > 0);
     }
-    if (view === "thisWeek") {
-      return buckets
-        .filter(
-          (b) =>
-            b.id === "overdue" ||
-            b.id === "today" ||
-            b.id === "tomorrow" ||
-            b.id === "rest-of-week",
-        )
-        .filter((b) => b.deadlines.length > 0);
-    }
-    // waiting: keep every bucket but filter to status === waiting_on_client
+    // view === "thisWeek" — fall through to here (default)
     return buckets
-      .map((b) => ({
-        ...b,
-        deadlines: b.deadlines.filter((d) => d.status === "waiting_on_client"),
-      }))
+      .filter(
+        (b) =>
+          b.id === "overdue" ||
+          b.id === "today" ||
+          b.id === "tomorrow" ||
+          b.id === "rest-of-week",
+      )
       .filter((b) => b.deadlines.length > 0);
   }, [buckets, view, selectedDate]);
 
@@ -640,20 +643,12 @@ export function DashboardClient({
 
   return (
     <div className="space-y-7">
-      {/* Chips row — passive metadata strip. The KPI cards below are the
-          actual filter surface; chips just show at-a-glance counts and
-          context. "Clear filter" still appears when a non-default view
+      {/* Chips row — date pill anchors the page; "today / this week / overdue"
+          counts are duplicated by the KPI cards below, so we don't need
+          them here too. "Clear filter" surfaces when a non-default view
           is active so the user has a one-click reset path. */}
       <div className="flex flex-wrap items-center gap-2.5">
-        <CountChip label={dateLabel()} tone="rose" />
-        {counts.overdue > 0 ? (
-          <CountChip label={`${counts.overdue} overdue`} tone="rose" />
-        ) : null}
-        <CountChip label={`${counts.today} due today`} tone="rose" />
-        <CountChip label={`${counts.thisWeek} this week`} tone="amber" />
-        {counts.waiting > 0 ? (
-          <CountChip label={`${counts.waiting} waiting`} tone="amber" />
-        ) : null}
+        <DatePill />
         {view !== "all" || selectedDate ? (
           <button
             type="button"
@@ -737,7 +732,7 @@ export function DashboardClient({
             type="text"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Search client, entity, form…"
+            placeholder="Search deadlines…"
             className="h-7 w-[220px] bg-background pl-7 pr-7 text-xs"
             aria-label="Search deadlines"
           />
@@ -753,13 +748,20 @@ export function DashboardClient({
           ) : null}
         </div>
 
+        {/* size="sm" routes to data-[size=sm]:h-7 (28px) on the trigger,
+            matching the Search Input's h-7. Plain h-7 className doesn't
+            win against the data-attribute h-8 default — must go through
+            the component API to get aligned heights. */}
         <Select
           value={filter.urgency}
           onValueChange={(v) =>
             setFilter((f) => ({ ...f, urgency: v as UrgencyFilter }))
           }
         >
-          <SelectTrigger className="h-7 w-[130px] cursor-pointer bg-background text-xs">
+          <SelectTrigger
+            size="sm"
+            className="w-[130px] cursor-pointer bg-background text-xs"
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -773,7 +775,10 @@ export function DashboardClient({
           value={filter.state}
           onValueChange={(v) => setFilter((f) => ({ ...f, state: v }))}
         >
-          <SelectTrigger className="h-7 w-[130px] cursor-pointer bg-background text-xs">
+          <SelectTrigger
+            size="sm"
+            className="w-[130px] cursor-pointer bg-background text-xs"
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -790,7 +795,10 @@ export function DashboardClient({
           value={filter.entityType}
           onValueChange={(v) => setFilter((f) => ({ ...f, entityType: v }))}
         >
-          <SelectTrigger className="h-7 w-[140px] cursor-pointer bg-background text-xs">
+          <SelectTrigger
+            size="sm"
+            className="w-[140px] cursor-pointer bg-background text-xs"
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -809,7 +817,10 @@ export function DashboardClient({
             setFilter((f) => ({ ...f, status: v as StatusFilter }))
           }
         >
-          <SelectTrigger className="h-7 w-[130px] cursor-pointer bg-background text-xs">
+          <SelectTrigger
+            size="sm"
+            className="w-[130px] cursor-pointer bg-background text-xs"
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -1305,6 +1316,9 @@ export function DashboardClient({
 }
 
 // "Wed · Apr 30" — short date label rendered in the chips row.
+// Time-aware greeting. Most CPAs open the dashboard first thing in the
+// morning (the persona was built around "before coffee"). Falls back to
+// neutral wording outside business hours.
 function dateLabel(): string {
   return new Date().toLocaleDateString("en-US", {
     weekday: "short",
@@ -1313,9 +1327,35 @@ function dateLabel(): string {
   });
 }
 
-// Time-aware greeting. Most CPAs open the dashboard first thing in the
-// morning (the persona was built around "before coffee"). Falls back to
-// neutral wording outside business hours.
+/**
+ * "Today" date display — Variant C (outlined pill, color dot accent).
+ *
+ * Cron / Notion Calendar pattern: subtle outline + white fill, a tiny
+ * rose dot does the only chromatic work, weekday sits in muted small
+ * caps next to the date. Color stays a garnish, not the meal.
+ */
+function DatePill() {
+  const now = new Date();
+  const weekday = now.toLocaleDateString("en-US", { weekday: "short" });
+  const monthDay = now.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  });
+  return (
+    <span className="inline-flex items-center gap-2 rounded-full border border-border-strong bg-card px-3.5 py-1.5 text-[13px] font-medium text-foreground">
+      <span
+        className="w-1.5 h-1.5 rounded-full"
+        style={{ background: "var(--client-rose)" }}
+        aria-hidden
+      />
+      <span className="text-muted-foreground uppercase text-[10.5px] tracking-[0.08em] font-semibold">
+        {weekday}
+      </span>
+      <span>{monthDay}</span>
+    </span>
+  );
+}
+
 function timeAwareGreeting(): string {
   const h = new Date().getHours();
   if (h < 12) return "Good morning";
@@ -1581,68 +1621,10 @@ function DateSubheader({ date, count }: { date: string; count: number }) {
   );
 }
 
-/**
- * 3-segment status progress bar — red (not started) → green (filed).
- *
- * Built from Joycee's CPA-interview ask: "红 = 未开始, 绿 = 完成". After
- * the 4-status refactor, each segment maps directly to the workflow:
- *   [1] pending           "Not started"
- *   [2] waiting_on_client "Blocked on client"
- *   [3] in_progress       "Working on it"
- *   all → green           "Filed" (completed)
- *
- * Pending shows segment 1 in red as a "needs attention" cue rather than
- * 3 empty gray slots (which would look like "no status").
- *
- * Extended status is no longer encoded here — it's a separate flag
- * shown by the row's "Extended" badge to the right of the title. The
- * progress bar reflects the underlying workflow (e.g., an extended
- * deadline currently in_progress shows the in_progress 3/3 fill).
- */
-function StatusProgressBar({ status }: { status: string }) {
-  const segments = stageSegments(status);
-  const label = statusLabel(status);
-  return (
-    <div
-      className="flex h-1.5 w-8 shrink-0 gap-0.5"
-      role="img"
-      aria-label={`Status: ${label}`}
-      title={label}
-    >
-      {segments.map((seg, i) => (
-        <div
-          key={i}
-          className={`flex-1 rounded-sm ${seg ?? "bg-muted"}`}
-        />
-      ))}
-    </div>
-  );
-}
-
-function stageSegments(status: string): (string | null)[] {
-  switch (status) {
-    case "completed":
-      return ["bg-emerald-500", "bg-emerald-500", "bg-emerald-500"];
-    case "in_progress":
-      return ["bg-red-400", "bg-orange-400", "bg-yellow-400"];
-    case "waiting_on_client":
-      return ["bg-red-400", "bg-orange-400", null];
-    case "pending":
-      return ["bg-red-400", null, null];
-    default:
-      return [null, null, null];
-  }
-}
-
-function statusLabel(status: string): string {
-  const map: Record<string, string> = {
-    pending: "Not started",
-    waiting_on_client: "Waiting on client",
-    in_progress: "In progress",
-    completed: "Filed",
-  };
-  return map[status] ?? status;
-}
+// (StatusProgressBar removed 2026-05-01 along with the workflow status
+// enum. With state collapsed to Pending / Filed, a 3-segment bar adds
+// chrome without information — the row's status badge already says
+// "Filed" / "Overdue" / nothing-for-pending.)
 
 /**
  * Clickable owner cell — assigned avatar OR "+ in dashed circle" for
@@ -1947,6 +1929,7 @@ function DeadlineRow({
             </>
           )}
         </div>
+        <SubtaskProgressStrip progress={d.subtask_progress} />
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
         {showOwner && members ? (
@@ -2034,4 +2017,55 @@ function entityTypeLabel(type: string): string {
     nonprofit: "Nonprofit",
   };
   return map[type] ?? type;
+}
+
+/**
+ * Compact prep-stage progress for the dashboard row. Two lines collapse
+ * into one strip: a 60px progress bar + "N/M prep" + the next-up hint.
+ * Hides itself entirely when there are no stages — most deadlines won't
+ * have stages, and showing "0/0" would just be visual noise.
+ */
+function SubtaskProgressStrip({
+  progress,
+}: {
+  progress: DashboardDeadline["subtask_progress"];
+}) {
+  if (!progress || progress.total === 0) return null;
+  const pct = Math.round((progress.done / progress.total) * 100);
+  return (
+    <div className="mt-1 flex items-center gap-2 text-[11.5px] text-muted-foreground">
+      <div
+        className="h-1 w-16 shrink-0 rounded-full overflow-hidden"
+        style={{ background: "var(--border)" }}
+        aria-hidden
+      >
+        <div
+          className="h-full"
+          style={{
+            width: `${pct}%`,
+            background: "var(--color-priority-done)",
+          }}
+        />
+      </div>
+      <span className="shrink-0">
+        {progress.done}/{progress.total} prep
+      </span>
+      {progress.next_label && progress.next_due_date ? (
+        <>
+          <span aria-hidden>·</span>
+          <span className="truncate">
+            next:{" "}
+            <span className="text-foreground">
+              {progress.next_label} {formatStageDate(progress.next_due_date)}
+            </span>
+          </span>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function formatStageDate(iso: string): string {
+  const d = new Date(iso + "T00:00:00");
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }

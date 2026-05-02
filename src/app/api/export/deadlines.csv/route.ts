@@ -18,7 +18,7 @@ export async function GET() {
     const rows = await db.execute<{
     due_date: string;
     effective_due_date: string;
-    status: string;
+    completed_at: string | null;
     tax_year: number;
     form_code: string;
     rule_title: string;
@@ -33,7 +33,7 @@ export async function GET() {
     SELECT
       di.due_date,
       COALESCE(di.extension_due_date, di.due_date) AS effective_due_date,
-      di.status,
+      di.completed_at::text AS completed_at,
       di.tax_year,
       r.form_code,
       r.title AS rule_title,
@@ -76,7 +76,7 @@ export async function GET() {
       [
         r.effective_due_date,
         r.due_date,
-        r.status,
+        r.completed_at ? "Filed" : "Pending",
         r.tax_year,
         csvEscape(r.client_name),
         csvEscape(r.entity_name),

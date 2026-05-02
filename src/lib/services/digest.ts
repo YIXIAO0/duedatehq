@@ -45,7 +45,6 @@ type DigestDeadlineRow = {
   id: string;
   due_date: string;
   effective_due_date: string;
-  status: string;
   irrevocable: boolean;
   rule_title: string;
   form_code: string;
@@ -144,7 +143,6 @@ async function gatherDigestStats(orgId: string): Promise<DigestStats> {
     SELECT di.id,
            di.due_date::text AS due_date,
            COALESCE(di.extension_due_date, di.due_date)::text AS effective_due_date,
-           di.status::text AS status,
            r.irrevocable,
            r.title AS rule_title,
            r.form_code,
@@ -158,7 +156,7 @@ async function gatherDigestStats(orgId: string): Promise<DigestStats> {
     INNER JOIN entities e ON e.id = di.entity_id
     INNER JOIN clients c ON c.id = e.client_id
     WHERE di.org_id = ${orgId}
-      AND di.status IN ('pending', 'waiting_on_client', 'in_progress')
+      AND di.completed_at IS NULL
       AND COALESCE(di.extension_due_date, di.due_date) BETWEEN ${todayIso}::date
         AND (${todayIso}::date + INTERVAL '14 days')
     ORDER BY effective_due_date ASC, r.irrevocable DESC
@@ -168,7 +166,6 @@ async function gatherDigestStats(orgId: string): Promise<DigestStats> {
     SELECT di.id,
            di.due_date::text AS due_date,
            COALESCE(di.extension_due_date, di.due_date)::text AS effective_due_date,
-           di.status::text AS status,
            r.irrevocable,
            r.title AS rule_title,
            r.form_code,
@@ -182,7 +179,7 @@ async function gatherDigestStats(orgId: string): Promise<DigestStats> {
     INNER JOIN entities e ON e.id = di.entity_id
     INNER JOIN clients c ON c.id = e.client_id
     WHERE di.org_id = ${orgId}
-      AND di.status IN ('pending', 'waiting_on_client', 'in_progress')
+      AND di.completed_at IS NULL
       AND COALESCE(di.extension_due_date, di.due_date) < ${todayIso}::date
     ORDER BY effective_due_date ASC
     LIMIT 20
@@ -192,7 +189,7 @@ async function gatherDigestStats(orgId: string): Promise<DigestStats> {
     SELECT COUNT(*)::int AS n
     FROM deadline_instances
     WHERE org_id = ${orgId}
-      AND status = 'completed'
+      AND completed_at IS NOT NULL
       AND completed_at >= NOW() - INTERVAL '7 days'
   `);
   const recentlyCompleted = Number(completedCountRow.rows[0]?.n ?? 0);

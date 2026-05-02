@@ -385,15 +385,13 @@ export async function listDashboardDeadlines(input: ListDashboardInput) {
   })();
 
   // Build WHERE clause dynamically using conditional fragments.
-  // "extended_only" filter narrows to deadlines that have had an
-  // extension filed against them. is_extended is a real boolean column
-  // now (used to be the status='extended' check before the 4-status
-  // refactor). Workflow filter "active" is the union of the 3 open
-  // workflow statuses — extended rows already sit inside in_progress.
+  // After the 2026-05-01 status collapse, "open" is just
+  // `completed_at IS NULL`. "extended_only" further narrows to rows
+  // that also have the extension flag set.
   const statusWhere =
     parsed.status === "extended_only"
-      ? sql`di.is_extended = true AND di.status != 'completed'`
-      : sql`di.status IN ('pending', 'waiting_on_client', 'in_progress')`;
+      ? sql`di.is_extended = true AND di.completed_at IS NULL`
+      : sql`di.completed_at IS NULL`;
 
   const urgencyWhere =
     parsed.urgency === "urgent"
@@ -440,7 +438,7 @@ export async function listDashboardDeadlines(input: ListDashboardInput) {
     id: string;
     due_date: string;
     effective_due_date: string;
-    status: string;
+    completed_at: string | null;
     tax_year: number;
     client_id: string;
     client_name: string;
@@ -461,7 +459,7 @@ export async function listDashboardDeadlines(input: ListDashboardInput) {
       di.id,
       di.due_date,
       COALESCE(di.extension_due_date, di.due_date) AS effective_due_date,
-      di.status,
+      di.completed_at::text AS completed_at,
       di.tax_year,
       e.id AS entity_id,
       e.name AS entity_name,
@@ -515,18 +513,18 @@ export async function getDashboardStats(orgId: string) {
     SELECT
       COUNT(*) FILTER (
         WHERE COALESCE(extension_due_date, due_date) BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '7 days'
-        AND status IN ('pending', 'waiting_on_client', 'in_progress')
+        AND completed_at IS NULL
       ) AS this_week,
       COUNT(*) FILTER (
         WHERE COALESCE(extension_due_date, due_date) BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '30 days'
-        AND status IN ('pending', 'waiting_on_client', 'in_progress')
+        AND completed_at IS NULL
       ) AS this_month,
       COUNT(*) FILTER (
         WHERE COALESCE(extension_due_date, due_date) < CURRENT_DATE
-        AND status IN ('pending', 'waiting_on_client', 'in_progress')
+        AND completed_at IS NULL
       ) AS overdue,
       COUNT(*) FILTER (
-        WHERE status = 'completed'
+        WHERE completed_at IS NOT NULL
         AND completed_at >= CURRENT_DATE - INTERVAL '30 days'
       ) AS completed_30d
     FROM deadline_instances

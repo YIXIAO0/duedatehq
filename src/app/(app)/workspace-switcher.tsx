@@ -1,7 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
-import { Building2, Check, ChevronDown } from "lucide-react";
+import { Check, ChevronsUpDown } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,6 +10,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { paletteForClient, clientInitials } from "@/lib/utils/client-palette";
 import { switchOrgAction } from "./workspace-actions";
 
 export interface WorkspaceOption {
@@ -19,14 +20,31 @@ export interface WorkspaceOption {
 }
 
 /**
- * Workspace dropdown in the app header. Solo users (1 membership) see a
- * static label — no menu chrome — so the chrome only shows up when it
- * earns its keep. Multi-org users get a dropdown listing every workspace
- * with a checkmark on the current one.
+ * Strip the auto-generated " practice" suffix from a workspace name for
+ * the sidebar trigger display. Solo orgs are auto-named "<full>'s practice"
+ * (organizations.ts), and the trailing word eats most of the available
+ * width — "Yi Xiao's practice" truncates to "Yi Xiao's pra..." in a 240px
+ * sidebar, which is uglier than just showing "Yi Xiao's". Custom workspace
+ * names (anything not matching the auto-pattern) pass through untouched.
+ */
+function shortDisplayName(name: string): string {
+  return name.replace(/'s practice$/i, "'s");
+}
+
+/**
+ * Workspace switcher for the sidebar. Renders a single-line row: avatar
+ * + workspace name + chevron. Click opens a dropdown listing all the
+ * user's orgs. Role label has been removed from the inline display —
+ * it's available in Settings, and the trigger now matches the original
+ * brand-row visual rhythm (icon + name, single line) the user prefers.
  *
- * Switching fires switchOrgAction which writes the active-org cookie
- * and redirects to /dashboard. We wrap it in useTransition so the trigger
- * dims while the round-trip is in flight (otherwise feels frozen).
+ * Solo users (one membership) see a static row.
+ *
+ * Avatar color comes from paletteForClient(orgId), so two orgs with
+ * IDENTICAL names (a real-world case during multi-workspace testing)
+ * still get distinguishable avatar colors — that color is the only
+ * disambiguator we surface; users can rename in Settings if it isn't
+ * enough.
  */
 export function WorkspaceSwitcher({
   current,
@@ -37,13 +55,13 @@ export function WorkspaceSwitcher({
 }) {
   const [pending, startTransition] = useTransition();
 
-  // Solo case: skip the dropdown chrome. The org name still shows so the
-  // user knows which workspace they're in, but there's nothing to pick.
   if (options.length <= 1) {
     return (
-      <div className="hidden items-center gap-1.5 rounded-md px-2 py-1 text-sm text-muted-foreground sm:flex">
-        <Building2 className="h-3.5 w-3.5" aria-hidden />
-        <span className="max-w-[140px] truncate">{current.name}</span>
+      <div className="flex items-center gap-2 px-1.5 py-0.5">
+        <Avatar option={current} />
+        <div className="min-w-0 flex-1 truncate text-[13px] font-medium">
+          {shortDisplayName(current.name)}
+        </div>
       </div>
     );
   }
@@ -51,21 +69,27 @@ export function WorkspaceSwitcher({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1 text-sm hover:bg-muted/40 disabled:opacity-60"
+        className="flex w-full cursor-pointer items-center gap-2 rounded-xl px-1.5 py-0.5 text-left transition-colors hover:bg-white/50 disabled:opacity-60"
         disabled={pending}
         aria-label="Switch workspace"
       >
-        <Building2 className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
-        <span className="max-w-[160px] truncate font-medium">
-          {current.name}
-        </span>
-        <ChevronDown
-          className="h-3 w-3 text-muted-foreground"
+        <Avatar option={current} />
+        <div className="min-w-0 flex-1 truncate text-[13px] font-medium">
+          {shortDisplayName(current.name)}
+        </div>
+        <ChevronsUpDown
+          className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
           aria-hidden
         />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="min-w-[220px]">
-        <DropdownMenuLabel>Workspaces</DropdownMenuLabel>
+      <DropdownMenuContent
+        align="start"
+        sideOffset={6}
+        className="min-w-[260px]"
+      >
+        <DropdownMenuLabel className="text-[10.5px] uppercase tracking-wider text-muted-foreground">
+          Workspaces
+        </DropdownMenuLabel>
         <DropdownMenuSeparator />
         {options.map((opt) => {
           const isCurrent = opt.id === current.id;
@@ -76,21 +100,40 @@ export function WorkspaceSwitcher({
                 if (isCurrent) return;
                 startTransition(() => switchOrgAction(opt.id));
               }}
-              className="flex items-start justify-between gap-3"
+              className="flex items-center gap-2.5 px-2 py-1.5"
             >
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-medium">{opt.name}</div>
-                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                  {opt.role}
-                </div>
+              <Avatar option={opt} />
+              <div
+                className={`min-w-0 flex-1 truncate text-sm ${isCurrent ? "font-medium" : ""}`}
+              >
+                {opt.name}
               </div>
               {isCurrent ? (
-                <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                <Check className="h-3.5 w-3.5 shrink-0 text-primary" />
               ) : null}
             </DropdownMenuItem>
           );
         })}
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+/**
+ * Workspace avatar — round, soft-tinted, initials based on org name.
+ * Color is hashed from the org id (NOT the name) so two orgs with the
+ * exact same name still get different colors. Sized to match the user
+ * avatar in the sidebar footer (h-7) so the two rows align visually.
+ */
+function Avatar({ option }: { option: WorkspaceOption }) {
+  const palette = paletteForClient(option.id);
+  return (
+    <span
+      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[11px] font-semibold"
+      style={{ background: palette.bg, color: palette.text }}
+      aria-hidden
+    >
+      {clientInitials(option.name)}
+    </span>
   );
 }

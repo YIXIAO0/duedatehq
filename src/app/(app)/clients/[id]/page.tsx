@@ -51,6 +51,10 @@ import { ClientActions } from "./client-actions";
 import { ContactsSection } from "./contacts-section";
 import { EntityActions } from "./entity-actions";
 import { DeadlinesCollapse } from "./deadlines-collapse";
+import {
+  paletteForClient,
+  clientInitials,
+} from "@/lib/utils/client-palette";
 
 type Params = Promise<{ id: string }>;
 type SearchParams = Promise<{ fromAnnouncement?: string }>;
@@ -218,9 +222,12 @@ async function ClientDetail({
           the button at the bottom of the page where the user has to
           scroll past everything else to find it. */}
       <section>
-        <div className="mb-4 flex items-center justify-between gap-3">
+        <div className="mb-3 flex items-center justify-between gap-3">
           <h2 className="text-lg font-semibold">
-            Tax entities ({entityRows.length})
+            Tax entities{" "}
+            <span className="text-sm font-normal text-muted-foreground">
+              ({entityRows.length})
+            </span>
           </h2>
           <AddEntityCollapser clientId={id} services={availableServices} />
         </div>
@@ -236,12 +243,13 @@ async function ClientDetail({
             </CardHeader>
           </Card>
         ) : (
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="rounded-xl border border-border divide-y divide-border bg-card">
             {entityRows.map((e) => (
               <EntityCard
                 key={e.id}
                 entity={e}
                 orgId={ctx.organization.id}
+                clientId={id}
                 availableServices={availableServices}
               />
             ))}
@@ -266,11 +274,8 @@ function DeadlinesSection({
   if (deadlines.length === 0) {
     return (
       <section>
-        <div className="mb-4 flex items-baseline justify-between">
+        <div className="mb-4">
           <h2 className="text-lg font-semibold">Open deadlines</h2>
-          <span className="text-xs text-muted-foreground">
-            Filed history not shown
-          </span>
         </div>
         <Card>
           <CardHeader>
@@ -330,16 +335,13 @@ function DeadlinesSection({
 
   return (
     <section>
-      <div className="mb-4 flex items-baseline justify-between">
+      <div className="mb-4">
         <h2 className="text-lg font-semibold">
           Open deadlines{" "}
           <span className="text-sm font-normal text-muted-foreground">
             ({deadlines.length})
           </span>
         </h2>
-        <span className="text-xs text-muted-foreground">
-          Earliest first · filed history not shown
-        </span>
       </div>
       {/* Timeline-rail layout (T4 "floating card stations"): every date
           is a self-contained card hanging off a left-side vertical rail.
@@ -539,7 +541,7 @@ function DeadlineRow({
         ) : null}
       </div>
       <StatusBadge
-        status={d.status}
+        isCompleted={d.completedAt !== null}
         isOverdue={isOverdue}
         isExtended={d.isExtended}
       />
@@ -603,9 +605,13 @@ function relativeTimeRibbon(iso: string): {
   let ribbonClass: string;
   let dotClass: string;
   if (days <= 3) {
-    // Solid alarm fill — the only tier that goes white-on-color.
+    // Soft tinted bg + saturated text — same pattern as the other
+    // tiers. The earlier solid-red-on-white "alarm fill" overpowered
+    // the rest of the page; differentiation now lives in hue (rose
+    // vs amber vs sage), not brightness. Dot stays saturated so the
+    // rail still reads as urgent at a glance.
     ribbonClass =
-      "bg-[var(--color-priority-urgent)] text-white";
+      "bg-[var(--color-priority-urgent-bg)] text-[var(--color-priority-urgent)]";
     dotClass = "bg-[var(--color-priority-urgent)]";
   } else if (days <= 14) {
     ribbonClass =
@@ -631,44 +637,20 @@ function relativeTimeRibbon(iso: string): {
   return { label, ribbonClass, dotClass };
 }
 
+// Two-state badge for the dense client-detail rows. Priority: Filed >
+// Overdue > Extended > (no badge for Pending). Owner avatar tells you
+// "who's on it"; status tells you "what's wrong / urgent". Pending ≈ no
+// badge keeps the row chrome quiet so non-default states pop.
 function StatusBadge({
-  status,
+  isCompleted,
   isOverdue,
   isExtended,
 }: {
-  status: string;
+  isCompleted: boolean;
   isOverdue: boolean;
   isExtended: boolean;
 }) {
-  // "Extended" is a date-shifted flag, not a workflow stage. It rides
-  // alongside whatever workflow status the deadline is in. Render it
-  // first so the CPA notices the date-moved signal before the workflow
-  // sub-state — it's higher-priority context for the calendar.
-  if (isExtended && status !== "completed") {
-    return (
-      <Badge variant="outline" className="shrink-0 text-[10px]">
-        <Calendar className="mr-1 h-2.5 w-2.5" /> Extended
-      </Badge>
-    );
-  }
-  if (status === "waiting_on_client") {
-    return (
-      <Badge
-        variant="outline"
-        className="shrink-0 text-[10px] text-[var(--color-priority-high)]"
-      >
-        <Clock className="mr-1 h-2.5 w-2.5" /> Waiting on client
-      </Badge>
-    );
-  }
-  if (status === "in_progress") {
-    return (
-      <Badge variant="outline" className="shrink-0 text-[10px]">
-        <Clock className="mr-1 h-2.5 w-2.5" /> In progress
-      </Badge>
-    );
-  }
-  if (status === "completed") {
+  if (isCompleted) {
     return (
       <Badge className="shrink-0 bg-[var(--color-priority-done-bg)] text-[10px] text-[var(--color-priority-done)] hover:bg-[var(--color-priority-done-bg)]">
         <CheckCircle2 className="mr-1 h-2.5 w-2.5" /> Filed
@@ -682,11 +664,13 @@ function StatusBadge({
       </Badge>
     );
   }
-  // Pending is the default state for ~80% of rows. Showing a badge
-  // for it on every row was visual noise; hiding it lets the
-  // *interesting* statuses (Waiting / In progress / Ready / Filed /
-  // Overdue) actually pop. Pending = "no badge" reads as the implicit
-  // baseline.
+  if (isExtended) {
+    return (
+      <Badge variant="outline" className="shrink-0 text-[10px]">
+        <Calendar className="mr-1 h-2.5 w-2.5" /> Extended
+      </Badge>
+    );
+  }
   return null;
 }
 
@@ -720,10 +704,12 @@ function formatFyeShort(mmdd: string): string {
 async function EntityCard({
   entity,
   orgId,
+  clientId,
   availableServices,
 }: {
   entity: typeof entities.$inferSelect;
   orgId: string;
+  clientId: string;
   availableServices: ServiceGroup[];
 }) {
   const db = getDb();
@@ -746,65 +732,42 @@ async function EntityCard({
   // count query above.
   const activeServices = await listActiveServicesForEntity(entity.id);
 
-  const icon =
-    entity.entityType === "individual" ? (
-      <UserIcon className="h-4 w-4" />
-    ) : (
-      <Building2 className="h-4 w-4" />
-    );
+  const palette = paletteForClient(clientId);
+  const initials = clientInitials(entity.name);
+
+  // Inline metadata — entity type, home state, +N states badge, FYE.
+  // Composed as a "·" separated string so it sits inline with the
+  // entity name rather than wrapping into its own row.
+  const metaParts: string[] = [entityTypeLabel(entity.entityType)];
+  if (entity.homeState) metaParts.push(entity.homeState);
+  if (entity.operatingStates && entity.operatingStates.length > 1) {
+    metaParts.push(`+${entity.operatingStates.length - 1} states`);
+  }
+  if (entity.fiscalYearEnd && entity.fiscalYearEnd !== "12-31") {
+    metaParts.push(`FYE ${formatFyeShort(entity.fiscalYearEnd)}`);
+  }
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <div className="flex items-start gap-3">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
-            {icon}
-          </div>
-          <div className="min-w-0 flex-1">
-            <CardTitle className="text-base">{entity.name}</CardTitle>
-            <div className="mt-1 flex flex-wrap items-center gap-2">
-              <Badge variant="secondary" className="font-mono text-xs">
-                {entityTypeLabel(entity.entityType)}
-              </Badge>
-              {entity.homeState ? (
-                <Badge variant="outline" className="text-xs">
-                  {entity.homeState}
-                </Badge>
-              ) : null}
-              {entity.operatingStates && entity.operatingStates.length > 1 ? (
-                <Badge variant="outline" className="text-xs">
-                  +{entity.operatingStates.length - 1} states
-                </Badge>
-              ) : null}
-              {/* Surface non-default FYE so the CPA can spot at a glance
-                  why this entity's 1120 / 1120-S / 1065 etc. dates differ
-                  from the calendar-year norm. Calendar year (Dec 31)
-                  stays unmarked — that's the boring default. */}
-              {entity.fiscalYearEnd && entity.fiscalYearEnd !== "12-31" ? (
-                <Badge variant="outline" className="text-xs">
-                  FYE {formatFyeShort(entity.fiscalYearEnd)}
-                </Badge>
-              ) : null}
-            </div>
-          </div>
-          <EntityActions
-            entity={{
-              id: entity.id,
-              name: entity.name,
-              entityType: entity.entityType,
-              homeState: entity.homeState,
-              operatingStates: entity.operatingStates ?? [],
-              ein: entity.ein,
-              fiscalYearEnd: entity.fiscalYearEnd,
-              activeServiceIds: activeServices.map((s) => s.id),
-            }}
-            availableServices={availableServices}
-          />
+    <div className="flex items-start gap-3 px-3 py-3">
+      <span
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[12px] font-semibold"
+        style={{ background: palette.bg, color: palette.text }}
+        aria-hidden
+      >
+        {initials}
+      </span>
+
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+          <span className="truncate text-[14px] font-semibold">
+            {entity.name}
+          </span>
+          <span className="text-[12px] text-muted-foreground">
+            {metaParts.join(" · ")}
+          </span>
         </div>
-      </CardHeader>
-      <CardContent className="space-y-2">
-        {activeServices.length > 0 ? (
-          <div className="flex flex-wrap gap-1">
+        {(activeServices.length > 0 || deadlineCount.length > 0) && (
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
             {activeServices.map((s) => (
               <Badge
                 key={s.id}
@@ -815,13 +778,27 @@ async function EntityCard({
                 {s.name}
               </Badge>
             ))}
+            <span className="text-[11.5px] text-muted-foreground">
+              {deadlineCount.length} deadlines
+            </span>
           </div>
-        ) : null}
-        <p className="text-sm text-muted-foreground">
-          {deadlineCount.length} deadlines generated
-        </p>
-      </CardContent>
-    </Card>
+        )}
+      </div>
+
+      <EntityActions
+        entity={{
+          id: entity.id,
+          name: entity.name,
+          entityType: entity.entityType,
+          homeState: entity.homeState,
+          operatingStates: entity.operatingStates ?? [],
+          ein: entity.ein,
+          fiscalYearEnd: entity.fiscalYearEnd,
+          activeServiceIds: activeServices.map((s) => s.id),
+        }}
+        availableServices={availableServices}
+      />
+    </div>
   );
 }
 

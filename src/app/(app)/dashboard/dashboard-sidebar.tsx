@@ -11,7 +11,7 @@ export type SidebarClient = {
   activeDeadlineCount: number;
 };
 
-export type SmartView = "all" | "today" | "thisWeek" | "overdue" | "waiting";
+export type SmartView = "all" | "today" | "thisWeek" | "overdue";
 
 type Props = {
   clients: SidebarClient[];
@@ -332,13 +332,6 @@ function SmartFilters({
       icon: <Flame className="h-4 w-4" />,
       count: counts.overdue,
       countTone: counts.overdue > 0 ? "urgent" : "muted",
-    },
-    {
-      id: "waiting",
-      label: "Waiting on client",
-      icon: <Clock4 className="h-4 w-4" />,
-      count: counts.waiting,
-      countTone: counts.waiting > 0 ? "warn" : "muted",
     },
   ];
 

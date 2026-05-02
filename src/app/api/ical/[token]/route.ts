@@ -75,12 +75,12 @@ export async function GET(
     events: deadlines.map((d) => {
       // Calendar event title: form code + client name. Short, scannable.
       // "1040 — Acme Corp" reads fast on phone notifications.
-      const summary =
-        d.status === "completed"
-          ? `[Filed] ${d.formCode} — ${d.clientName}`
-          : d.isExtended
-          ? `[Ext] ${d.formCode} — ${d.clientName}`
-          : `${d.formCode} — ${d.clientName}`;
+      const isCompleted = d.completedAt !== null;
+      const summary = isCompleted
+        ? `[Filed] ${d.formCode} — ${d.clientName}`
+        : d.isExtended
+        ? `[Ext] ${d.formCode} — ${d.clientName}`
+        : `${d.formCode} — ${d.clientName}`;
 
       const lines = [
         d.ruleTitle,
@@ -102,7 +102,7 @@ export async function GET(
         url: `${APP_URL}/deadlines/${d.id}`,
         // Default reminder: 1 day before. CPA can override per-event in
         // their calendar app. Skip the alarm for already-filed items.
-        alarmDaysBefore: d.status === "completed" ? undefined : 1,
+        alarmDaysBefore: isCompleted ? undefined : 1,
         lastModified: d.updatedAt,
       };
     }),

@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>Client open deadlines — design variants</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  :root {
+    --bg: #FFFFFF;
+    --canvas: #FAF7F2;
+    --fg: #1B1B1F;
+    --muted: #5C5A5C;
+    --muted-2: #8A8784;
+    --border: #ECEAE5;
+    --border-strong: #DDD9D2;
+
+    /* Heavy current palette — kept only for reference */
+    --priority-urgent: #B83A3A;
+    --priority-urgent-bg: #FFE3E3;
+    --priority-high: #A56A1F;
+    --priority-high-bg: #FFEFD0;
+    --priority-done: #1F6B41;
+    --priority-done-bg: #D8EFE2;
+
+    /* Softer "fresh" palette — Arc Browser DNA, more peach + sage */
+    --soft-overdue: #C95548;
+    --soft-overdue-bg: #FFEDE9;
+    --soft-overdue-bg-2: #FBE0DA;
+    --soft-soon: #C2862E;
+    --soft-soon-bg: #FFF3DC;
+    --soft-soon-bg-2: #F8E4BD;
+    --soft-later: #7DAA7D;
+    --soft-later-bg: #E8F2E2;
+    --soft-later-bg-2: #DAE9D2;
+    --soft-future: #8B8DAD;
+    --soft-future-bg: #ECECF7;
+
+    --client-rose: #FF7B7B;
+    --client-amber: #E8A04A;
+    --client-sage: #6FA37A;
+    --client-iris: #8A7CC6;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Söhne", "Inter", sans-serif;
+    color: var(--fg);
+    background: var(--canvas);
+    font-size: 15px;
+  }
+  .mono { font-family: "SF Mono", "Geist Mono", ui-monospace, monospace; }
+  .card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+  }
+  .label-tiny {
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .form-code { font-family: "SF Mono", "Geist Mono", ui-monospace, monospace; font-size: 13px; font-weight: 600; }
+</style>
+</head>
+<body class="px-10 py-12">
+
+<header class="max-w-5xl mx-auto mb-10">
+  <div class="label-tiny mb-2">Client detail · open deadlines</div>
+  <h1 class="text-2xl font-semibold tracking-tight mb-2">Open deadlines — fresh palette + structure</h1>
+  <p class="text-[14px] text-[color:var(--muted)] max-w-2xl leading-relaxed">
+    Brief：现在的全宽红/橙/绿 banner 太重，"轻松活泼"丢掉了。CPA 工作本来就枯燥重复，
+    UI 不要再压上一层；要让 deadline 列表能给"重复劳动"带一点松弛感。
+  </p>
+  <p class="text-[12.5px] text-[color:var(--muted-2)] max-w-2xl leading-relaxed mt-3">
+    设计参考：
+    <span class="mono">Things 3</span>（轻松日期分组）·
+    <span class="mono">Sunsama</span>（柔和的"今日/本周"调度）·
+    <span class="mono">Cron</span>（最小色 + dot 强调）·
+    <span class="mono">Linear</span>（极简 timeline）·
+    <span class="mono">Notion Calendar</span>（小色块 + 大留白）
+  </p>
+</header>
+
+<!-- Reference: current state -->
+<section class="max-w-5xl mx-auto mb-12">
+  <div class="label-tiny mb-3">Reference · 当前实现</div>
+  <div class="card p-6">
+    <div class="flex items-baseline justify-between mb-5">
+      <h2 class="text-base font-semibold">Open deadlines <span class="text-[13px] font-normal text-[color:var(--muted-2)]">(21)</span></h2>
+      <span class="text-[11px] text-[color:var(--muted-2)]">Earliest first · filed history not shown</span>
+    </div>
+    <div class="relative pl-6">
+      <div class="absolute left-[7px] top-3 bottom-3 w-px bg-[color:var(--border)]"></div>
+      <!-- streak 1 -->
+      <div class="absolute left-0 top-2.5 w-3.5 h-3.5 rounded-full bg-[color:var(--priority-urgent)]"></div>
+      <div class="mb-4 rounded-xl overflow-hidden border border-[color:var(--border)]">
+        <div class="flex items-center justify-between px-4 py-2 text-white" style="background: var(--priority-urgent);">
+          <span class="text-[12px] font-bold tracking-wider">APR 30, 2026 THU</span>
+          <span class="text-[11px] font-bold tracking-wider">2D OVERDUE</span>
+        </div>
+        <div class="px-4 py-3 bg-white text-[14px]">
+          <span class="form-code mr-3">941-Q1</span>
+          <span class="text-[color:var(--muted)]">US Federal · Form 941 Q1 — Quarterly Employer Payroll Tax</span>
+        </div>
+      </div>
+      <!-- streak 2 -->
+      <div class="absolute left-0 top-[125px] w-3.5 h-3.5 rounded-full" style="background: var(--priority-high);"></div>
+      <div class="mb-4 rounded-xl overflow-hidden border border-[color:var(--border)]">
+        <div class="flex items-center justify-between px-4 py-2" style="background: var(--priority-high-bg); color: var(--priority-high);">
+          <span class="text-[12px] font-bold tracking-wider">MAY 15, 2026 FRI</span>
+          <span class="text-[11px] font-bold tracking-wider">IN 13D · 2</span>
+        </div>
+        <div class="px-4 py-3 bg-white text-[14px]"><span class="form-code mr-3">TX-Franchise</span><span class="text-[color:var(--muted)]">TX · TX Franchise Tax Report</span></div>
+        <div class="px-4 py-3 bg-white text-[14px] border-t border-[color:var(--border)]"><span class="form-code mr-3">TX-PIR</span><span class="text-[color:var(--muted)]">TX · TX Public Information Report</span></div>
+      </div>
+      <!-- streak 3 -->
+      <div class="absolute left-0 top-[265px] w-3.5 h-3.5 rounded-full" style="background: var(--priority-done);"></div>
+      <div class="rounded-xl overflow-hidden border border-[color:var(--border)]">
+        <div class="flex items-center justify-between px-4 py-2" style="background: var(--priority-done-bg); color: var(--priority-done);">
+          <span class="text-[12px] font-bold tracking-wider">JUN 15, 2026 MON</span>
+          <span class="text-[11px] font-bold tracking-wider">IN 6W</span>
+        </div>
+        <div class="px-4 py-3 bg-white text-[14px]"><span class="form-code mr-3">1040-ES-Q2</span><span class="text-[color:var(--muted)]">US Federal · Form 1040-ES Q2 — Individual Estimated Tax</span></div>
+      </div>
+    </div>
+  </div>
+  <p class="mt-3 text-[12px] text-[color:var(--muted-2)]">
+    问题：3 个全宽彩 banner 把视觉权重抢光，"过期"用饱和红 = 警报感太强；列表本身（form code + 描述）反而被压成次要。
+  </p>
+</section>
+
+
+<!-- Variant A — Soft tinted card with corner pill -->
+<section class="max-w-5xl mx-auto mb-14">
+  <div class="flex items-baseline justify-between mb-3">
+    <div>
+      <div class="label-tiny mb-1">Variant A  ·  Sunsama / Things 3 同款</div>
+      <h2 class="text-lg font-semibold">柔色 tinted card · 日期变成左上角小 chip</h2>
+    </div>
+    <div class="text-[12px] text-[color:var(--muted-2)] mono">soft palette · floating chip</div>
+  </div>
+
+  <div class="card p-6">
+    <div class="flex items-baseline justify-between mb-5">
+      <h2 class="text-base font-semibold">Open deadlines <span class="text-[13px] font-normal text-[color:var(--muted-2)]">(21)</span></h2>
+      <span class="text-[11px] text-[color:var(--muted-2)]">Earliest first · filed history not shown</span>
+    </div>
+
+    <div class="space-y-3">
+      <!-- Overdue -->
+      <div class="rounded-xl border border-[color:var(--soft-overdue-bg-2)] px-4 py-3" style="background: linear-gradient(135deg, var(--soft-overdue-bg) 0%, #FFF8F5 70%);">
+        <div class="flex items-center justify-between mb-1.5">
+          <div class="flex items-center gap-2">
+            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-bold tracking-wide" style="background: rgba(255,255,255,0.7); color: var(--soft-overdue);">Apr 30 · Thu</span>
+            <span class="text-[11px] font-semibold" style="color: var(--soft-overdue);">2 days past</span>
+          </div>
+        </div>
+        <div class="flex items-baseline gap-3 text-[14px]">
+          <span class="form-code">941-Q1</span>
+          <span class="text-[color:var(--fg)]">US Federal · Form 941 Q1 — Quarterly Employer Payroll Tax</span>
+        </div>
+      </div>
+
+      <!-- May 15 (2 deadlines) -->
+      <div class="rounded-xl border border-[color:var(--soft-soon-bg-2)] px-4 py-3" style="background: linear-gradient(135deg, var(--soft-soon-bg) 0%, #FFFCF4 70%);">
+        <div class="flex items-center justify-between mb-1.5">
+          <div class="flex items-center gap-2">
+            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-bold tracking-wide" style="background: rgba(255,255,255,0.7); color: var(--soft-soon);">May 15 · Fri</span>
+            <span class="text-[11px] font-semibold" style="color: var(--soft-soon);">in 13 days</span>
+          </div>
+          <span class="text-[10.5px] text-[color:var(--muted-2)]">2 filings</span>
+        </div>
+        <div class="flex items-baseline gap-3 text-[14px]"><span class="form-code">TX-Franchise</span><span class="text-[color:var(--fg)]">TX Franchise Tax Report</span></div>
+        <div class="flex items-baseline gap-3 text-[14px] mt-1"><span class="form-code">TX-PIR</span><span class="text-[color:var(--fg)]">TX Public Information Report</span></div>
+      </div>
+
+      <!-- Jun 15 -->
+      <div class="rounded-xl border border-[color:var(--soft-later-bg-2)] px-4 py-3" style="background: linear-gradient(135deg, var(--soft-later-bg) 0%, #F7FBF4 70%);">
+        <div class="flex items-center justify-between mb-1.5">
+          <div class="flex items-center gap-2">
+            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-bold tracking-wide" style="background: rgba(255,255,255,0.7); color: var(--soft-later);">Jun 15 · Mon</span>
+            <span class="text-[11px] font-semibold" style="color: var(--soft-later);">in 6 weeks</span>
+          </div>
+        </div>
+        <div class="flex items-baseline gap-3 text-[14px]"><span class="form-code">1040-ES-Q2</span><span class="text-[color:var(--fg)]">Form 1040-ES Q2 — Individual Estimated Tax</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="mt-3 grid grid-cols-2 gap-x-8 gap-y-2 text-[13px] text-[color:var(--muted)]">
+    <div><span class="font-semibold text-[color:var(--fg)]">+</span> 柔和饱和度（peach / cream / sage），不抢眼但有暖度</div>
+    <div><span class="font-semibold text-[color:var(--fg)]">+</span> Subtle gradient 让 card 有"光"，跟 Arc Browser DNA 一致</div>
+    <div><span class="font-semibold text-[color:var(--fg)]">+</span> "2 days past" / "in 13 days" 替代 "2D OVERDUE" / "IN 13D" — 像人话不像系统报警</div>
+    <div><span class="font-semibold text-[color:var(--fg)]">+</span> 日期 chip 浮在卡片上，不占整条横幅</div>
+    <div><span class="font-semibold text-[color:var(--fg)]">−</span> Gradient 在 retina 屏可能 banding，需要测试</div>
+  </div>
+</section>
+
+
+<!-- Variant B — Linear / Cron-style minimal list -->
+<section class="max-w-5xl mx-auto mb-14">
+  <div class="flex items-baseline justify-between mb-3">
+    <div>
+      <div class="label-tiny mb-1">Variant B  ·  Linear / Cron 极简</div>
+      <h2 class="text-lg font-semibold">Status-led row · 完全去 banner，色彩仅在 dot 和文本上</h2>
+    </div>
+    <div class="text-[12px] text-[color:var(--muted-2)] mono">no card background</div>
+  </div>
+
+  <div class="card p-6">
+    <div class="flex items-baseline justify-between mb-5">
+      <h2 class="text-base font-semibold">Open deadlines <span class="text-[13px] font-normal text-[color:var(--muted-2)]">(21)</span></h2>
+      <span class="text-[11px] text-[color:var(--muted-2)]">Earliest first · filed history not shown</span>
+    </div>
+
+    <div class="divide-y divide-[color:var(--border)]">
+      <div class="flex items-center gap-4 py-3.5">
+        <span class="w-1.5 h-1.5 rounded-full shrink-0" style="background: var(--soft-overdue);"></span>
+        <div class="w-28 shrink-0">
+          <div class="text-[13px] font-semibold">Apr 30</div>
+          <div class="text-[11px] font-medium" style="color: var(--soft-overdue);">2 days past</div>
+        </div>
+        <span class="form-code">941-Q1</span>
+        <span class="text-[14px] text-[color:var(--muted)] flex-1 truncate">Form 941 Q1 — Quarterly Employer Payroll Tax</span>
+      </div>
+      <div class="flex items-center gap-4 py-3.5">
+        <span class="w-1.5 h-1.5 rounded-full shrink-0" style="background: var(--soft-soon);"></span>
+        <div class="w-28 shrink-0">
+          <div class="text-[13px] font-semibold">May 15</div>
+          <div class="text-[11px] font-medium" style="color: var(--soft-soon);">in 13 days</div>
+        </div>
+        <span class="form-code">TX-Franchise</span>
+        <span class="text-[14px] text-[color:var(--muted)] flex-1 truncate">TX Franchise Tax Report</span>
+      </div>
+      <div class="flex items-center gap-4 py-3.5">
+        <span class="w-1.5 h-1.5 rounded-full shrink-0 invisible"></span>
+        <div class="w-28 shrink-0"></div>
+        <span class="form-code">TX-PIR</span>
+        <span class="text-[14px] text-[color:var(--muted)] flex-1 truncate">TX Public Information Report</span>
+      </div>
+      <div class="flex items-center gap-4 py-3.5">
+        <span class="w-1.5 h-1.5 rounded-full shrink-0" style="background: var(--soft-later);"></span>
+        <div class="w-28 shrink-0">
+          <div class="text-[13px] font-semibold">Jun 15</div>
+          <div class="text-[11px] font-medium" style="color: var(--soft-later);">in 6 weeks</div>
+        </div>
+        <span class="form-code">1040-ES-Q2</span>
+        <span class="text-[14px] text-[color:var(--muted)] flex-1 truncate">Form 1040-ES Q2 — Individual Estimated Tax</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="mt-3 grid grid-cols-2 gap-x-8 gap-y-2 text-[13px] text-[color:var(--muted)]">
+    <div><span class="font-semibold text-[color:var(--fg)]">+</span> 信息密度最高，21 条 deadline 一屏放完很轻松</div>
+    <div><span class="font-semibold text-[color:var(--fg)]">+</span> 颜色仅在 dot + 相对天数文本，全局不喧宾夺主</div>
+    <div><span class="font-semibold text-[color:var(--fg)]">+</span> 同日多笔 filing 用空 dot 表"延续"，比 banner 更轻</div>
+    <div><span class="font-semibold text-[color:var(--fg)]">−</span> 缺少视觉节奏，长列表时"扁平"</div>
+    <div><span class="font-semibold text-[color:var(--fg)]">−</span> "活泼"度最低 —— Linear 风格其实偏冷</div>
+  </div>
+</section>
+
+
+<!-- Variant C — Week buckets (structural change) -->
+<section class="max-w-5xl mx-auto mb-14">
+  <div class="flex items-baseline justify-between mb-3">
+    <div>
+      <div class="label-tiny mb-1">Variant C  ·  Sunsama 周维度</div>
+      <h2 class="text-lg font-semibold">按"This week / Next week / Later" 分桶 · 结构性变化</h2>
+    </div>
+    <div class="text-[12px] text-[color:var(--muted-2)] mono">grouped by week</div>
+  </div>
+
+  <div class="card p-6">
+    <div class="flex items-baseline justify-between mb-5">
+      <h2 class="text-base font-semibold">Open deadlines <span class="text-[13px] font-normal text-[color:var(--muted-2)]">(21)</span></h2>
+      <span class="text-[11px] text-[color:var(--muted-2)]">Filed history not shown</span>
+    </div>
+
+    <!-- Past due -->
+    <div class="mb-6">
+      <div class="flex items-baseline justify-between mb-2.5">
+        <h3 class="text-[13px] font-semibold" style="color: var(--soft-overdue);">⚠ Past due</h3>
+        <span class="text-[11px] text-[color:var(--muted-2)]">1 filing</span>
+      </div>
+      <div class="rounded-xl px-4 py-3 border border-[color:var(--soft-overdue-bg-2)]" style="background: var(--soft-overdue-bg);">
+        <div class="flex items-baseline justify-between gap-3">
+          <div>
+            <span class="form-code">941-Q1</span>
+            <span class="ml-2 text-[14px] text-[color:var(--fg)]">Form 941 Q1 — Quarterly Employer Payroll Tax</span>
+          </div>
+          <span class="text-[11.5px] font-semibold whitespace-nowrap" style="color: var(--soft-overdue);">Apr 30 · 2d ago</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- This week -->
+    <div class="mb-6">
+      <div class="flex items-baseline justify-between mb-2.5">
+        <h3 class="text-[13px] font-semibold" style="color: var(--soft-soon);">📅 Next 2 weeks</h3>
+        <span class="text-[11px] text-[color:var(--muted-2)]">2 filings · same day</span>
+      </div>
+      <div class="rounded-xl px-4 py-3 border border-[color:var(--soft-soon-bg-2)] space-y-2" style="background: var(--soft-soon-bg);">
+        <div class="flex items-baseline justify-between gap-3">
+          <div><span class="form-code">TX-Franchise</span><span class="ml-2 text-[14px] text-[color:var(--fg)]">TX Franchise Tax Report</span></div>
+          <span class="text-[11.5px] font-semibold whitespace-nowrap" style="color: var(--soft-soon);">May 15 · in 13d</span>
+        </div>
+        <div class="flex items-baseline justify-between gap-3">
+          <div><span class="form-code">TX-PIR</span><span class="ml-2 text-[14px] text-[color:var(--fg)]">TX Public Information Report</span></div>
+          <span class="text-[11.5px] font-semibold whitespace-nowrap" style="color: var(--soft-soon);">May 15 · in 13d</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Later this quarter -->
+    <div class="mb-2">
+      <div class="flex items-baseline justify-between mb-2.5">
+        <h3 class="text-[13px] font-semibold" style="color: var(--soft-later);">🌱 Later this quarter</h3>
+        <span class="text-[11px] text-[color:var(--muted-2)]">1 filing</span>
+      </div>
+      <div class="rounded-xl px-4 py-3 border border-[color:var(--soft-later-bg-2)]" style="background: var(--soft-later-bg);">
+        <div class="flex items-baseline justify-between gap-3">
+          <div><span class="form-code">1040-ES-Q2</span><span class="ml-2 text-[14px] text-[color:var(--fg)]">Form 1040-ES Q2 — Individual Estimated Tax</span></div>
+          <span class="text-[11.5px] font-semibold whitespace-nowrap" style="color: var(--soft-later);">Jun 15 · in 6w</span>
+        </div>
+      </div>
+    </div>
+
+    <button class="text-[12px] text-[color:var(--muted)] hover:text-[color:var(--fg)] mt-3">↓ 17 more later this year</button>
+  </div>
+
+  <div class="mt-3 grid grid-cols-2 gap-x-8 gap-y-2 text-[13px] text-[color:var(--muted)]">
+    <div><span class="font-semibold text-[color:var(--fg)]">+</span> 时间分桶 = CPA 天然的心智模型（"这周要做的"vs"以后再说"）</div>
+    <div><span class="font-semibold text-[color:var(--fg)]">+</span> 桶标题用人话 + emoji 加点活泼，又不过分</div>
+    <div><span class="font-semibold text-[color:var(--fg)]">+</span> 21 条 deadline 折叠到 4 条 + "17 more"，认知负担骤降</div>
+    <div><span class="font-semibold text-[color:var(--fg)]">−</span> 失去精确日期排序，跨桶对比要点开</div>
+    <div><span class="font-semibold text-[color:var(--fg)]">−</span> 桶边界（What's "Next 2 weeks"）需要业务确认</div>
+  </div>
+</section>
+
+
+<!-- Variant D — Rail with floating "node cards" -->
+<section class="max-w-5xl mx-auto mb-14">
+  <div class="flex items-baseline justify-between mb-3">
+    <div>
+      <div class="label-tiny mb-1">Variant D  ·  保留 rail，去 banner</div>
+      <h2 class="text-lg font-semibold">Timeline rail + floating cards · 现状的轻量化版</h2>
+    </div>
+    <div class="text-[12px] text-[color:var(--muted-2)] mono">least disruptive</div>
+  </div>
+
+  <div class="card p-6">
+    <div class="flex items-baseline justify-between mb-5">
+      <h2 class="text-base font-semibold">Open deadlines <span class="text-[13px] font-normal text-[color:var(--muted-2)]">(21)</span></h2>
+      <span class="text-[11px] text-[color:var(--muted-2)]">Earliest first · filed history not shown</span>
+    </div>
+
+    <div class="relative pl-8">
+      <div class="absolute left-[11px] top-3 bottom-3 w-px" style="background: var(--border);"></div>
+
+      <!-- Apr 30 -->
+      <div class="absolute left-0 top-2 w-6 h-6 rounded-full flex items-center justify-center" style="background: var(--soft-overdue-bg); border: 2px solid var(--soft-overdue);">
+        <span class="w-1.5 h-1.5 rounded-full" style="background: var(--soft-overdue);"></span>
+      </div>
+      <div class="mb-5">
+        <div class="flex items-baseline gap-2 mb-1.5">
+          <span class="text-[13px] font-bold" style="color: var(--soft-overdue);">Apr 30 · Thu</span>
+          <span class="text-[11.5px] font-medium" style="color: var(--soft-overdue);">2 days past</span>
+        </div>
+        <div class="rounded-xl border border-[color:var(--soft-overdue-bg-2)] px-4 py-2.5" style="background: var(--soft-overdue-bg);">
+          <span class="form-code">941-Q1</span>
+          <span class="ml-2 text-[14px]">Form 941 Q1 — Quarterly Employer Payroll Tax</span>
+        </div>
+      </div>
+
+      <!-- May 15 -->
+      <div class="absolute left-0 top-[145px] w-6 h-6 rounded-full flex items-center justify-center" style="background: var(--soft-soon-bg); border: 2px solid var(--soft-soon);">
+        <span class="w-1.5 h-1.5 rounded-full" style="background: var(--soft-soon);"></span>
+      </div>
+      <div class="mb-5">
+        <div class="flex items-baseline gap-2 mb-1.5">
+          <span class="text-[13px] font-bold" style="color: var(--soft-soon);">May 15 · Fri</span>
+          <span class="text-[11.5px] font-medium" style="color: var(--soft-soon);">in 13 days</span>
+          <span class="text-[10.5px] text-[color:var(--muted-2)] ml-1">· 2 filings</span>
+        </div>
+        <div class="rounded-xl border border-[color:var(--soft-soon-bg-2)] divide-y divide-[color:var(--soft-soon-bg-2)]" style="background: var(--soft-soon-bg);">
+          <div class="px-4 py-2.5 text-[14px]"><span class="form-code">TX-Franchise</span><span class="ml-2">TX Franchise Tax Report</span></div>
+          <div class="px-4 py-2.5 text-[14px]"><span class="form-code">TX-PIR</span><span class="ml-2">TX Public Information Report</span></div>
+        </div>
+      </div>
+
+      <!-- Jun 15 -->
+      <div class="absolute left-0 top-[300px] w-6 h-6 rounded-full flex items-center justify-center" style="background: var(--soft-later-bg); border: 2px solid var(--soft-later);">
+        <span class="w-1.5 h-1.5 rounded-full" style="background: var(--soft-later);"></span>
+      </div>
+      <div>
+        <div class="flex items-baseline gap-2 mb-1.5">
+          <span class="text-[13px] font-bold" style="color: var(--soft-later);">Jun 15 · Mon</span>
+          <span class="text-[11.5px] font-medium" style="color: var(--soft-later);">in 6 weeks</span>
+        </div>
+        <div class="rounded-xl border border-[color:var(--soft-later-bg-2)] px-4 py-2.5" style="background: var(--soft-later-bg);">
+          <span class="form-code">1040-ES-Q2</span>
+          <span class="ml-2 text-[14px]">Form 1040-ES Q2 — Individual Estimated Tax</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="mt-3 grid grid-cols-2 gap-x-8 gap-y-2 text-[13px] text-[color:var(--muted)]">
+    <div><span class="font-semibold text-[color:var(--fg)]">+</span> 保留现有 rail / streak 结构，重构成本最低</div>
+    <div><span class="font-semibold text-[color:var(--fg)]">+</span> 全宽 banner → 软色 card；信息层级回归（form code 是主角，颜色是 hint）</div>
+    <div><span class="font-semibold text-[color:var(--fg)]">+</span> Rail dot 用空心圆，比之前的实心点更精致</div>
+    <div><span class="font-semibold text-[color:var(--fg)]">+</span> 日期 + 相对天数横排，省掉了一行</div>
+    <div><span class="font-semibold text-[color:var(--fg)]">−</span> 仍然按日期 streak 分组，没解决 "21 条铺出来太长"的认知负担问题</div>
+  </div>
+</section>
+
+
+<footer class="max-w-5xl mx-auto pt-6 pb-12 border-t" style="border-color: var(--border);">
+  <div class="text-[12px] text-[color:var(--muted-2)] leading-relaxed">
+    <span class="font-semibold text-[color:var(--fg)]">推荐顺序：A &gt; D &gt; C &gt; B</span><br />
+    A 最贴 brief（"轻松活泼"用 gradient + 软色实现），结构跟现状基本兼容。
+    D 是"现状最小修复版"——保留 rail 但去 banner，保守。
+    C 桶分组对长列表（21 条）认知负担帮助大，但是结构性改动。
+    B 最简但偏冷，不适合"fresh"的氛围目标。
+    <br /><br />
+    <span class="font-semibold text-[color:var(--fg)]">copy 改动建议（任何 variant 都适用）</span>：
+    "2D OVERDUE" → "2 days past"，"IN 13D" → "in 13 days"，"IN 6W" → "in 6 weeks"
+    —— CPA 看到的是同事写的便签，不是系统报警。
+  </div>
+</footer>
+
+</body>
+</html>

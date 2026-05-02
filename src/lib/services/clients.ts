@@ -407,7 +407,7 @@ export async function listClientsWithEntityCount(
              INNER JOIN entities e2 ON e2.id = di.entity_id
              WHERE e2.client_id = c.id
                AND e2.archived_at IS NULL
-               AND di.status IN ('pending', 'waiting_on_client', 'in_progress')
+               AND di.completed_at IS NULL
            ) AS active_deadline_count,
            (
              SELECT MIN(COALESCE(di.extension_due_date, di.due_date))::text
@@ -415,7 +415,7 @@ export async function listClientsWithEntityCount(
              INNER JOIN entities e3 ON e3.id = di.entity_id
              WHERE e3.client_id = c.id
                AND e3.archived_at IS NULL
-               AND di.status IN ('pending', 'waiting_on_client', 'in_progress')
+               AND di.completed_at IS NULL
            ) AS next_due_date,
            (
              SELECT COUNT(*)::int
@@ -423,7 +423,7 @@ export async function listClientsWithEntityCount(
              INNER JOIN entities e4 ON e4.id = di.entity_id
              WHERE e4.client_id = c.id
                AND e4.archived_at IS NULL
-               AND di.status IN ('pending', 'waiting_on_client', 'in_progress')
+               AND di.completed_at IS NULL
                AND COALESCE(di.extension_due_date, di.due_date) <= CURRENT_DATE + INTERVAL '3 days'
            ) AS urgent_count,
            (

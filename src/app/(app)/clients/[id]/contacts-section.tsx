@@ -34,8 +34,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Plus,
-  Mail,
-  Phone,
   MoreHorizontal,
   Star,
   Pencil,
@@ -44,6 +42,7 @@ import {
   Bell,
   BellOff,
 } from "lucide-react";
+import { paletteForClient } from "@/lib/utils/client-palette";
 import {
   createContactAction,
   updateContactAction,
@@ -70,7 +69,7 @@ export function ContactsSection({
 
   return (
     <section>
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-3 flex items-center justify-between">
         <h2 className="text-lg font-semibold">
           Contacts{" "}
           <span className="text-sm font-normal text-muted-foreground">
@@ -80,9 +79,10 @@ export function ContactsSection({
         <Button
           variant="outline"
           size="sm"
+          className="gap-1.5"
           onClick={() => setAddOpen(true)}
         >
-          <Plus className="mr-2 h-4 w-4" /> Add contact
+          <Plus className="h-3.5 w-3.5" /> Add
         </Button>
       </div>
 
@@ -92,7 +92,7 @@ export function ContactsSection({
           reminders.
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="rounded-xl border border-border divide-y divide-border bg-card">
           {contacts.map((c) => (
             <ContactRow key={c.id} contact={c} clientId={clientId} />
           ))}
@@ -109,6 +109,15 @@ export function ContactsSection({
   );
 }
 
+// First letter (uppercase) of the contact's most-identifiable string.
+// Prefers name, then email, then phone. Used for the colored avatar.
+function avatarInitial(c: ClientContact): string {
+  const seed = (c.name || c.email || c.phone || "?").trim();
+  if (seed.length === 0) return "?";
+  const ch = seed[0]?.toUpperCase() ?? "?";
+  return /[A-Z0-9]/.test(ch) ? ch : "?";
+}
+
 function ContactRow({
   contact,
   clientId,
@@ -121,41 +130,49 @@ function ContactRow({
   const [pending, startTransition] = useTransition();
   const isPrimary = contact.priority === 0;
 
+  // Per-client palette so all rows for one client share the same hue.
+  const palette = paletteForClient(clientId);
+  // Primary identifier (what we show as the row title). When the contact
+  // has both name + email, name wins and email moves to the subtitle.
+  const primaryLabel = contact.name || contact.email || contact.phone || "Unnamed";
+  const hasName = Boolean(contact.name);
+  // Subtitle: when name is present, email + phone go here. When name is
+  // missing, just phone (email is already the title — no duplication).
+  const subtitleParts: string[] = [];
+  if (hasName) {
+    if (contact.email) subtitleParts.push(contact.email);
+    if (contact.phone) subtitleParts.push(contact.phone);
+  } else if (contact.phone && contact.email) {
+    // Email is the title; surface phone as supporting metadata.
+    subtitleParts.push(contact.phone);
+  }
+  const subtitle = subtitleParts.join(" · ");
+
   return (
     <>
-      <div
-        className={`flex items-center gap-3 rounded-lg border p-3 ${
-          isPrimary
-            ? "border-primary/30 bg-primary/5"
-            : "border-border bg-card"
-        }`}
-      >
-        {/* Primary star — visible if primary; click to flip if not */}
-        {isPrimary ? (
-          <div
-            className="shrink-0 text-primary"
-            aria-label="Primary contact"
-            title="Primary contact"
-          >
-            <Star className="h-4 w-4 fill-current" />
-          </div>
-        ) : (
-          <div className="h-4 w-4 shrink-0" aria-hidden />
-        )}
+      <div className="flex items-center gap-3 px-3 py-2.5">
+        <span
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold"
+          style={{ background: palette.bg, color: palette.text }}
+          aria-hidden
+        >
+          {avatarInitial(contact)}
+        </span>
 
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-semibold">
-              {contact.name || contact.email || contact.phone || "Unnamed"}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="truncate text-[14px] font-medium">
+              {primaryLabel}
             </span>
+            {isPrimary ? (
+              <Star
+                className="h-3 w-3 shrink-0 fill-current text-muted-foreground"
+                aria-label="Primary contact"
+              />
+            ) : null}
             {contact.role ? (
               <Badge variant="outline" className="text-[10px]">
                 {contact.role}
-              </Badge>
-            ) : null}
-            {isPrimary ? (
-              <Badge className="bg-primary/15 text-[10px] text-primary hover:bg-primary/15">
-                Primary
               </Badge>
             ) : null}
             {!contact.receivesReminders ? (
@@ -167,28 +184,13 @@ function ContactRow({
               </Badge>
             ) : null}
           </div>
-          <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-            {contact.email ? (
-              <a
-                href={`mailto:${contact.email}`}
-                className="inline-flex items-center gap-1 hover:text-foreground hover:underline"
-              >
-                <Mail className="h-3 w-3" />
-                {contact.email}
-              </a>
-            ) : null}
-            {contact.phone ? (
-              <a
-                href={`tel:${contact.phone}`}
-                className="inline-flex items-center gap-1 hover:text-foreground hover:underline"
-              >
-                <Phone className="h-3 w-3" />
-                {contact.phone}
-              </a>
-            ) : null}
-          </div>
+          {subtitle ? (
+            <div className="truncate text-[12px] text-muted-foreground">
+              {subtitle}
+            </div>
+          ) : null}
           {contact.notes ? (
-            <div className="mt-1 truncate text-xs text-foreground/70">
+            <div className="mt-0.5 truncate text-[12px] text-foreground/60">
               {contact.notes}
             </div>
           ) : null}
@@ -196,7 +198,12 @@ function ContactRow({
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm" disabled={pending}>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0"
+              disabled={pending}
+            >
               {pending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (

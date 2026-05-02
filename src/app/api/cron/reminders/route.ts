@@ -1,38 +1,63 @@
 /**
  * Daily reminder cron — hit by Vercel Cron at 06:00 UTC every day.
  *
- * Scans upcoming deadlines at 30 / 14 / 3 / 1 day offsets and sends email
- * reminders via Resend. Dedupes by (deadline_instance_id, days_before_due).
+ * Fires the C-3 pipeline:
+ *   - deadline_t_minus_{7,3,1} → deadline owners
+ *   - stage_t_minus_1          → stage owners (NULL falls back to deadline owner)
+ *
+ * Each candidate gets one row in `notifications` (popover feed) + one email
+ * via Resend. Idempotency lives on the notifications unique constraint —
+ * see lib/services/reminders.ts for the rationale.
  *
  * Protected by CRON_SECRET — Vercel Cron sets the `Authorization` header.
  * https://vercel.com/docs/cron-jobs#securing-cron-jobs
+ *
+ * Manual usage (e.g. seed → trigger → inspect popover):
+ *   GET /api/cron/reminders
+ *   Authorization: Bearer $CRON_SECRET
+ *
+ * Optional dev override: ?as_of=YYYY-MM-DD lets you simulate "today" so
+ * a candidate query against today+7d hits a deadline already in the seed.
+ * The CRON_SECRET guard still applies.
  */
 
 import { NextResponse } from "next/server";
+import { dispatchAllReminders } from "@/lib/services/reminders";
 
-const CRON_SECRET = process.env.CRON_SECRET;
+// One Resend send + one DB insert per candidate. At pilot scale (a few
+// dozen candidates per day) this completes in seconds, but bump to match
+// weekly-digest so a busy day during tax season doesn't trip the default.
+export const maxDuration = 600;
 
 export async function GET(req: Request) {
-  // Vercel sends `Authorization: Bearer <CRON_SECRET>`
+  const cronSecret = process.env.CRON_SECRET;
   const auth = req.headers.get("authorization");
-  if (CRON_SECRET && auth !== `Bearer ${CRON_SECRET}`) {
+  if (cronSecret && auth !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // V1: this is a stub. Once DB is provisioned + seed data loaded, this will:
-  //   1. Query deadline_instances where due_date ∈ { today+30, today+14, today+3, today+1 }
-  //   2. LEFT JOIN reminders_sent to skip already-sent combos
-  //   3. Group by org_id → user email lookup
-  //   4. Send batched email via Resend
-  //   5. Insert reminders_sent rows + audit events
-  //
-  // For today, just emit a heartbeat the Vercel dashboard can see.
-  const now = new Date().toISOString();
-  console.log(`[cron/reminders] tick at ${now}`);
+  const url = new URL(req.url);
+  const asOfParam = url.searchParams.get("as_of");
+  const asOf = asOfParam ? new Date(`${asOfParam}T06:00:00Z`) : new Date();
+  if (asOfParam && Number.isNaN(asOf.getTime())) {
+    return NextResponse.json(
+      { error: "Invalid as_of — expected YYYY-MM-DD" },
+      { status: 400 },
+    );
+  }
 
-  return NextResponse.json({
-    ok: true,
-    timestamp: now,
-    status: "stub — DB not yet seeded",
-  });
+  const startedAt = Date.now();
+
+  try {
+    const result = await dispatchAllReminders(asOf);
+    const durationMs = Date.now() - startedAt;
+    console.log(
+      `[cron/reminders] as_of=${result.asOfIso} attempted=${result.attempted} sent=${result.sent} skipped=${result.skipped} failed=${result.failed} duration_ms=${durationMs}`,
+    );
+    return NextResponse.json({ ok: true, durationMs, ...result });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    console.error("[cron/reminders] fatal:", message);
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+  }
 }

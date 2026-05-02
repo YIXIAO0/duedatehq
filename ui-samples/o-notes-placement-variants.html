@@ -1,0 +1,595 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>Notes placement — design variants</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  :root {
+    --bg: #FFFFFF;
+    --canvas: #FAF7F2;
+    --fg: #1B1B1F;
+    --muted: #5C5A5C;
+    --muted-2: #8A8784;
+    --border: #ECEAE5;
+    --border-strong: #DDD9D2;
+
+    --priority-urgent: #B83A3A;
+    --priority-urgent-bg: #FFE3E3;
+    --priority-high: #A56A1F;
+    --priority-high-bg: #FFEFD0;
+    --priority-done: #1F6B41;
+    --priority-done-bg: #D8EFE2;
+
+    --client-rose: #FF7B7B;
+    --client-rose-bg: #FFD0D0;
+    --client-amber: #E8A04A;
+    --client-amber-bg: #FCEBC8;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Söhne", "Inter", sans-serif;
+    color: var(--fg);
+    background: var(--canvas);
+    font-size: 15px;
+  }
+  .mono { font-family: "SF Mono", "Geist Mono", ui-monospace, monospace; }
+  .card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    box-shadow: 0 1px 2px rgba(20, 18, 14, 0.04);
+  }
+  .label-tiny {
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .pill-outline {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-size: 12px;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .pill-outline:hover { background: rgba(0,0,0,0.03); }
+  .due-date-block {
+    font-size: 22px;
+    font-weight: 600;
+    line-height: 1.2;
+  }
+  .relative-pill {
+    color: var(--priority-high);
+    font-size: 13px;
+    font-weight: 500;
+    margin-left: 8px;
+  }
+  .stages-row {
+    display: flex; align-items: flex-start; justify-content: center; gap: 0;
+    padding: 8px 0 4px;
+  }
+  .stage-col { width: 144px; display: flex; flex-direction: column; align-items: center; padding: 0 4px; }
+  .connector { width: 128px; height: 2px; background: var(--border); margin-top: 14px; }
+  .connector-done { background: var(--priority-done); }
+  .stage-dot {
+    width: 28px; height: 28px; border-radius: 999px; border: 2px solid var(--border-strong);
+    display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600;
+    color: var(--muted);
+  }
+  .stage-dot-done {
+    background: var(--priority-done); border-color: var(--priority-done); color: #FFF;
+  }
+  .stage-dot-current {
+    background: var(--priority-high-bg); border-color: var(--priority-high); color: var(--priority-high);
+  }
+  .stage-dot-file {
+    background: var(--priority-urgent-bg); border-color: var(--priority-urgent); color: var(--priority-urgent);
+  }
+  .stage-label { font-size: 12px; margin-top: 8px; color: var(--fg); }
+  .stage-label-current { color: var(--priority-high); font-weight: 500; }
+  .stage-label-file { color: var(--priority-urgent); font-weight: 600; }
+  .stage-date { font-size: 11px; color: var(--muted-2); margin-top: 2px; }
+  .stage-date-current { color: var(--priority-high); }
+  .stage-date-file { color: var(--priority-urgent); }
+  .ref-link { color: var(--muted-2); font-size: 11px; }
+</style>
+</head>
+<body class="px-10 py-12">
+
+<header class="max-w-5xl mx-auto mb-10">
+  <div class="label-tiny mb-2">Deadline detail · notes placement</div>
+  <h1 class="text-2xl font-semibold tracking-tight mb-2">Notes placement variants</h1>
+  <p class="text-[14px] text-[color:var(--muted)] max-w-2xl leading-relaxed">
+    现状：notes 是右上角的小 pill，跟 "+ Add stage" 镜像。问题：notes 是<strong>内容</strong>不是
+    metadata，藏在 popover 里需要点开才能看到全文，且与 Add-stage 的语义类比错位
+    （一个是创建动作，一个是阅读/编辑内容）。
+  </p>
+  <p class="text-[12.5px] text-[color:var(--muted-2)] max-w-2xl leading-relaxed mt-3">
+    设计参考：
+    <span class="mono">Linear</span>（issue body inline）·
+    <span class="mono">Notion</span>（block-level note）·
+    <span class="mono">Asana</span>（description section）·
+    <span class="mono">Things 3</span>（subtitle below title）·
+    <span class="mono">Karbon</span>（task notes section）·
+    <span class="mono">GitHub Issues</span>（description full-width）
+  </p>
+</header>
+
+<!-- Reference: current state -->
+<section class="max-w-5xl mx-auto mb-12">
+  <div class="label-tiny mb-3">Reference · 当前实现</div>
+  <div class="card p-6">
+    <div class="flex items-center justify-between gap-2 mb-2">
+      <span class="label-tiny">Due date</span>
+      <button class="pill-outline">📝 xxx</button>
+    </div>
+    <div class="due-date-block">May 15, 2026 · Fri <span class="relative-pill">In 13 days</span></div>
+    <hr class="my-5 border-[color:var(--border)]" />
+    <div class="flex items-center justify-between gap-2 mb-3">
+      <span class="label-tiny">Prep stages</span>
+      <button class="pill-outline">+ Add stage</button>
+    </div>
+    <div class="stages-row">
+      <div class="stage-col">
+        <div class="stage-dot stage-dot-done">✓</div>
+        <div class="stage-label">Initial meeting</div>
+        <div class="stage-date">Apr 15</div>
+      </div>
+      <div class="connector connector-done"></div>
+      <div class="stage-col">
+        <div class="stage-dot stage-dot-current">2</div>
+        <div class="stage-label stage-label-current">Receive financials</div>
+        <div class="stage-date stage-date-current">May 8 · in 6d</div>
+      </div>
+      <div class="connector"></div>
+      <div class="stage-col">
+        <div class="stage-dot stage-dot-file">📄</div>
+        <div class="stage-label stage-label-file">FILE</div>
+        <div class="stage-date stage-date-file">May 15</div>
+      </div>
+    </div>
+  </div>
+  <p class="mt-3 text-[12px] text-[color:var(--muted-2)]">
+    问题：notes 内容不可见，必须点 pill 才知道写了啥；视觉上跟 + Add stage 同形态但语义错位。
+  </p>
+</section>
+
+
+<!-- Variant A — Inline body section -->
+<section class="max-w-5xl mx-auto mb-14">
+  <div class="flex items-baseline justify-between mb-3">
+    <div>
+      <div class="label-tiny mb-1">Variant A  ·  Linear / Notion / GitHub Issues 同款</div>
+      <h2 class="text-lg font-semibold">Inline body section · 在 due-date 和 stages 之间</h2>
+    </div>
+    <div class="text-[12px] text-[color:var(--muted-2)] mono">~80px when empty / ~140px with content</div>
+  </div>
+
+  <div class="card p-6">
+    <div class="label-tiny mb-2">Due date</div>
+    <div class="due-date-block">May 15, 2026 · Fri <span class="relative-pill">In 13 days</span></div>
+
+    <hr class="my-5 border-[color:var(--border)]" />
+
+    <!-- Notes section -->
+    <div class="label-tiny mb-2">Notes</div>
+    <div class="rounded-xl border border-[color:var(--border)] bg-[color:var(--canvas)] px-4 py-3 cursor-text hover:border-[color:var(--border-strong)] transition-colors">
+      <div class="text-[14px] leading-relaxed text-[color:var(--fg)]">
+        Q1 numbers came in late — schedule call with client to walk through K-1 allocations before final review. PTET election deadline is hard, can't slip past Mar 15.
+      </div>
+    </div>
+
+    <hr class="my-5 border-[color:var(--border)]" />
+
+    <div class="flex items-center justify-between gap-2 mb-3">
+      <span class="label-tiny">Prep stages</span>
+      <button class="pill-outline">+ Add stage</button>
+    </div>
+    <div class="stages-row">
+      <div class="stage-col"><div class="stage-dot stage-dot-done">✓</div><div class="stage-label">Initial meeting</div><div class="stage-date">Apr 15</div></div>
+      <div class="connector connector-done"></div>
+      <div class="stage-col"><div class="stage-dot stage-dot-current">2</div><div class="stage-label stage-label-current">Receive financials</div><div class="stage-date stage-date-current">May 8 · in 6d</div></div>
+      <div class="connector"></div>
+      <div class="stage-col"><div class="stage-dot stage-dot-file">📄</div><div class="stage-label stage-label-file">FILE</div><div class="stage-date stage-date-file">May 15</div></div>
+    </div>
+  </div>
+
+  <!-- Empty state -->
+  <div class="card p-6 mt-3">
+    <div class="text-[11px] tracking-wider uppercase text-[color:var(--muted-2)] mb-2">Empty state</div>
+    <hr class="my-3 border-[color:var(--border)]" />
+    <div class="label-tiny mb-2">Notes</div>
+    <button class="w-full text-left rounded-xl border border-dashed border-[color:var(--border-strong)] px-4 py-3 text-[13px] text-[color:var(--muted-2)] hover:border-[color:var(--muted)] hover:text-[color:var(--muted)] transition-colors">
+      Add notes about this filing — context, blockers, client conversations…
+    </button>
+  </div>
+
+  <div class="mt-3 grid grid-cols-2 gap-x-8 gap-y-2 text-[13px] text-[color:var(--muted)]">
+    <div><span class="font-semibold text-[color:var(--fg)]">+</span> 全文一眼可见，notes 是<strong>内容</strong>不是 metadata</div>
+    <div><span class="font-semibold text-[color:var(--fg)]">+</span> 跟 PREP STAGES 用同一个 label-tiny 风格，结构一致</div>
+    <div><span class="font-semibold text-[color:var(--fg)]">+</span> Notes 在 stages 之前 = "为什么要做"在"做什么"之前（Linear / Jira 同样顺序）</div>
+    <div><span class="font-semibold text-[color:var(--fg)]">−</span> 空态也占 ~80px 垂直空间（虚线 affordance），但提示文案能教用户用</div>
+  </div>
+</section>
+
+
+<!-- Variant B — Right rail card -->
+<section class="max-w-5xl mx-auto mb-14">
+  <div class="flex items-baseline justify-between mb-3">
+    <div>
+      <div class="label-tiny mb-1">Variant B  ·  Asana / Jira 同款</div>
+      <h2 class="text-lg font-semibold">Right-rail card · 主信息左边，notes 在右栏</h2>
+    </div>
+    <div class="text-[12px] text-[color:var(--muted-2)] mono">2-col layout</div>
+  </div>
+
+  <div class="grid grid-cols-3 gap-4">
+    <div class="card p-6 col-span-2">
+      <div class="label-tiny mb-2">Due date</div>
+      <div class="due-date-block">May 15, 2026 · Fri <span class="relative-pill">In 13 days</span></div>
+      <hr class="my-5 border-[color:var(--border)]" />
+      <div class="flex items-center justify-between gap-2 mb-3">
+        <span class="label-tiny">Prep stages</span>
+        <button class="pill-outline">+ Add stage</button>
+      </div>
+      <div class="stages-row">
+        <div class="stage-col"><div class="stage-dot stage-dot-done">✓</div><div class="stage-label">Initial meeting</div><div class="stage-date">Apr 15</div></div>
+        <div class="connector connector-done"></div>
+        <div class="stage-col"><div class="stage-dot stage-dot-current">2</div><div class="stage-label stage-label-current">Receive financials</div><div class="stage-date stage-date-current">May 8 · in 6d</div></div>
+        <div class="connector"></div>
+        <div class="stage-col"><div class="stage-dot stage-dot-file">📄</div><div class="stage-label stage-label-file">FILE</div><div class="stage-date stage-date-file">May 15</div></div>
+      </div>
+    </div>
+    <div class="card p-5">
+      <div class="flex items-center justify-between mb-3">
+        <span class="label-tiny">Notes</span>
+        <button class="text-[11px] text-[color:var(--muted-2)] hover:text-[color:var(--fg)]">Edit</button>
+      </div>
+      <div class="text-[13.5px] leading-relaxed text-[color:var(--fg)]">
+        Q1 numbers came in late — schedule call with client to walk through K-1 allocations before final review. PTET election deadline is hard, can't slip past Mar 15.
+      </div>
+    </div>
+  </div>
+
+  <!-- Collapse behavior demo -->
+  <div class="mt-6 mb-2 text-[11px] tracking-wider uppercase text-[color:var(--muted-2)] font-semibold">
+    Variant B-1 · collapse behavior
+  </div>
+
+  <!-- Expanded -->
+  <div class="grid grid-cols-3 gap-4 mb-3">
+    <div class="card p-6 col-span-2" style="opacity: 0.4;">
+      <div class="label-tiny mb-2">Due date</div>
+      <div class="due-date-block">May 15, 2026 · Fri</div>
+      <div class="text-[12px] text-[color:var(--muted-2)] mt-2">… (主信息卡，不重复展示)</div>
+    </div>
+    <div class="card overflow-hidden">
+      <button class="w-full flex items-center justify-between gap-2 px-5 py-3 hover:bg-[color:var(--canvas)] transition-colors cursor-pointer border-b border-[color:var(--border)]">
+        <div class="flex items-center gap-2">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" class="text-[color:var(--muted)]"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          <span class="label-tiny">Notes</span>
+        </div>
+        <button class="text-[11px] text-[color:var(--muted-2)] hover:text-[color:var(--fg)]">Edit</button>
+      </button>
+      <div class="px-5 py-4">
+        <div class="text-[13.5px] leading-relaxed">
+          Q1 numbers came in late — schedule call with client to walk through K-1 allocations before final review. PTET election deadline is hard, can't slip past Mar 15.
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="mb-5 text-[12px] text-[color:var(--muted-2)]">
+    <span class="font-semibold text-[color:var(--fg)]">展开态</span>（默认）：chevron 朝下，全文显示。点 header 整行折叠。
+  </p>
+
+  <!-- Collapsed with preview -->
+  <div class="grid grid-cols-3 gap-4 mb-3">
+    <div class="card p-6 col-span-2" style="opacity: 0.4;">
+      <div class="label-tiny mb-2">Due date</div>
+      <div class="due-date-block">May 15, 2026 · Fri</div>
+      <div class="text-[12px] text-[color:var(--muted-2)] mt-2">… (主信息卡，不重复展示)</div>
+    </div>
+    <button class="card flex flex-col w-full text-left overflow-hidden hover:bg-[color:var(--canvas)] transition-colors cursor-pointer">
+      <div class="flex items-center justify-between gap-2 px-5 pt-3 pb-1">
+        <div class="flex items-center gap-2">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" class="text-[color:var(--muted)]"><polyline points="9 18 15 12 9 6"></polyline></svg>
+          <span class="label-tiny">Notes</span>
+        </div>
+        <span class="text-[11px] text-[color:var(--muted-2)]">3 lines</span>
+      </div>
+      <div class="px-5 pb-3 text-[13px] text-[color:var(--muted)] truncate">
+        Q1 numbers came in late — schedule call with client to walk through…
+      </div>
+    </button>
+  </div>
+  <p class="mb-5 text-[12px] text-[color:var(--muted-2)]">
+    <span class="font-semibold text-[color:var(--fg)]">折叠态</span>：chevron 朝右，单行预览 + 行数提示
+    （"3 lines"）。这样用户折叠后还知道里面有内容、大概多少。整张卡片可点击展开。
+  </p>
+
+  <p class="mb-5 text-[12.5px] text-[color:var(--muted)] leading-relaxed">
+    <span class="font-semibold text-[color:var(--fg)]">默认态规则</span>：有内容 →
+    展开（让用户读到）；空 → 显示 B-1 的虚线 placeholder（无 chevron，因为没东西可折叠）。
+    折叠/展开状态<strong>不持久化</strong>（不写 localStorage），刷新回到默认 —— 跟
+    sidebar 折叠不同，notes 太重要不能默认隐藏。
+  </p>
+
+  <!-- Empty state options for Variant B -->
+  <div class="mt-6 mb-2 text-[11px] tracking-wider uppercase text-[color:var(--muted-2)] font-semibold">
+    Variant B · empty state options
+  </div>
+
+  <!-- Empty B-1: Card chrome retained, dashed inner placeholder (recommended) -->
+  <div class="grid grid-cols-3 gap-4 mb-3">
+    <div class="card p-6 col-span-2">
+      <div class="label-tiny mb-2">Due date</div>
+      <div class="due-date-block">May 15, 2026 · Fri <span class="relative-pill">In 13 days</span></div>
+      <hr class="my-5 border-[color:var(--border)]" />
+      <div class="flex items-center justify-between gap-2 mb-3">
+        <span class="label-tiny">Prep stages</span>
+        <button class="pill-outline">+ Add stage</button>
+      </div>
+      <div class="stages-row">
+        <div class="stage-col"><div class="stage-dot stage-dot-done">✓</div><div class="stage-label">Initial meeting</div><div class="stage-date">Apr 15</div></div>
+        <div class="connector connector-done"></div>
+        <div class="stage-col"><div class="stage-dot stage-dot-current">2</div><div class="stage-label stage-label-current">Receive financials</div><div class="stage-date stage-date-current">May 8 · in 6d</div></div>
+        <div class="connector"></div>
+        <div class="stage-col"><div class="stage-dot stage-dot-file">📄</div><div class="stage-label stage-label-file">FILE</div><div class="stage-date stage-date-file">May 15</div></div>
+      </div>
+    </div>
+    <button class="card p-5 text-left transition-colors hover:bg-[color:var(--canvas)] hover:border-[color:var(--border-strong)] cursor-text">
+      <div class="flex items-center justify-between mb-3">
+        <span class="label-tiny">Notes</span>
+        <span class="text-[11px] text-[color:var(--muted-2)]">+ Add</span>
+      </div>
+      <div class="rounded-lg border border-dashed border-[color:var(--border-strong)] px-3 py-6 text-center">
+        <div class="text-[13px] text-[color:var(--muted)] mb-1">No notes yet</div>
+        <div class="text-[11.5px] text-[color:var(--muted-2)] leading-relaxed">
+          Click anywhere here to add context, blockers, or client conversations.
+        </div>
+      </div>
+    </button>
+  </div>
+  <p class="mb-5 text-[12px] text-[color:var(--muted-2)]">
+    <span class="font-semibold text-[color:var(--fg)]">B-1（推荐）</span>：保留 card chrome + label，内部用虚线 placeholder。
+    "Notes" 列始终在右栏可见，用户知道这里就是写笔记的地方；空态读起来像 "等你写"，
+    不像 A 的虚线全宽 box 那么"催促"。整张卡片可点击（cursor-text + hover 状态）。
+  </p>
+
+  <!-- Empty B-2: Tiny ghost card, just label + + Add (minimal) -->
+  <div class="grid grid-cols-3 gap-4 mb-3">
+    <div class="card p-6 col-span-2" style="opacity: 0.4;">
+      <div class="label-tiny mb-2">Due date</div>
+      <div class="due-date-block">May 15, 2026 · Fri</div>
+      <div class="text-[12px] text-[color:var(--muted-2)] mt-2">… (主信息卡，不重复展示)</div>
+    </div>
+    <div class="self-start">
+      <button class="card flex items-center justify-between gap-2 px-5 py-3 w-full hover:bg-[color:var(--canvas)] cursor-pointer transition-colors">
+        <span class="label-tiny">Notes</span>
+        <span class="text-[12px] font-medium text-[color:var(--muted)]">+ Add note</span>
+      </button>
+    </div>
+  </div>
+  <p class="mb-5 text-[12px] text-[color:var(--muted-2)]">
+    <span class="font-semibold text-[color:var(--fg)]">B-2</span>：空态塌缩成单行 card（约 44px 高），
+    点击后扩展成 B-1 形态进入编辑。最省空间，但"右栏始终保留 notes 卡"的视觉锚点变弱
+    —— 短卡跟主卡的高度差大，layout 显得"上重下轻"。
+  </p>
+
+  <!-- Empty B-3: Card chrome + soft prompt (no dashed border) -->
+  <div class="grid grid-cols-3 gap-4">
+    <div class="card p-6 col-span-2" style="opacity: 0.4;">
+      <div class="label-tiny mb-2">Due date</div>
+      <div class="due-date-block">May 15, 2026 · Fri</div>
+      <div class="text-[12px] text-[color:var(--muted-2)] mt-2">… (主信息卡，不重复展示)</div>
+    </div>
+    <button class="card p-5 text-left transition-colors hover:bg-[color:var(--canvas)] cursor-text">
+      <div class="flex items-center justify-between mb-3">
+        <span class="label-tiny">Notes</span>
+        <span class="text-[11px] text-[color:var(--muted-2)]">+ Add</span>
+      </div>
+      <div class="text-[13px] italic text-[color:var(--muted-2)] leading-relaxed">
+        Add context for this filing — blockers, client conversations, or anything you'd want to remember next year.
+      </div>
+    </button>
+  </div>
+  <p class="mt-3 text-[12px] text-[color:var(--muted-2)]">
+    <span class="font-semibold text-[color:var(--fg)]">B-3</span>：跟 B-1 同结构但不用虚线 box，
+    直接斜体 muted 提示文案。视觉最轻、最像 "成品有这样一段文字"，
+    Linear 的 issue body 空态就是这个 pattern。
+  </p>
+
+  <div class="mt-5 grid grid-cols-2 gap-x-8 gap-y-2 text-[13px] text-[color:var(--muted)]">
+    <div><span class="font-semibold text-[color:var(--fg)]">+</span> Notes 始终在视野中，不会被 stages 推到屏幕外</div>
+    <div><span class="font-semibold text-[color:var(--fg)]">+</span> 长 notes 不会让主信息卡变得很高</div>
+    <div><span class="font-semibold text-[color:var(--fg)]">+</span> Notes "重要"的语义被 sticky 右栏强化</div>
+    <div><span class="font-semibold text-[color:var(--fg)]">−</span> 主信息卡变窄（66% 宽），stages 横排在 ≤ 1024px 屏会挤压</div>
+    <div><span class="font-semibold text-[color:var(--fg)]">−</span> 偏离当前单列流，layout 重构涉及 page.tsx + Card 组件</div>
+    <div><span class="font-semibold text-[color:var(--fg)]">−</span> 移动端 (&lt; 768px) 必须降级成单列堆叠</div>
+  </div>
+</section>
+
+
+<!-- Variant C — Things 3 / muted subtitle -->
+<section class="max-w-5xl mx-auto mb-14">
+  <div class="flex items-baseline justify-between mb-3">
+    <div>
+      <div class="label-tiny mb-1">Variant C  ·  Things 3 / Apple Reminders 同款</div>
+      <h2 class="text-lg font-semibold">Subtitle inline · 紧贴 due-date 下方，muted 灰字</h2>
+    </div>
+    <div class="text-[12px] text-[color:var(--muted-2)] mono">+30px when present</div>
+  </div>
+
+  <div class="card p-6">
+    <div class="label-tiny mb-2">Due date</div>
+    <div class="due-date-block">May 15, 2026 · Fri <span class="relative-pill">In 13 days</span></div>
+    <button class="mt-2 text-left text-[13px] leading-relaxed text-[color:var(--muted)] hover:text-[color:var(--fg)] cursor-text transition-colors block w-full">
+      Q1 numbers came in late — schedule call with client to walk through K-1 allocations before final review. PTET election deadline is hard, can't slip past Mar 15.
+    </button>
+    <hr class="my-5 border-[color:var(--border)]" />
+    <div class="flex items-center justify-between gap-2 mb-3">
+      <span class="label-tiny">Prep stages</span>
+      <button class="pill-outline">+ Add stage</button>
+    </div>
+    <div class="stages-row">
+      <div class="stage-col"><div class="stage-dot stage-dot-done">✓</div><div class="stage-label">Initial meeting</div><div class="stage-date">Apr 15</div></div>
+      <div class="connector connector-done"></div>
+      <div class="stage-col"><div class="stage-dot stage-dot-current">2</div><div class="stage-label stage-label-current">Receive financials</div><div class="stage-date stage-date-current">May 8 · in 6d</div></div>
+      <div class="connector"></div>
+      <div class="stage-col"><div class="stage-dot stage-dot-file">📄</div><div class="stage-label stage-label-file">FILE</div><div class="stage-date stage-date-file">May 15</div></div>
+    </div>
+  </div>
+
+  <div class="card p-6 mt-3">
+    <div class="text-[11px] tracking-wider uppercase text-[color:var(--muted-2)] mb-2">Empty state</div>
+    <div class="label-tiny mb-2">Due date</div>
+    <div class="due-date-block">May 15, 2026 · Fri <span class="relative-pill">In 13 days</span></div>
+    <button class="mt-2 text-left text-[13px] text-[color:var(--muted-2)] hover:text-[color:var(--muted)] italic transition-colors cursor-text">
+      Add a note…
+    </button>
+  </div>
+
+  <div class="mt-3 grid grid-cols-2 gap-x-8 gap-y-2 text-[13px] text-[color:var(--muted)]">
+    <div><span class="font-semibold text-[color:var(--fg)]">+</span> Notes 视为 due-date 的 "subtitle"，关系明确：这是关于这次 filing 的备注</div>
+    <div><span class="font-semibold text-[color:var(--fg)]">+</span> 空态只占 ~24px，对无 notes 的 deadline 几乎不打扰</div>
+    <div><span class="font-semibold text-[color:var(--fg)]">+</span> 没有 "Notes" label，完全靠位置和样式表达——最干净</div>
+    <div><span class="font-semibold text-[color:var(--fg)]">−</span> 长 notes 会把 stages 挤下去；对超长 notes 不友好</div>
+    <div><span class="font-semibold text-[color:var(--fg)]">−</span> 没有明确的 "edit" 入口（要求点击文本本身）</div>
+  </div>
+</section>
+
+
+<!-- Variant D — Smart collapse: empty=pill, present=inline -->
+<section class="max-w-5xl mx-auto mb-14">
+  <div class="flex items-baseline justify-between mb-3">
+    <div>
+      <div class="label-tiny mb-1">Variant D  ·  hybrid (推荐折中)</div>
+      <h2 class="text-lg font-semibold">Smart collapse · 有 notes 时 inline 展示，没有时仅 pill</h2>
+    </div>
+    <div class="text-[12px] text-[color:var(--muted-2)] mono">动态 ~24-140px</div>
+  </div>
+
+  <p class="text-[13px] text-[color:var(--muted)] mb-3 max-w-2xl leading-relaxed">
+    规则：notes 有内容时按 Variant A 的 inline section 展示（让内容可见）；
+    没有内容时塌缩为 due-date 行的 "+ Add note" pill（保留当前的极简空态）。
+    既不让无 notes 的 deadline 浪费空间，又让有 notes 的 deadline 内容一眼可见。
+  </p>
+
+  <!-- With content -->
+  <div class="card p-6">
+    <div class="text-[11px] tracking-wider uppercase text-[color:var(--muted-2)] mb-2">With content (notes 可见)</div>
+    <div class="label-tiny mb-2">Due date</div>
+    <div class="due-date-block">May 15, 2026 · Fri <span class="relative-pill">In 13 days</span></div>
+    <hr class="my-5 border-[color:var(--border)]" />
+    <div class="label-tiny mb-2">Notes</div>
+    <div class="rounded-xl border border-[color:var(--border)] bg-[color:var(--canvas)] px-4 py-3 cursor-text hover:border-[color:var(--border-strong)] transition-colors">
+      <div class="text-[14px] leading-relaxed">
+        Q1 numbers came in late — schedule call with client to walk through K-1 allocations before final review.
+      </div>
+    </div>
+    <hr class="my-5 border-[color:var(--border)]" />
+    <div class="flex items-center justify-between gap-2 mb-3">
+      <span class="label-tiny">Prep stages</span>
+      <button class="pill-outline">+ Add stage</button>
+    </div>
+    <div class="stages-row">
+      <div class="stage-col"><div class="stage-dot stage-dot-done">✓</div><div class="stage-label">Initial meeting</div><div class="stage-date">Apr 15</div></div>
+      <div class="connector connector-done"></div>
+      <div class="stage-col"><div class="stage-dot stage-dot-current">2</div><div class="stage-label stage-label-current">Receive financials</div><div class="stage-date stage-date-current">May 8 · in 6d</div></div>
+      <div class="connector"></div>
+      <div class="stage-col"><div class="stage-dot stage-dot-file">📄</div><div class="stage-label stage-label-file">FILE</div><div class="stage-date stage-date-file">May 15</div></div>
+    </div>
+  </div>
+
+  <!-- Without content -->
+  <div class="card p-6 mt-3">
+    <div class="text-[11px] tracking-wider uppercase text-[color:var(--muted-2)] mb-2">Without content (pill 兜底)</div>
+    <div class="flex items-center justify-between gap-2 mb-2">
+      <span class="label-tiny">Due date</span>
+      <button class="pill-outline">+ Add note</button>
+    </div>
+    <div class="due-date-block">May 15, 2026 · Fri <span class="relative-pill">In 13 days</span></div>
+    <hr class="my-5 border-[color:var(--border)]" />
+    <div class="flex items-center justify-between gap-2 mb-3">
+      <span class="label-tiny">Prep stages</span>
+      <button class="pill-outline">+ Add stage</button>
+    </div>
+    <div class="stages-row">
+      <div class="stage-col"><div class="stage-dot stage-dot-done">✓</div><div class="stage-label">Initial meeting</div><div class="stage-date">Apr 15</div></div>
+      <div class="connector connector-done"></div>
+      <div class="stage-col"><div class="stage-dot stage-dot-current">2</div><div class="stage-label stage-label-current">Receive financials</div><div class="stage-date stage-date-current">May 8 · in 6d</div></div>
+      <div class="connector"></div>
+      <div class="stage-col"><div class="stage-dot stage-dot-file">📄</div><div class="stage-label stage-label-file">FILE</div><div class="stage-date stage-date-file">May 15</div></div>
+    </div>
+  </div>
+
+  <div class="mt-3 grid grid-cols-2 gap-x-8 gap-y-2 text-[13px] text-[color:var(--muted)]">
+    <div><span class="font-semibold text-[color:var(--fg)]">+</span> 复用现有 pill 兜底空态（节省垂直空间）</div>
+    <div><span class="font-semibold text-[color:var(--fg)]">+</span> 有内容时按 Variant A 展示，不让 notes 隐身</div>
+    <div><span class="font-semibold text-[color:var(--fg)]">+</span> 自动适配 "大部分 deadline 没有 notes" 的 codebase 假设</div>
+    <div><span class="font-semibold text-[color:var(--fg)]">−</span> 两种状态切换需要更多渲染分支 + 测试</div>
+  </div>
+</section>
+
+
+<!-- Variant E — Bottom dedicated section -->
+<section class="max-w-5xl mx-auto mb-14">
+  <div class="flex items-baseline justify-between mb-3">
+    <div>
+      <div class="label-tiny mb-1">Variant E  ·  GitHub Issues / Stripe customer notes</div>
+      <h2 class="text-lg font-semibold">Bottom section · 在 stages 之后，跟 ACTIONS 一组</h2>
+    </div>
+    <div class="text-[12px] text-[color:var(--muted-2)] mono">~120px when present</div>
+  </div>
+
+  <div class="card p-6">
+    <div class="label-tiny mb-2">Due date</div>
+    <div class="due-date-block">May 15, 2026 · Fri <span class="relative-pill">In 13 days</span></div>
+    <hr class="my-5 border-[color:var(--border)]" />
+    <div class="flex items-center justify-between gap-2 mb-3">
+      <span class="label-tiny">Prep stages</span>
+      <button class="pill-outline">+ Add stage</button>
+    </div>
+    <div class="stages-row">
+      <div class="stage-col"><div class="stage-dot stage-dot-done">✓</div><div class="stage-label">Initial meeting</div><div class="stage-date">Apr 15</div></div>
+      <div class="connector connector-done"></div>
+      <div class="stage-col"><div class="stage-dot stage-dot-current">2</div><div class="stage-label stage-label-current">Receive financials</div><div class="stage-date stage-date-current">May 8 · in 6d</div></div>
+      <div class="connector"></div>
+      <div class="stage-col"><div class="stage-dot stage-dot-file">📄</div><div class="stage-label stage-label-file">FILE</div><div class="stage-date stage-date-file">May 15</div></div>
+    </div>
+    <hr class="my-5 border-[color:var(--border)]" />
+    <div class="label-tiny mb-2">Notes</div>
+    <div class="rounded-xl border border-[color:var(--border)] bg-[color:var(--canvas)] px-4 py-3 cursor-text hover:border-[color:var(--border-strong)] transition-colors">
+      <div class="text-[14px] leading-relaxed">
+        Q1 numbers came in late — schedule call with client to walk through K-1 allocations before final review.
+      </div>
+    </div>
+  </div>
+
+  <div class="mt-3 grid grid-cols-2 gap-x-8 gap-y-2 text-[13px] text-[color:var(--muted)]">
+    <div><span class="font-semibold text-[color:var(--fg)]">+</span> Notes 作为 "supporting context"，跟随主流程而不打断它</div>
+    <div><span class="font-semibold text-[color:var(--fg)]">+</span> 跟即将出现的 audit / activity timeline section 形成 stack</div>
+    <div><span class="font-semibold text-[color:var(--fg)]">−</span> 长页面下需要滚动才能看到 notes（信息层级埋得偏深）</div>
+    <div><span class="font-semibold text-[color:var(--fg)]">−</span> 跟 "为什么要做"在"做什么"之前的认知顺序相反</div>
+  </div>
+</section>
+
+
+<footer class="max-w-5xl mx-auto pt-6 pb-12 border-t" style="border-color: var(--border);">
+  <div class="text-[12px] text-[color:var(--muted-2)] leading-relaxed">
+    <span class="font-semibold text-[color:var(--fg)]">推荐顺序：D &gt; A &gt; C &gt; E &gt; B</span><br />
+    D 兼顾 codebase 已有的 "大部分 deadline 没 notes，省垂直空间" 假设和 "有 notes 时不要藏起来" 的内容可见性。
+    A 是最稳的"做了不会错"答案（Linear 同款）。
+    C 最简洁但对长文本不友好。
+    E 顺序倒置（先做事再写为什么）不太自然。
+    B 重构成本太高，MVP 阶段不值。
+  </div>
+</footer>
+
+</body>
+</html>

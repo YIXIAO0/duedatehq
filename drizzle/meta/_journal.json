@@ -57,6 +57,27 @@
       "when": 1777594857465,
       "tag": "0007_keen_black_knight",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1777672311465,
+      "tag": "0008_tense_boom_boom",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1777678689092,
+      "tag": "0009_smart_squirrel_girl",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1777746641717,
+      "tag": "0010_mixed_king_bedlam",
+      "breakpoints": true
     }
   ]
 }
