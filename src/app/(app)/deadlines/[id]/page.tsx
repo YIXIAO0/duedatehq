@@ -227,18 +227,11 @@ async function DeadlineDetail({ params }: { params: Params }) {
           extension on Apr 25 to Oct 15, then disaster relief moved it
           to Jan 15" without digging through DB rows. */}
       {history.length > 0 ? (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">History</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <HistoryList>
-              {history.map((h) => (
-                <HistoryEntry key={h.id} entry={h} />
-              ))}
-            </HistoryList>
-          </CardContent>
-        </Card>
+        <HistoryList>
+          {history.map((h) => (
+            <HistoryEntry key={h.id} entry={h} />
+          ))}
+        </HistoryList>
       ) : null}
 
       {/* Rule reference */}
