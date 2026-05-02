@@ -14,9 +14,8 @@ import {
   ArrowLeft,
   Calendar,
   ExternalLink,
-  CheckCircle2,
-  Clock,
   AlertTriangle,
+  CheckCircle2,
 } from "lucide-react";
 import { getCurrentContext } from "@/lib/auth/current-org";
 import {
@@ -24,9 +23,16 @@ import {
   getDeadlineHistory,
   type DeadlineHistoryEntry,
 } from "@/lib/services/deadlines";
+import { listSubtasks } from "@/lib/services/subtasks";
 import { DeadlineActionBar } from "./deadline-action-bar";
-import { NotesForm } from "./notes-form";
+import { HistoryList } from "./history-list";
+import {
+  NotesProvider,
+  NotesPillSlot,
+  NotesSectionSlot,
+} from "./notes-panel";
 import { OwnerPicker } from "./owner-picker";
+import { SubtaskStepper } from "./subtask-stepper";
 import { listMembers } from "@/lib/services/team";
 
 type Params = Promise<{ id: string }>;
@@ -56,9 +62,10 @@ async function DeadlineDetail({ params }: { params: Params }) {
 
   // History timeline pulled from audit_events. Cheap query (indexed),
   // and rendered below Notes so the primary actions stay above the fold.
-  const [history, members] = await Promise.all([
+  const [history, members, subtasks] = await Promise.all([
     getDeadlineHistory(d.id, ctx.organization.id),
     listMembers(ctx.organization.id),
+    listSubtasks(d.id, ctx.organization.id),
   ]);
   const isMultiUser = members.length > 1;
   const ownerOptions = members.map((m) => ({
@@ -68,8 +75,7 @@ async function DeadlineDetail({ params }: { params: Params }) {
   }));
 
   const effectiveDueDate = d.extension_due_date ?? d.due_date;
-  const status = d.status;
-  const isCompleted = status === "completed";
+  const isCompleted = d.completed_at !== null;
   const isExtended = d.is_extended === true;
   const isOverdue =
     !isCompleted && new Date(effectiveDueDate + "T00:00:00") < new Date();
@@ -90,9 +96,18 @@ async function DeadlineDetail({ params }: { params: Params }) {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* Header — owner chip sits inline with the badges row at the top
+          so "who's on this" reads as page metadata rather than something
+          tucked inside the date card. Solo orgs (no isMultiUser) hide it. */}
       <div>
         <div className="flex flex-wrap items-center gap-2">
+          {isMultiUser ? (
+            <OwnerPicker
+              deadlineId={d.id}
+              currentOwnerUserId={d.owner_user_id}
+              members={ownerOptions}
+            />
+          ) : null}
           <Badge variant="outline" className="font-mono text-xs">
             {d.rule_form_code}
           </Badge>
@@ -106,7 +121,11 @@ async function DeadlineDetail({ params }: { params: Params }) {
               Irrevocable
             </Badge>
           ) : null}
-          <StatusBadge status={status} isOverdue={isOverdue} />
+          {/* Status badge only surfaces meaningful states (Filed, Overdue,
+              Extension filed). Plain "Pending" is the default and adds
+              nothing — the dashboard already implies a deadline is open
+              if it shows up here. */}
+          <StatusBadge isCompleted={isCompleted} isOverdue={isOverdue} />
           {isExtended ? (
             <Badge variant="outline" className="ml-2">
               <Calendar className="mr-1 h-3 w-3" /> Extension filed
@@ -133,79 +152,75 @@ async function DeadlineDetail({ params }: { params: Params }) {
         </p>
       </div>
 
-      {/* Due date + actions. Stacked vertically rather than 2-column
-          because the action bar (status dropdown + Mark as filed +
-          File extension) needs the full card width to fit cleanly on
-          one row without wrapping. The horizontal divider keeps the
-          two zones visually separated. */}
-      <Card>
-        <CardContent className="space-y-5 pt-6">
-          <div>
-            <p className="text-xs uppercase tracking-wider text-muted-foreground">
-              {isExtended ? "New due date (after extension)" : "Due date"}
-            </p>
-            <div className="mt-1 flex items-baseline gap-3">
-              <p className="text-2xl font-semibold">
-                {formatDate(effectiveDueDate)}
-              </p>
-              {!isCompleted ? (
-                <RelativeDate iso={effectiveDueDate} />
+      {/* Variant D: pill in due-date row when empty, full-width inline
+          section between due-date and stages when content exists. State
+          shared across both render points via NotesProvider. */}
+      <NotesProvider deadlineId={d.id} initialNotes={d.notes}>
+        <Card>
+          <CardContent className="space-y-5 pt-1">
+            <div>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs uppercase tracking-wider text-muted-foreground">
+                  {isExtended ? "New due date (after extension)" : "Due date"}
+                </p>
+                <NotesPillSlot />
+              </div>
+              <div className="mt-1 flex items-baseline gap-3">
+                <p className="text-xl font-semibold">
+                  {formatDate(effectiveDueDate)}
+                </p>
+                {!isCompleted ? (
+                  <RelativeDate iso={effectiveDueDate} />
+                ) : null}
+              </div>
+              {isExtended ? (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Original due {formatDate(d.due_date)} — extension filed{" "}
+                  {d.extension_filed_at
+                    ? formatDate(d.extension_filed_at.slice(0, 10))
+                    : ""}
+                </p>
+              ) : null}
+              {isCompleted && d.completed_at ? (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Filed on {formatDate(d.completed_at.slice(0, 10))}
+                </p>
               ) : null}
             </div>
-            {isExtended ? (
-              <p className="mt-2 text-xs text-muted-foreground">
-                Original due {formatDate(d.due_date)} — extension filed{" "}
-                {d.extension_filed_at
-                  ? formatDate(d.extension_filed_at.slice(0, 10))
-                  : ""}
-              </p>
-            ) : null}
-            {isCompleted && d.completed_at ? (
-              <p className="mt-2 text-xs text-muted-foreground">
-                Filed on {formatDate(d.completed_at.slice(0, 10))}
-              </p>
-            ) : null}
-          </div>
 
-          {isMultiUser ? (
+            <NotesSectionSlot />
+
             <div className="border-t border-border pt-5">
-              <OwnerPicker
+              <SubtaskStepper
                 deadlineId={d.id}
-                currentOwnerUserId={d.owner_user_id}
-                members={ownerOptions}
+                deadlineDueDate={effectiveDueDate}
+                isExtended={isExtended}
+                isCompleted={isCompleted}
+                subtasks={subtasks.map((s) => ({
+                  id: s.id,
+                  label: s.label,
+                  dueDate: s.dueDate,
+                  completedAt: s.completedAt,
+                }))}
               />
             </div>
-          ) : null}
 
-          <div className="border-t border-border pt-5">
-            <p className="text-xs uppercase tracking-wider text-muted-foreground">
-              Actions
-            </p>
-            <div className="mt-2">
-              <DeadlineActionBar
-                deadlineId={d.id}
-                status={status}
-                defaultNewDueDate={defaultNewDueDate}
-                currentExtensionDueDate={d.extension_due_date}
-              />
+            <div className="border-t border-border pt-5">
+              <p className="text-xs uppercase tracking-wider text-muted-foreground">
+                Actions
+              </p>
+              <div className="mt-2">
+                <DeadlineActionBar
+                  deadlineId={d.id}
+                  isCompleted={isCompleted}
+                  defaultNewDueDate={defaultNewDueDate}
+                  currentExtensionDueDate={d.extension_due_date}
+                />
+              </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Notes */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Notes</CardTitle>
-          <CardDescription>
-            Anything you want to remember about this deadline. Shown on the
-            dashboard tooltip.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <NotesForm deadlineId={d.id} initialNotes={d.notes} />
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </NotesProvider>
 
       {/* History — chronological audit trail of every change to this
           deadline. Reads from audit_events. Lets a CPA prove "we filed
@@ -215,17 +230,13 @@ async function DeadlineDetail({ params }: { params: Params }) {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">History</CardTitle>
-            <CardDescription>
-              Every change to this deadline. Useful when a client (or the
-              IRS) asks &ldquo;when did this extension get filed?&rdquo;
-            </CardDescription>
           </CardHeader>
           <CardContent>
-            <ol className="space-y-3">
+            <HistoryList>
               {history.map((h) => (
                 <HistoryEntry key={h.id} entry={h} />
               ))}
-            </ol>
+            </HistoryList>
           </CardContent>
         </Card>
       ) : null}
@@ -318,28 +329,30 @@ function HistoryEntry({ entry }: { entry: DeadlineHistoryEntry }) {
       ? "System"
       : entry.actorName ?? entry.actorEmail ?? "User";
   return (
-    <li className="flex gap-3">
-      <div
-        className={`mt-1 h-2 w-2 shrink-0 rounded-full ${accent}`}
-        aria-hidden
-      />
-      <div className="min-w-0 flex-1">
-        <div className="text-sm">
-          <span className="font-medium">{label}</span>
-          {body ? (
-            <span className="ml-1 text-muted-foreground">{body}</span>
-          ) : null}
-        </div>
-        <div className="mt-0.5 text-xs text-muted-foreground">
-          {actorLabel} ·{" "}
-          {entry.occurredAt.toLocaleString("en-US", {
-            month: "short",
-            day: "numeric",
-            year: "numeric",
-            hour: "numeric",
-            minute: "2-digit",
-          })}
-        </div>
+    <li>
+      {/* Dot lives inside the same flex row as the label so items-center
+          pins it to the optical center of the first line — eliminates
+          the half-pixel drift the old `mt-1` div approach had. Second
+          line indents by dot width + gap so it aligns under the label. */}
+      <div className="flex items-center gap-2.5 text-sm">
+        <span
+          className={`h-2 w-2 shrink-0 rounded-full ${accent}`}
+          aria-hidden
+        />
+        <span className="font-medium">{label}</span>
+        {body ? (
+          <span className="text-muted-foreground">{body}</span>
+        ) : null}
+      </div>
+      <div className="ml-[18px] mt-0.5 text-xs text-muted-foreground">
+        {actorLabel} ·{" "}
+        {entry.occurredAt.toLocaleString("en-US", {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+        })}
       </div>
     </li>
   );
@@ -440,14 +453,44 @@ function describeHistory(entry: DeadlineHistoryEntry): {
         accent,
       };
     }
-    default:
-      // Unknown action — surface raw to be safe rather than hide.
+    case "deadline.assigned": {
+      // Owner picker fires this on every non-noop change. Without a name
+      // resolver in scope we keep the body generic; the actor line below
+      // already shows "Yi Xiao · May 1" so "who did it" is covered.
+      const hadOwner = (p.previousOwnerUserId ?? null) !== null;
       return {
-        label: entry.action,
+        label: hadOwner ? "Owner reassigned" : "Owner assigned",
+        body: "",
+        accent: "bg-muted-foreground",
+      };
+    }
+    case "deadline.unassigned": {
+      return {
+        label: "Owner removed",
+        body: "",
+        accent: "bg-muted-foreground",
+      };
+    }
+    default:
+      // Unknown action — convert dot.notation enum to a human-readable
+      // sentence so the timeline never leaks raw "deadline.foo_bar"
+      // strings even when a new action type ships before this switch is
+      // updated. Keeps the UI safe-by-default for forward compatibility.
+      return {
+        label: humanizeAction(entry.action),
         body: "",
         accent: "bg-muted-foreground",
       };
   }
+}
+
+function humanizeAction(raw: string): string {
+  // "deadline.notes_updated" → "Notes updated"
+  // "deadline.foo" → "Foo"
+  const tail = raw.includes(".") ? raw.split(".").slice(1).join(" ") : raw;
+  const spaced = tail.replace(/_/g, " ").trim();
+  if (!spaced) return raw;
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
 function humanDate(iso: string): string {
@@ -474,25 +517,24 @@ function statusLabel(s: string): string {
   return map[s] ?? s;
 }
 
+// Renders Filed (completed) or Overdue (past due). Plain "Pending" — the
+// open default — renders nothing: a deadline showing up on the page is
+// already implicitly pending, and a neutral badge adds no signal. Owner
+// avatar tells you who's on it; notes tell you what stage.
 function StatusBadge({
-  status,
+  isCompleted,
   isOverdue,
 }: {
-  status: string;
+  isCompleted: boolean;
   isOverdue: boolean;
 }) {
-  if (status === "completed") {
+  if (isCompleted) {
     return (
       <Badge className="bg-[var(--color-priority-done-bg)] text-[var(--color-priority-done)] hover:bg-[var(--color-priority-done-bg)]">
         <CheckCircle2 className="mr-1 h-3 w-3" /> Filed
       </Badge>
     );
   }
-  // Surface workflow states explicitly so the CPA can scan the page
-  // header and know "where in the process" each deadline is. Overdue
-  // still wins visually (urgent red) — being late beats stage info.
-  // The "Extension filed" indicator is rendered separately by the
-  // caller (it's a flag, not a workflow status).
   if (isOverdue) {
     return (
       <Badge className="bg-[var(--color-priority-urgent-bg)] text-[var(--color-priority-urgent)] hover:bg-[var(--color-priority-urgent-bg)]">
@@ -500,25 +542,7 @@ function StatusBadge({
       </Badge>
     );
   }
-  if (status === "waiting_on_client") {
-    return (
-      <Badge variant="outline" className="text-[var(--color-priority-high)]">
-        <Clock className="mr-1 h-3 w-3" /> Waiting on client
-      </Badge>
-    );
-  }
-  if (status === "in_progress") {
-    return (
-      <Badge variant="outline">
-        <Clock className="mr-1 h-3 w-3" /> In progress
-      </Badge>
-    );
-  }
-  return (
-    <Badge variant="outline">
-      <Clock className="mr-1 h-3 w-3" /> Pending
-    </Badge>
-  );
+  return null;
 }
 
 function RelativeDate({ iso }: { iso: string }) {

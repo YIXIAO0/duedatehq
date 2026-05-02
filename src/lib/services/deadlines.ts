@@ -12,7 +12,7 @@
 
 import "server-only";
 import { z } from "zod";
-import { and, asc, eq, gte, lte, ne, sql } from "drizzle-orm";
+import { and, asc, eq, gte, isNull, lte, sql } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { deadlineInstances, memberships } from "@/lib/db/schema";
 import { recordAudit } from "./audit";
@@ -65,7 +65,7 @@ export async function listUpcoming(input: ListUpcomingInput) {
         eq(deadlineInstances.orgId, parsed.orgId),
         gte(deadlineInstances.dueDate, from),
         lte(deadlineInstances.dueDate, to),
-        ne(deadlineInstances.status, "completed"),
+        isNull(deadlineInstances.completedAt),
       ),
     )
     .orderBy(asc(deadlineInstances.dueDate))
@@ -99,7 +99,6 @@ export async function markCompleted(input: MarkCompletedInput) {
   const [row] = await db
     .update(deadlineInstances)
     .set({
-      status: "completed",
       completedAt: new Date(),
       completedByUserId: parsed.actorType === "user" ? parsed.actorId : null,
       completedByActorType: parsed.actorType,
@@ -129,7 +128,7 @@ export async function markCompleted(input: MarkCompletedInput) {
       taxYear: row.taxYear,
       originalDueDate: row.dueDate,
       effectiveDueDate: row.extensionDueDate ?? row.dueDate,
-      previousStatus: pre.status,
+      previouslyFiled: pre.completedAt !== null,
       wasExtended: pre.isExtended === true,
       completedAt: row.completedAt?.toISOString(),
     },
@@ -309,7 +308,7 @@ export async function fileExtension(input: FileExtensionInput) {
     payload: {
       originalDueDate: row.dueDate,
       previousExtensionDueDate: pre.extensionDueDate, // null on first extension
-      previousStatus: pre.status,
+      previouslyFiled: pre.completedAt !== null,
       previousIsExtended: pre.isExtended,
       // newDueDate captures what's actually stored. requestedDueDate
       // is what the CPA typed — when they differ, businessDayShift
@@ -418,7 +417,6 @@ export async function reopenDeadline(input: MarkCompletedInput) {
   const [row] = await db
     .update(deadlineInstances)
     .set({
-      status: "pending",
       completedAt: null,
       completedByUserId: null,
       completedByActorType: null,
@@ -442,7 +440,6 @@ export async function reopenDeadline(input: MarkCompletedInput) {
     targetType: "deadline_instance",
     targetId: row.id,
     payload: {
-      previousStatus: pre.status,
       previousCompletedAt: pre.completedAt?.toISOString() ?? null,
     },
   });
@@ -454,91 +451,9 @@ export async function reopenDeadline(input: MarkCompletedInput) {
 // Fetch a single deadline with its joined context (rule + entity + client)
 // ---------------------------------------------------------------------------
 
-// ---------------------------------------------------------------------------
-// Workflow-status setter — for the "soft" states that aren't tied to
-// a concrete event (mark-completed / file-extension are their own
-// actions). Used by:
-//   - pending             "Not started yet"
-//   - waiting_on_client   "I'm blocked on the client sending docs"
-//   - in_progress         "I'm working on it"
-//
-// Refuses to set "completed" — that has the richer markCompleted action
-// (which captures completedAt + actor metadata).
-// ---------------------------------------------------------------------------
-
-const WORKFLOW_STATUSES = [
-  "pending",
-  "waiting_on_client",
-  "in_progress",
-] as const;
-
-export const SetDeadlineStatusInputSchema = z.object({
-  deadlineInstanceId: z.string(),
-  orgId: z.string(),
-  status: z.enum(WORKFLOW_STATUSES),
-  actorType: z.enum(["user", "agent", "cron", "system"]).default("user"),
-  actorId: z.string().nullable().default(null),
-});
-export type SetDeadlineStatusInput = z.input<typeof SetDeadlineStatusInputSchema>;
-
-export async function setDeadlineStatus(input: SetDeadlineStatusInput) {
-  const parsed = SetDeadlineStatusInputSchema.parse(input);
-  const db = getDb();
-
-  const [pre] = await db
-    .select()
-    .from(deadlineInstances)
-    .where(
-      and(
-        eq(deadlineInstances.id, parsed.deadlineInstanceId),
-        eq(deadlineInstances.orgId, parsed.orgId),
-      ),
-    )
-    .limit(1);
-  if (!pre) {
-    throw new Error(
-      `Deadline ${parsed.deadlineInstanceId} not found in org ${parsed.orgId}`,
-    );
-  }
-
-  // Defensive: don't let this back-track from completed silently. Caller
-  // should use reopenDeadline. Extended deadlines stay workable — the
-  // CPA still has to file against the new extensionDueDate, and missed
-  // is computed at query time so it never appears as a stored status.
-  if (pre.status === "completed") {
-    throw new Error(
-      "Cannot set workflow status on a completed deadline. Reopen first.",
-    );
-  }
-
-  if (pre.status === parsed.status) return pre; // no-op, no audit noise
-
-  const [row] = await db
-    .update(deadlineInstances)
-    .set({ status: parsed.status, updatedAt: new Date() })
-    .where(
-      and(
-        eq(deadlineInstances.id, parsed.deadlineInstanceId),
-        eq(deadlineInstances.orgId, parsed.orgId),
-      ),
-    )
-    .returning();
-
-  await recordAudit({
-    orgId: parsed.orgId,
-    actorType: parsed.actorType,
-    actorId: parsed.actorId,
-    action: "deadline.status_changed",
-    targetType: "deadline_instance",
-    targetId: row.id,
-    payload: {
-      previousStatus: pre.status,
-      newStatus: parsed.status,
-    },
-  });
-
-  return row;
-}
+// (Workflow-status setter removed 2026-05-01 — see schema.ts header. State
+// is now derived purely from completed_at; assignment / notes carry the
+// "what's happening" detail.)
 
 export async function getDeadlineDetail(
   deadlineInstanceId: string,
@@ -553,7 +468,6 @@ export async function getDeadlineDetail(
     rule_id: string;
     tax_year: number;
     due_date: string;
-    status: string;
     completed_at: string | null;
     completed_by_user_id: string | null;
     completed_by_actor_type: string | null;
@@ -588,7 +502,6 @@ export async function getDeadlineDetail(
       di.rule_id,
       di.tax_year,
       di.due_date,
-      di.status,
       di.completed_at,
       di.completed_by_user_id,
       di.completed_by_actor_type,
@@ -651,7 +564,9 @@ export type ClientDeadlineRow = {
   taxYear: number;
   dueDate: string;
   effectiveDueDate: string;
-  status: string;
+  /** ISO timestamp when filed; null = open. The display state (Pending /
+      Filed / Overdue) is computed in the UI. */
+  completedAt: string | null;
   isExtended: boolean;
   notes: string | null;
   formCode: string;
@@ -684,14 +599,12 @@ export async function listDeadlinesForClient(args: {
   const includeFiled = args.includeFiled ?? false;
   const withinDays = args.withinDays;
 
-  // The 3 "open" workflow statuses — must match the count on /clients
-  // (the listing page) so both views agree on what "open" means. After
-  // the 4-status refactor, extended deadlines are inside in_progress
-  // (with isExtended=true), missed is computed, and ready_to_file is
-  // gone. Three values cover everything that's not "completed".
+  // "Open" = completed_at IS NULL. After the 2026-05-01 status collapse
+  // we don't store a workflow status anymore — completion is the only
+  // bit. includeFiled=true returns everything regardless.
   const statusFilter = includeFiled
     ? sql``
-    : sql`AND di.status IN ('pending', 'waiting_on_client', 'in_progress')`;
+    : sql`AND di.completed_at IS NULL`;
 
   // Window only applies when a caller explicitly opts in. No cap by
   // default — the open count is a true portfolio metric, not a
@@ -709,7 +622,7 @@ export async function listDeadlinesForClient(args: {
     tax_year: number;
     due_date: string;
     effective_due_date: string;
-    status: string;
+    completed_at: string | null;
     is_extended: boolean;
     notes: string | null;
     form_code: string;
@@ -725,7 +638,7 @@ export async function listDeadlinesForClient(args: {
       di.tax_year,
       di.due_date::text AS due_date,
       COALESCE(di.extension_due_date, di.due_date)::text AS effective_due_date,
-      di.status::text AS status,
+      di.completed_at::text AS completed_at,
       di.is_extended,
       di.notes,
       r.form_code,
@@ -752,7 +665,7 @@ export async function listDeadlinesForClient(args: {
     taxYear: r.tax_year,
     dueDate: r.due_date,
     effectiveDueDate: r.effective_due_date,
-    status: r.status,
+    completedAt: r.completed_at,
     isExtended: r.is_extended,
     notes: r.notes,
     formCode: r.form_code,
@@ -781,7 +694,9 @@ export async function listDeadlinesForClient(args: {
 export type OrgIcalDeadlineRow = {
   id: string;
   effectiveDueDate: string;
-  status: string;
+  /** Null = open. Past completedAt within the 7-day recall window is
+      surfaced so the CPA's calendar still shows what they just filed. */
+  completedAt: string | null;
   isExtended: boolean;
   notes: string | null;
   formCode: string;
@@ -799,7 +714,7 @@ export async function listDeadlinesForOrgIcal(args: {
   const rows = await db.execute<{
     id: string;
     effective_due_date: string;
-    status: string;
+    completed_at: string | null;
     is_extended: boolean;
     notes: string | null;
     form_code: string;
@@ -812,7 +727,7 @@ export async function listDeadlinesForOrgIcal(args: {
     SELECT
       di.id,
       COALESCE(di.extension_due_date, di.due_date)::text AS effective_due_date,
-      di.status::text AS status,
+      di.completed_at::text AS completed_at,
       di.is_extended,
       di.notes,
       r.form_code,
@@ -832,7 +747,7 @@ export async function listDeadlinesForOrgIcal(args: {
           BETWEEN (CURRENT_DATE - INTERVAL '14 days')
           AND     (CURRENT_DATE + INTERVAL '365 days')
       AND (
-        di.status <> 'completed'
+        di.completed_at IS NULL
         OR di.completed_at >= NOW() - INTERVAL '7 days'
       )
     ORDER BY effective_due_date ASC
@@ -841,7 +756,7 @@ export async function listDeadlinesForOrgIcal(args: {
   return rows.rows.map((r) => ({
     id: r.id,
     effectiveDueDate: r.effective_due_date,
-    status: r.status,
+    completedAt: r.completed_at,
     isExtended: r.is_extended,
     notes: r.notes,
     formCode: r.form_code,
@@ -902,7 +817,7 @@ export async function getDeadlineHistory(
     WHERE ae.org_id = ${orgId}
       AND ae.target_type = 'deadline_instance'
       AND ae.target_id = ${deadlineInstanceId}
-    ORDER BY ae.occurred_at ASC
+    ORDER BY ae.occurred_at DESC
   `);
 
   return rows.rows.map((r) => ({
