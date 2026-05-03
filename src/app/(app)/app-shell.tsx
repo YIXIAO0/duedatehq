@@ -111,7 +111,7 @@ export function AppShell({
           </div>
         </aside>
 
-        <main className="flex-1 min-w-0 relative">
+        <main className="flex-1 min-w-0 relative md:pr-16">
           {/* Expand toggle — only visible when sidebar is collapsed.
               Sits in the dashboard's top padding area (left side). */}
           {collapsed ? (
