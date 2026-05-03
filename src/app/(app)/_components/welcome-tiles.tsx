@@ -44,7 +44,7 @@ export function WelcomeTiles({
           <div className="mb-5 inline-flex h-11 w-11 items-center justify-center rounded-lg bg-[var(--color-priority-medium)] text-white shadow-sm">
             <FileSpreadsheet className="h-5 w-5" />
           </div>
-          <h3 className="text-lg font-semibold">Import from spreadsheet</h3>
+          <h3 className="text-lg font-semibold">Import existing list</h3>
           <p className="mt-2 text-sm text-muted-foreground">
             Upload your existing client list. AI maps the columns for you.
           </p>
@@ -59,7 +59,7 @@ export function WelcomeTiles({
           <div className="mb-5 inline-flex h-11 w-11 items-center justify-center rounded-lg bg-[var(--color-priority-medium-bg)] text-[var(--color-priority-medium)]">
             <Plus className="h-5 w-5" />
           </div>
-          <h3 className="text-lg font-semibold">Add one client</h3>
+          <h3 className="text-lg font-semibold">Add a client</h3>
           <p className="mt-2 text-sm text-muted-foreground">
             Try the tool with a single client first.
           </p>
