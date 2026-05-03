@@ -3,7 +3,6 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardFooter,
   CardHeader,
   CardTitle,
@@ -27,10 +26,6 @@ export default function NewClientPage() {
         <Card>
           <CardHeader>
             <CardTitle>Add a new client</CardTitle>
-            <CardDescription>
-              Just the basics for now. You&apos;ll add their tax entities (individual,
-              S-Corp, LLC, trust&hellip;) on the next screen.
-            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
             <div className="space-y-2">
@@ -43,15 +38,11 @@ export default function NewClientPage() {
                 autoFocus
                 maxLength={200}
               />
-              <p className="text-xs text-muted-foreground">
-                The family, household, or firm name — whatever you usually call
-                them in your notes.
-              </p>
             </div>
 
             <div className="grid gap-5 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="primaryContactEmail">Primary contact email</Label>
+                <Label htmlFor="primaryContactEmail">Email</Label>
                 <Input
                   id="primaryContactEmail"
                   name="primaryContactEmail"
@@ -76,7 +67,6 @@ export default function NewClientPage() {
                 id="notes"
                 name="notes"
                 rows={3}
-                placeholder="Anything you want to remember about this client — how you met, who the spouse is, prior-year quirks, etc."
                 maxLength={2000}
               />
             </div>
