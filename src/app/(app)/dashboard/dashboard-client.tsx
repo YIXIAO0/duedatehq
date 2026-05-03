@@ -1964,7 +1964,7 @@ function DeadlineRow({
             color: "var(--client-blue-text)",
           }}
         >
-          {d.jurisdiction_code === "federal" ? "US" : d.jurisdiction_code}
+          {d.jurisdiction_code === "federal" ? "FED" : d.jurisdiction_code}
         </span>
       </div>
     </div>
