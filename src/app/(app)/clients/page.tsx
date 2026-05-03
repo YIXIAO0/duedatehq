@@ -13,10 +13,6 @@ export default function ClientsPage() {
       <div className="mb-8 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Clients</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            All your tax clients. Add an entity to any client to auto-generate
-            their deadlines.
-          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           {/* Note: the firm-wide PDF route at /api/export/deadlines.pdf is
@@ -54,16 +50,13 @@ async function ClientsListContainer() {
   const clients = await listClientsWithEntityCount({ orgId: ctx.organization.id });
 
   if (clients.length === 0) {
-    // Sits below the page header (Clients title + action buttons), so
-    // we use a smaller centered area than dashboard's full-viewport
-    // hero. Same WelcomeTiles content; different headline framing
-    // ("No clients yet") because the user is on /clients explicitly.
+    // Sits below the page header (Clients title + action buttons).
+    // pt-20 + min-h-[60vh] pushes the hero clearly off the action
+    // bar — without that gap the headline ran straight into the
+    // "Add client" button and read as part of the same row.
     return (
-      <div className="flex min-h-[55vh] flex-col items-center justify-center px-2">
-        <WelcomeTiles
-          title="No clients yet"
-          subtitle="Two ways to get going — pick whichever fits."
-        />
+      <div className="flex min-h-[60vh] flex-col items-center justify-center px-2 pt-20">
+        <WelcomeTiles title="No clients yet" />
       </div>
     );
   }

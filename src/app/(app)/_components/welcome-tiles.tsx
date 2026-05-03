@@ -15,16 +15,21 @@ import { FileSpreadsheet, Plus } from "lucide-react";
  */
 export function WelcomeTiles({
   title = "Welcome to DueDateHQ",
-  subtitle = "Two ways to get started — pick whichever fits.",
+  subtitle,
 }: {
   title?: string;
+  /** Optional. Skipped by default — the title + the two visible tiles
+      already say "two paths to get started", a subtitle reading
+      "Two ways to get started, pick whichever fits" was filler. */
   subtitle?: string;
 }) {
   return (
     <div className="w-full max-w-3xl">
       <div className="mb-10 text-center">
         <h2 className="text-3xl font-semibold tracking-tight">{title}</h2>
-        <p className="mt-3 text-base text-muted-foreground">{subtitle}</p>
+        {subtitle ? (
+          <p className="mt-3 text-base text-muted-foreground">{subtitle}</p>
+        ) : null}
       </div>
       <div className="grid gap-4 md:grid-cols-2">
         <Link
