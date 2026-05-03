@@ -102,9 +102,14 @@
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.205 0.005 290);
 
-  /* Coral primary — used for "Today" emphasis and primary CTAs.
-     Pairs with the gradient on hero today-state (#FF7B7B → #FF6B6B). */
-  --primary: oklch(0.205 0.005 290);        /* solid black for + Add client buttons */
+  /* Warm-dark primary — used for "+ Add client" and other primary CTAs.
+     Was solid near-black (oklch 0.205 / hue 290 / cool); pure black read
+     as cold against the app's warm cream + amber palette. Replaced with
+     a dark warm brown — same visual weight, ~13:1 contrast vs white text
+     (AAA), but harmonises with --priority-medium / --color-priority-medium
+     and the sidebar's peach-cream gradient. Today-state gradient
+     (#FF7B7B → #FF6B6B) lives separately and is unchanged. */
+  --primary: oklch(0.25 0.04 65);
   --primary-foreground: oklch(1 0 0);
 
   --secondary: oklch(0.96 0.005 70);
