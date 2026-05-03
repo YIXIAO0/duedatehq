@@ -56,7 +56,7 @@ export function WelcomeTiles({
           <p className="mt-2 text-sm text-muted-foreground">
             Try the tool with a single client first.
           </p>
-          <p className="mt-auto pt-6 text-sm font-medium group-hover:underline">
+          <p className="mt-auto pt-6 text-sm font-medium text-[var(--color-priority-medium)] group-hover:underline">
             Add client →
           </p>
         </Link>
