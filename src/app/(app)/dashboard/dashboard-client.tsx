@@ -46,6 +46,7 @@ import {
   paletteForClient,
   clientInitials,
 } from "@/lib/utils/client-palette";
+import { WelcomeTiles } from "../_components/welcome-tiles";
 
 export type DashboardDeadline = {
   id: string;
@@ -566,60 +567,18 @@ export function DashboardClient({
     searchInput.trim() !== "";
 
   // Empty state: 2-path welcome (Import vs Add one).
-  // Centered in the viewport and stripped of competitor names — the
-  // dashboard is the user's first taste of the product, so the welcome
-  // gets generous whitespace + larger tiles instead of a header card
-  // hugging the top edge. Copy on each tile is one short sentence; the
-  // long "starting fresh or testing the tool…" wall-of-text was hard
-  // to scan in user testing.
-  if (deadlines.length === 0 && !filtersActive && !fetching) {
+  // Render this whenever we know there's no data and no filters active —
+  // do NOT gate on `!fetching`. Gating on fetching caused a flash of
+  // the with-data layout (filter bar, list chrome) on every refresh
+  // before the empty result landed. Once we've decided "0 deadlines, no
+  // filters", showing welcome immediately is correct: even if the fetch
+  // is still in flight, the only possible terminal states are "still 0"
+  // (welcome stays) or "filter changed underneath" (handled by the
+  // condition itself). No reverse flicker possible.
+  if (deadlines.length === 0 && !filtersActive) {
     return (
       <div className="flex min-h-[70vh] flex-col items-center justify-center px-4">
-        <div className="w-full max-w-3xl">
-          <div className="mb-10 text-center">
-            <h2 className="text-3xl font-semibold tracking-tight">
-              Welcome to DueDateHQ
-            </h2>
-            <p className="mt-3 text-base text-muted-foreground">
-              Two ways to get started — pick whichever fits.
-            </p>
-          </div>
-          <div className="grid gap-4 md:grid-cols-2">
-            <Link
-              href="/clients/import"
-              className="group relative flex flex-col rounded-xl border border-primary/30 bg-gradient-to-br from-primary/[0.04] to-primary/[0.10] p-7 transition-all hover:border-primary/60 hover:shadow-md"
-            >
-              <span className="absolute right-4 top-4 rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary">
-                Recommended
-              </span>
-              <div className="mb-5 inline-flex h-11 w-11 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
-                <FileSpreadsheet className="h-5 w-5" />
-              </div>
-              <h3 className="text-lg font-semibold">Import from spreadsheet</h3>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Upload your existing client list. AI maps the columns for you.
-              </p>
-              <p className="mt-6 text-sm font-medium text-primary group-hover:underline">
-                Start import →
-              </p>
-            </Link>
-            <Link
-              href="/clients/new"
-              className="group flex flex-col rounded-xl border border-border bg-card p-7 transition-all hover:border-foreground/30 hover:shadow-md"
-            >
-              <div className="mb-5 inline-flex h-11 w-11 items-center justify-center rounded-lg bg-muted text-foreground">
-                <Plus className="h-5 w-5" />
-              </div>
-              <h3 className="text-lg font-semibold">Add one client</h3>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Try the tool with a single client first.
-              </p>
-              <p className="mt-6 text-sm font-medium group-hover:underline">
-                Add client →
-              </p>
-            </Link>
-          </div>
-        </div>
+        <WelcomeTiles />
       </div>
     );
   }
