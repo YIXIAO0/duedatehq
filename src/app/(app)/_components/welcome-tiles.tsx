@@ -26,7 +26,12 @@ export function WelcomeTiles({
   return (
     <div className="w-full max-w-3xl">
       <div className="mb-10 text-center">
-        <h2 className="text-3xl font-semibold tracking-tight text-[var(--primary)]">
+        {/* Inline warm-brown for the hero heading. Used to share
+            --primary, but the same token drives "+ Add client" buttons
+            which we want to stay near-black for CTA punch. Decoupled
+            so the heading can be visibly warm without softening the
+            button. */}
+        <h2 className="text-3xl font-semibold tracking-tight text-[oklch(0.35_0.08_60)]">
           {title}
         </h2>
         {subtitle ? (

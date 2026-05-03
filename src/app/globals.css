@@ -102,20 +102,13 @@
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.205 0.005 290);
 
-  /* Warm-dark primary — used for "+ Add client", primary CTAs, hero
-     headings (text-[var(--primary)]), focus rings, etc.
-     Iteration history:
-       v0  oklch(0.205 0.005 290) — near-black, cool purple hue. Read as
-           "stark, cold" against the warm cream / amber palette.
-       v1  oklch(0.25 0.04 65) — technically warm brown, but at L=0.25
-           with C=0.04 the warmth was perceptually invisible: eyes still
-           read it as "black".
-       v2  oklch(0.35 0.08 60) — current. Lifted L by 0.10 and doubled
-           chroma so the warm brown actually reads as warm. Contrast vs
-           white text drops from ~13:1 to ~7:1 — still WCAG AAA for
-           normal text. Today-state gradient and --color-priority-urgent
-           are separate tokens, unchanged. */
-  --primary: oklch(0.35 0.08 60);
+  /* Primary — used for "+ Add client" and other primary CTA buttons.
+     Tried a warm-brown variant (v2) for whole-system warmth, but the
+     button felt visually weak — primary CTAs need the punch of near-
+     black. Heading warmth is handled separately via a one-off color
+     on the WelcomeTiles h2 (so the heading can be warm without
+     dragging the button along). */
+  --primary: oklch(0.205 0.005 290);
   --primary-foreground: oklch(1 0 0);
 
   --secondary: oklch(0.96 0.005 70);
