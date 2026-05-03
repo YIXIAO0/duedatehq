@@ -210,35 +210,43 @@ export function MiniCalendar({
             );
           }
 
-          // Layered state styling:
-          //   1. Base fill — today (red if urgent, else blue), or accent
-          //      for a selected non-today, or transparent otherwise.
-          //   2. Selection ring — drawn ring-INSET so it lives inside the
-          //      cell (no spillover into neighbors). The previous design
-          //      used ring-offset-1, which combined with grid gap-px
-          //      produced visible artifacts on adjacent cells.
+          // Layered state styling, in priority order:
+          //   1. today (urgent vs not) — the loudest signal, full red fill
+          //   2. selected — user intent, accent fill + inset ring
+          //   3. urgent — pale red fill so urgent days read at a glance
+          //   4. has-due (non-urgent) — soft amber fill (the warm "notice"
+          //      tint) so "this day has stuff" lands on the date itself
+          //      rather than relying on a 4px dot underneath
+          //   5. default — transparent, hover-only
+          //
+          // The dot below the digit was replaced by the cell fill: a
+          // small black dot was hard to spot against a bold date number,
+          // and the warm fill makes "has deadlines" obvious without
+          // adding a second visual element.
           const fillClass = isToday
             ? isTodayUrgent
               ? "bg-[var(--color-priority-urgent)] font-bold text-white hover:bg-[var(--color-priority-urgent)]/90"
               : "bg-gradient-to-br from-[#FF7B7B] to-[#FF6B6B] font-bold text-white shadow-sm"
             : isSelected
             ? "bg-accent font-semibold text-accent-foreground"
+            : isUrgent
+            ? "bg-[var(--color-priority-urgent-bg)] font-medium text-[var(--color-priority-urgent)] hover:bg-[var(--color-priority-urgent-bg)]/80"
+            : hasDue
+            ? "bg-[var(--color-priority-medium-bg)] font-medium text-[var(--color-priority-medium)] hover:bg-[var(--color-priority-medium-bg)]/80"
             : "text-foreground hover:bg-muted";
           const ringClass = isSelected ? "ring-2 ring-inset ring-primary" : "";
 
-          // Dot logic:
-          //   - Urgent today: cell is fully red — the cell IS the alarm,
-          //     a dot would only add noise. Skip.
-          //   - Non-urgent today: cell is blue, white dot for "deadlines
-          //     here" (some non-urgent thing in progress).
-          //   - Any other day: red dot for urgent, blue dot for due.
-          const showDot = hasDue && !(isToday && isTodayUrgent);
-          const dotColor =
-            isToday
-              ? "bg-primary-foreground"
-              : isUrgent
-              ? "bg-[var(--color-priority-urgent)]"
-              : "bg-primary";
+          // Inner dot is now only a fallback for cases where the cell
+          // fill is hijacked by a louder state (today / selected) but
+          // the day still has deadlines worth noting. For plain due /
+          // urgent days the fill itself is the signal.
+          const showInnerDot =
+            hasDue && (isToday || isSelected) && !(isToday && isTodayUrgent);
+          const innerDotColor = isToday
+            ? "bg-primary-foreground"
+            : isUrgent
+            ? "bg-[var(--color-priority-urgent)]"
+            : "bg-[var(--color-priority-medium)]";
 
           return (
             <button
@@ -250,26 +258,27 @@ export function MiniCalendar({
               className={`relative flex aspect-square cursor-pointer items-center justify-center rounded-md text-[12px] transition-colors ${fillClass} ${ringClass}`}
             >
               {c.day}
-              {showDot ? (
+              {showInnerDot ? (
                 <span
-                  className={`absolute bottom-1 h-1 w-1 rounded-full ${dotColor}`}
+                  className={`absolute bottom-1 h-1.5 w-1.5 rounded-full ${innerDotColor}`}
                 />
               ) : null}
             </button>
           );
         })}
       </div>
-      {/* Legend explains only the elements that aren't self-evident. The
-          dots under days need labels (no one's born knowing red vs blue
-          means urgent vs due); the today cell is the entire highlighted
-          square, which speaks for itself — listing it here was just noise. */}
+      {/* Legend mirrors the cell-fill treatment: a small filled chip in
+          the same color the calendar uses for that state, so the legend
+          reads as "find this color on a day = that's what it means".
+          today / selected are self-evident from their bolder treatment
+          and don't need legend entries. */}
       <div className="mt-2 flex items-center gap-3 border-t border-border pt-2 text-[10.5px] text-muted-foreground">
-        <span className="flex items-center gap-1">
-          <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+        <span className="flex items-center gap-1.5">
+          <span className="h-3 w-3 rounded-sm bg-[var(--color-priority-medium-bg)] border border-[var(--color-priority-medium)]/30" />
           Due
         </span>
-        <span className="flex items-center gap-1">
-          <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-priority-urgent)]" />
+        <span className="flex items-center gap-1.5">
+          <span className="h-3 w-3 rounded-sm bg-[var(--color-priority-urgent-bg)] border border-[var(--color-priority-urgent)]/30" />
           Urgent
         </span>
       </div>
