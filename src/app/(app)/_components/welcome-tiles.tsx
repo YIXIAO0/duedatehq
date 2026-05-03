@@ -26,7 +26,9 @@ export function WelcomeTiles({
   return (
     <div className="w-full max-w-3xl">
       <div className="mb-10 text-center">
-        <h2 className="text-3xl font-semibold tracking-tight">{title}</h2>
+        <h2 className="text-3xl font-semibold tracking-tight text-[var(--primary)]">
+          {title}
+        </h2>
         {subtitle ? (
           <p className="mt-3 text-base text-muted-foreground">{subtitle}</p>
         ) : null}
@@ -62,7 +64,7 @@ export function WelcomeTiles({
             Try the tool with a single client first.
           </p>
           <p className="mt-auto pt-6 text-sm font-medium text-[var(--color-priority-medium)] group-hover:underline">
-            Add client →
+            Add manually →
           </p>
         </Link>
       </div>
