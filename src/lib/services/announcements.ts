@@ -20,6 +20,7 @@ import {
   announcementDismissals,
   type Announcement,
 } from "@/lib/db/schema";
+import { hasClients } from "./clients";
 
 export const ListAnnouncementsInputSchema = z.object({
   /** Only items published in the last N days. 0 = no time floor. */
@@ -307,6 +308,15 @@ export async function getAnnouncementsSummary(
   orgId?: string,
 ): Promise<DashboardAnnouncementSummary> {
   const db = getDb();
+
+  // Zero-state gate: if the org has no clients yet, the entire tax-updates
+  // surface is suppressed. The feature exists to flag changes affecting
+  // your client portfolio — without a portfolio, even score-5 federal
+  // disaster items are just newsroom noise. As soon as the first client
+  // is added, the normal impact filter takes over and items reappear.
+  if (orgId && !(await hasClients(orgId))) {
+    return { highRelevance30d: 0, total30d: 0, topRecent: null };
+  }
 
   // When userId is set, exclude this user's dismissed items from BOTH
   // the high-7d and total-30d counts so the header badge can return

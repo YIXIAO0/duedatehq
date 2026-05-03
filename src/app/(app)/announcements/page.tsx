@@ -23,6 +23,7 @@ import {
   listAnnouncementsWithImpact,
   type AnnouncementWithImpact,
 } from "@/lib/services/announcements";
+import { hasClients } from "@/lib/services/clients";
 import { AnnouncementDismissButton } from "@/components/announcement-dismiss-button";
 
 export const metadata = {
@@ -79,6 +80,34 @@ async function Feed({ searchParams }: { searchParams: SearchParams }) {
   const ctx = await getCurrentContext();
   const { view } = await searchParams;
   const showDismissed = view === "dismissed";
+
+  // Zero-state gate: tax updates only make sense once you have clients
+  // for them to affect. Without any client portfolio, even high-priority
+  // federal items are noise. Show a friendly empty state pointing the
+  // user to /clients/new instead. Mirrors the same gate in
+  // getAnnouncementsSummary so the sidebar badge doesn't lie.
+  const orgHasClients = await hasClients(ctx.organization.id);
+  if (!orgHasClients) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Add a client first</CardTitle>
+          <CardDescription>
+            Tax updates surface here once they affect one of your clients.
+            Your portfolio is currently empty —{" "}
+            <Link href="/clients/new" className="font-medium text-primary hover:underline">
+              add a client
+            </Link>{" "}
+            or{" "}
+            <Link href="/clients/import" className="font-medium text-primary hover:underline">
+              import your list
+            </Link>{" "}
+            to start tracking.
+          </CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
 
   // minScore: 3 — hide pure PR (1) and "vaguely tax-adjacent" (2) so
   // the page is useful signal, not IRS newsroom mirror. Deadline moves

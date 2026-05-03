@@ -39,6 +39,23 @@ export type ListClientsInput = z.input<typeof ListClientsInputSchema>;
 // Service functions
 // ---------------------------------------------------------------------------
 
+/**
+ * Cheap existence check used by zero-state gates (tax updates feature,
+ * dashboard welcome, etc.). EXISTS short-circuits on the first row, so
+ * this is a single-index probe regardless of portfolio size. Excludes
+ * archived clients so a fully-archived org reads as empty.
+ */
+export async function hasClients(orgId: string): Promise<boolean> {
+  const db = getDb();
+  const r = await db.execute<{ has_clients: boolean }>(sql`
+    SELECT EXISTS(
+      SELECT 1 FROM clients
+      WHERE org_id = ${orgId} AND archived_at IS NULL
+    ) AS has_clients
+  `);
+  return Boolean(r.rows[0]?.has_clients);
+}
+
 export async function createClient(input: CreateClientInput) {
   const parsed = CreateClientInputSchema.parse(input);
   const db = getDb();
