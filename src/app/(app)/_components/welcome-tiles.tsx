@@ -47,9 +47,9 @@ export function WelcomeTiles({
         </Link>
         <Link
           href="/clients/new"
-          className="group flex flex-col rounded-xl border border-border bg-card p-7 transition-all hover:border-foreground/30 hover:shadow-md"
+          className="group flex flex-col rounded-xl border border-[var(--color-priority-medium)]/15 bg-[var(--color-priority-medium-bg)]/25 p-7 transition-all hover:border-[var(--color-priority-medium)]/35 hover:bg-[var(--color-priority-medium-bg)]/45 hover:shadow-md"
         >
-          <div className="mb-5 inline-flex h-11 w-11 items-center justify-center rounded-lg bg-muted text-foreground">
+          <div className="mb-5 inline-flex h-11 w-11 items-center justify-center rounded-lg bg-[var(--color-priority-medium-bg)] text-[var(--color-priority-medium)]">
             <Plus className="h-5 w-5" />
           </div>
           <h3 className="text-lg font-semibold">Add one client</h3>
