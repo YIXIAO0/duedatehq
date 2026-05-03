@@ -56,7 +56,7 @@ async function ClientsListContainer() {
     // "Add client" button and read as part of the same row.
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center px-2 pt-20">
-        <WelcomeTiles title="No clients yet" />
+        <WelcomeTiles />
       </div>
     );
   }
