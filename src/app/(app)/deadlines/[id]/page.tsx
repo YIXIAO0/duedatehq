@@ -113,7 +113,7 @@ async function DeadlineDetail({ params }: { params: Params }) {
           </Badge>
           <Badge variant="outline" className="text-xs">
             {d.rule_jurisdiction_code === "federal"
-              ? "US Federal"
+              ? "FED"
               : d.rule_jurisdiction_code}
           </Badge>
           {d.rule_irrevocable ? (
@@ -256,7 +256,7 @@ async function DeadlineDetail({ params }: { params: Params }) {
               </dt>
               <dd>
                 {d.rule_jurisdiction_code === "federal"
-                  ? "US Federal (IRS)"
+                  ? "FED (IRS)"
                   : d.rule_jurisdiction_code}
               </dd>
             </div>

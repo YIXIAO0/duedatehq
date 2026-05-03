@@ -516,7 +516,7 @@ function DeadlineRow({
             </Badge>
           ) : null}
           <span className="truncate text-xs text-muted-foreground">
-            {d.jurisdictionCode === "federal" ? "US Federal" : d.jurisdictionCode}{" "}
+            {d.jurisdictionCode === "federal" ? "FED" : d.jurisdictionCode}{" "}
             · {d.ruleTitle}
           </span>
         </div>
