@@ -23,10 +23,13 @@ export const config: VercelConfig = {
       schedule: "0 12 * * 1",
     },
 
-    // Daily 08:00 UTC = 04:00 EST / 03:00 EDT — IRS Newsroom RSS scrape +
-    // AI classification. Fires before US business hours so any new IRS
-    // disaster relief / form changes are surfaced when CPAs sit down.
-    // Idempotent per RSS GUID; double-fires are no-ops via unique index.
+    // Daily 08:00 UTC = 04:00 EST / 03:00 EDT — fans out the scrape
+    // workflow across every source registered in
+    // src/lib/workflows/sources/index.ts (IRS Newsroom + TX Comptroller
+    // today; CA / NY / FL / IL planned). AI classification runs per
+    // item. Fires before US business hours so any new disaster relief
+    // / form changes are surfaced when CPAs sit down. Idempotent per
+    // (source, external_id); double-fires are no-ops via unique index.
     {
       path: "/api/cron/scrape-announcements",
       schedule: "0 8 * * *",

@@ -34,7 +34,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   MoreHorizontal,
   Pencil,
-  Archive,
+  Trash2,
   Loader2,
   FileText,
 } from "lucide-react";
@@ -53,8 +53,10 @@ export function ClientActions({
 }) {
   const router = useRouter();
   const [editOpen, setEditOpen] = useState(false);
-  const [archiveOpen, setArchiveOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
   const [pending, startTransition] = useTransition();
+  const canDelete = confirmText.trim() === client.name;
 
   return (
     <>
@@ -66,25 +68,25 @@ export function ClientActions({
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuItem asChild>
-            {/* Calendar PDF lives in here now — it's a 1-2x/year action
-                (engagement-letter time), doesn't deserve its own button
-                competing with the page title. */}
             <a
               href={`/api/export/clients/${client.id}/calendar.pdf?taxYear=${new Date().getFullYear()}`}
               download
             >
-              <FileText className="mr-2 h-4 w-4" /> Download calendar PDF
+              <FileText className="h-4 w-4" /> Download calendar PDF
             </a>
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => setEditOpen(true)}>
-            <Pencil className="mr-2 h-4 w-4" /> Edit client
+            <Pencil className="h-4 w-4" /> Edit client
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
-            onClick={() => setArchiveOpen(true)}
+            onClick={() => {
+              setConfirmText("");
+              setDeleteOpen(true);
+            }}
             className="text-destructive focus:text-destructive"
           >
-            <Archive className="mr-2 h-4 w-4" /> Archive
+            <Trash2 className="h-4 w-4" /> Delete client
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -100,10 +102,6 @@ export function ClientActions({
           >
             <DialogHeader>
               <DialogTitle>Edit client</DialogTitle>
-              <DialogDescription>
-                Update the client&apos;s details. Changes are reflected
-                immediately.
-              </DialogDescription>
             </DialogHeader>
 
             <input type="hidden" name="id" value={client.id} />
@@ -164,23 +162,37 @@ export function ClientActions({
         </DialogContent>
       </Dialog>
 
-      {/* Archive confirmation */}
-      <AlertDialog open={archiveOpen} onOpenChange={setArchiveOpen}>
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              Archive &ldquo;{client.name}&rdquo;?
+              Delete &ldquo;{client.name}&rdquo;?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              The client, its entities, and their deadlines will be hidden from
-              your active lists. Data is preserved — you can contact support to
-              un-archive.
+              This removes the client, its entities, and all their deadlines.
+              This can&apos;t be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="confirm-name" className="text-sm">
+              Type{" "}
+              <span className="font-mono font-semibold">{client.name}</span>{" "}
+              to confirm.
+            </Label>
+            <Input
+              id="confirm-name"
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck={false}
+              value={confirmText}
+              onChange={(e) => setConfirmText(e.target.value)}
+              disabled={pending}
+            />
+          </div>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              disabled={pending}
+              disabled={pending || !canDelete}
               onClick={() =>
                 startTransition(async () => {
                   await archiveClientAction(client.id);
@@ -191,10 +203,10 @@ export function ClientActions({
             >
               {pending ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Archiving…
+                  <Loader2 className="h-4 w-4 animate-spin" /> Deleting…
                 </>
               ) : (
-                "Archive"
+                "Delete client"
               )}
             </AlertDialogAction>
           </AlertDialogFooter>

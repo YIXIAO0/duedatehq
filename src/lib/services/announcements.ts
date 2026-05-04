@@ -466,19 +466,6 @@ export async function undismissAnnouncement(
     );
 }
 
-/** Count of items this user has dismissed (used for "Show dismissed" toggle). */
-export async function countDismissedAnnouncements(
-  userId: string,
-): Promise<number> {
-  const db = getDb();
-  const r = await db.execute<{ n: number }>(sql`
-    SELECT COUNT(*)::int AS n
-    FROM announcement_dismissals
-    WHERE user_id = ${userId}
-  `);
-  return Number(r.rows[0]?.n ?? 0);
-}
-
 // ---------------------------------------------------------------------------
 // Per-announcement client checklist — the deadline-centric view.
 //

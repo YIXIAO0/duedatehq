@@ -37,9 +37,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { MoreHorizontal, Pencil, Archive, Loader2 } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash2, Loader2 } from "lucide-react";
 import { updateEntityAction, archiveEntityAction } from "./edit-actions";
 import type { ServiceGroup } from "@/lib/db/schema";
+import { StateCombobox } from "@/components/ui/state-combobox";
 
 const ENTITY_TYPE_OPTIONS = [
   { value: "individual", label: "Individual (1040)" },
@@ -51,8 +52,6 @@ const ENTITY_TYPE_OPTIONS = [
   { value: "estate", label: "Estate (1041)" },
   { value: "nonprofit", label: "Nonprofit (990)" },
 ];
-
-const SUPPORTED_STATES = ["CA", "NY", "TX", "DE", "NJ"];
 
 export function EntityActions({
   entity,
@@ -71,14 +70,17 @@ export function EntityActions({
   availableServices: ServiceGroup[];
 }) {
   const [editOpen, setEditOpen] = useState(false);
-  const [archiveOpen, setArchiveOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
   const [pending, startTransition] = useTransition();
-  // Track service selection within the edit dialog. Initialized from
-  // the active set; user toggles add/remove. Submitted as multiple
-  // hidden inputs named "serviceGroupIds" so FormData.getAll() reads
-  // them on the server.
+  const canDelete = confirmText.trim() === entity.name;
   const [checkedServiceIds, setCheckedServiceIds] = useState<string[]>(
     entity.activeServiceIds,
+  );
+  // Combobox is controlled; mirror its value into a hidden input so the
+  // server action's FormData reads `homeState` like before.
+  const [homeState, setHomeState] = useState<string | undefined>(
+    entity.homeState ?? undefined,
   );
   const toggleService = (id: string) => {
     setCheckedServiceIds((prev) =>
@@ -96,14 +98,17 @@ export function EntityActions({
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuItem onClick={() => setEditOpen(true)}>
-            <Pencil className="mr-2 h-4 w-4" /> Edit entity
+            <Pencil className="h-4 w-4" /> Edit entity
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
-            onClick={() => setArchiveOpen(true)}
+            onClick={() => {
+              setConfirmText("");
+              setDeleteOpen(true);
+            }}
             className="text-destructive focus:text-destructive"
           >
-            <Archive className="mr-2 h-4 w-4" /> Archive
+            <Trash2 className="h-4 w-4" /> Delete entity
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -120,8 +125,7 @@ export function EntityActions({
             <DialogHeader>
               <DialogTitle>Edit entity</DialogTitle>
               <DialogDescription>
-                Changing entity type or states doesn&apos;t regenerate
-                deadlines automatically — contact support if you need that.
+                Type or state changes won&apos;t regenerate existing deadlines.
               </DialogDescription>
             </DialogHeader>
 
@@ -162,21 +166,17 @@ export function EntityActions({
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="homeState">Home state</Label>
-                  <Select
+                  <input
+                    type="hidden"
                     name="homeState"
-                    defaultValue={entity.homeState ?? ""}
-                  >
-                    <SelectTrigger id="homeState" className="w-full">
-                      <SelectValue placeholder="None" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {SUPPORTED_STATES.map((s) => (
-                        <SelectItem key={s} value={s}>
-                          {s}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    value={homeState ?? ""}
+                  />
+                  <StateCombobox
+                    id="homeState"
+                    value={homeState}
+                    onChange={setHomeState}
+                    placeholder="None"
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="operatingStates">Operating states</Label>
@@ -237,7 +237,7 @@ export function EntityActions({
                     return (
                       <label
                         key={s.id}
-                        className={`flex cursor-pointer items-start gap-2 rounded-md border px-2.5 py-1.5 transition-colors ${
+                        className={`flex items-start gap-2 rounded-md border px-2.5 py-1.5 transition-colors ${
                           checked
                             ? "border-primary/40 bg-primary/5"
                             : "border-border bg-background hover:bg-muted/30"
@@ -285,36 +285,51 @@ export function EntityActions({
         </DialogContent>
       </Dialog>
 
-      {/* Archive confirmation */}
-      <AlertDialog open={archiveOpen} onOpenChange={setArchiveOpen}>
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              Archive &ldquo;{entity.name}&rdquo;?
+              Delete &ldquo;{entity.name}&rdquo;?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              This entity and its deadlines will be hidden from active lists.
-              The client stays.
+              This removes the entity and all its deadlines. The client stays.
+              This can&apos;t be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="confirm-entity-name" className="text-sm">
+              Type{" "}
+              <span className="font-mono font-semibold">{entity.name}</span>{" "}
+              to confirm.
+            </Label>
+            <Input
+              id="confirm-entity-name"
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck={false}
+              value={confirmText}
+              onChange={(e) => setConfirmText(e.target.value)}
+              disabled={pending}
+            />
+          </div>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              disabled={pending}
+              disabled={pending || !canDelete}
               onClick={() =>
                 startTransition(async () => {
                   await archiveEntityAction(entity.id);
-                  setArchiveOpen(false);
+                  setDeleteOpen(false);
                 })
               }
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {pending ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Archiving…
+                  <Loader2 className="h-4 w-4 animate-spin" /> Deleting…
                 </>
               ) : (
-                "Archive"
+                "Delete entity"
               )}
             </AlertDialogAction>
           </AlertDialogFooter>

@@ -69,15 +69,14 @@ export function DigestPreviewCard({
           </Badge>
         </CardTitle>
         <CardDescription>
-          Every Monday at 7am ET, you&apos;ll get a one-glance summary of the
-          week ahead — deadlines, irrevocable elections, anything overdue.
-          Send yourself a sample now to see what it looks like.
+          Mondays at 7am ET — the week&apos;s deadlines, elections, and overdue
+          items. Send yourself a sample.
         </CardDescription>
       </CardHeader>
       <CardContent>
         <div className="flex flex-wrap items-center gap-3">
           <Button onClick={send} disabled={pending} variant="outline">
-            <Mail className="mr-2 h-4 w-4" />
+            <Mail className="h-4 w-4" />
             {pending ? "Sending…" : "Send me a sample"}
           </Button>
           <span className="text-xs text-muted-foreground">

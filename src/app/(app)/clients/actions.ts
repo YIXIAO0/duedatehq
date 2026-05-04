@@ -9,7 +9,86 @@ import {
   mergeClients,
   type MergeClientsResult,
 } from "@/lib/services/clients";
+import { createContact } from "@/lib/services/client-contacts";
 import { createEntity } from "@/lib/services/entities";
+
+const CreateClientWithSetupSchema = z.object({
+  clientName: z.string().min(1, "Client name is required").max(200),
+  clientNotes: z.string().max(2000).optional(),
+  contactName: z.string().max(120).optional(),
+  contactEmail: z.string().email("Enter a valid email"),
+  contactPhone: z.string().max(50).optional(),
+  entityName: z.string().min(1, "Entity name is required").max(200),
+  entityType: z.enum([
+    "individual",
+    "c_corp",
+    "s_corp",
+    "partnership",
+    "llc",
+    "trust",
+    "estate",
+    "nonprofit",
+  ]),
+  entityHomeState: z
+    .string()
+    .length(2)
+    .regex(/^[A-Z]{2}$/)
+    .optional()
+    .or(z.literal("")),
+});
+
+export type CreateClientWithSetupInput = z.infer<
+  typeof CreateClientWithSetupSchema
+>;
+
+export async function createClientWithSetupAction(
+  input: CreateClientWithSetupInput,
+) {
+  const ctx = await getCurrentContext();
+  const parsed = CreateClientWithSetupSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new Error(parsed.error.issues[0]?.message ?? "Invalid input");
+  }
+  const data = parsed.data;
+
+  const client = await createClient({
+    orgId: ctx.organization.id,
+    name: data.clientName,
+    primaryContactEmail: data.contactEmail,
+    primaryContactPhone: data.contactPhone || undefined,
+    notes: data.clientNotes || undefined,
+    actorType: "user",
+    actorId: ctx.user.id,
+  });
+
+  await createContact({
+    orgId: ctx.organization.id,
+    clientId: client.id,
+    name: data.contactName?.trim() || null,
+    email: data.contactEmail,
+    phone: data.contactPhone?.trim() || null,
+    role: null,
+    notes: null,
+    receivesReminders: true,
+    priority: 0,
+    actorId: ctx.user.id,
+  });
+
+  await createEntity({
+    orgId: ctx.organization.id,
+    clientId: client.id,
+    name: data.entityName,
+    entityType: data.entityType,
+    homeState: data.entityHomeState || undefined,
+    operatingStates: [],
+    actorType: "user",
+    actorId: ctx.user.id,
+  });
+
+  revalidatePath("/dashboard");
+  revalidatePath("/clients");
+  redirect(`/clients/${client.id}`);
+}
 
 const CreateClientFormSchema = z.object({
   name: z.string().min(1, "Name is required").max(200),

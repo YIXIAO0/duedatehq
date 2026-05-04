@@ -38,7 +38,7 @@ export function AddEntityCollapser({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button variant="outline">
-          <Plus className="mr-2 h-4 w-4" /> Add a tax entity
+          <Plus className="h-4 w-4" /> Add a tax entity
         </Button>
       </DialogTrigger>
       {/* IMPORTANT: must use `sm:max-w-3xl` (not bare `max-w-3xl`) —
@@ -54,8 +54,7 @@ export function AddEntityCollapser({
         <DialogHeader>
           <DialogTitle>Add a tax entity</DialogTitle>
           <DialogDescription>
-            Pick the entity type and the filings to track. We&apos;ll
-            generate the deadlines automatically.
+            Pick the entity type and filings to track.
           </DialogDescription>
         </DialogHeader>
         <AddEntityForm

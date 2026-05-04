@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import { Button } from "@/components/ui/button";
 import { Plus, FileSpreadsheet, Download } from "lucide-react";
 import { getCurrentContext } from "@/lib/auth/current-org";
-import { listClientsWithEntityCount } from "@/lib/services/clients";
+import { hasClients, listClientsWithEntityCount } from "@/lib/services/clients";
 import { ClientsList } from "./clients-list";
 import { WelcomeTiles } from "../_components/welcome-tiles";
 
@@ -15,24 +15,17 @@ export default function ClientsPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Clients</h1>
         </div>
         <div className="flex flex-wrap gap-2">
-          {/* Note: the firm-wide PDF route at /api/export/deadlines.pdf is
-              still live for partners who want a workload-review snapshot,
-              but we don't surface it here. The high-value PDF — per-client
-              annual calendar — lives on each client detail page instead.
-              CSV stays because Excel is a real workflow for many CPAs. */}
-          <Button asChild variant="outline">
-            <a href="/api/export/deadlines.csv" download>
-              <Download className="mr-2 h-4 w-4" /> Export CSV
-            </a>
-          </Button>
+          <Suspense fallback={null}>
+            <ExportButton />
+          </Suspense>
           <Button asChild variant="outline">
             <Link href="/clients/import">
-              <FileSpreadsheet className="mr-2 h-4 w-4" /> Import
+              <FileSpreadsheet className="h-4 w-4" /> Import clients
             </Link>
           </Button>
           <Button asChild>
             <Link href="/clients/new">
-              <Plus className="mr-2 h-4 w-4" /> Add client
+              <Plus className="h-4 w-4" /> Add client
             </Link>
           </Button>
         </div>
@@ -45,15 +38,25 @@ export default function ClientsPage() {
   );
 }
 
+// Suspense-wrapped so the page renders instantly while hasClients resolves.
+async function ExportButton() {
+  const ctx = await getCurrentContext();
+  const showExport = await hasClients(ctx.organization.id);
+  if (!showExport) return null;
+  return (
+    <Button asChild variant="outline">
+      <a href="/api/export/deadlines.csv" download>
+        <Download className="h-4 w-4" /> Export CSV
+      </a>
+    </Button>
+  );
+}
+
 async function ClientsListContainer() {
   const ctx = await getCurrentContext();
   const clients = await listClientsWithEntityCount({ orgId: ctx.organization.id });
 
   if (clients.length === 0) {
-    // Sits below the page header (Clients title + action buttons).
-    // pt-20 + min-h-[60vh] pushes the hero clearly off the action
-    // bar — without that gap the headline ran straight into the
-    // "Add client" button and read as part of the same row.
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center px-2 pt-20">
         <WelcomeTiles />

@@ -19,7 +19,6 @@ import {
 } from "lucide-react";
 import { getCurrentContext } from "@/lib/auth/current-org";
 import {
-  countDismissedAnnouncements,
   listAnnouncementsWithImpact,
   type AnnouncementWithImpact,
 } from "@/lib/services/announcements";
@@ -41,16 +40,14 @@ export default function AnnouncementsPage({
     <div className="mx-auto w-full max-w-4xl px-6 py-8">
       <Button asChild variant="ghost" size="sm" className="mb-4 -ml-3">
         <Link href="/dashboard">
-          <ArrowLeft className="mr-2 h-4 w-4" /> Back to dashboard
+          <ArrowLeft className="h-4 w-4" /> Back to dashboard
         </Link>
       </Button>
 
       <div className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Tax updates</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Pulled daily from the IRS Newsroom feed. Each item is classified by
-          AI for relevance — score 5 means a real deadline or filing
-          requirement just changed.
+          Tax announcements that affect your clients.
         </p>
       </div>
 
@@ -114,13 +111,26 @@ async function Feed({ searchParams }: { searchParams: SearchParams }) {
   // / form changes are 4-5; routine useful reminders are 3.
   // …WithImpact intersects each item's affected_jurisdictions with the
   // org's clients' home_state so we can show "Affects N of your clients".
-  const rawItems = await listAnnouncementsWithImpact(ctx.organization.id, {
-    sinceDays: 30,
-    minScore: 3,
-    userId: ctx.user.id,
-    showDismissed,
-  });
-  const dismissedCount = await countDismissedAnnouncements(ctx.user.id);
+  //
+  // We always fetch the dismissed list too (in parallel) so the
+  // "Dismissed (N)" badge can count what's *visible* after the relevance
+  // gate, not what's raw in the dismissals table. Without this, a user
+  // who dismissed a federal score-4 item sees "Dismissed (1)" but an
+  // empty list, because the gate filters federal-only score<5.
+  const [activeRaw, dismissedRaw] = await Promise.all([
+    listAnnouncementsWithImpact(ctx.organization.id, {
+      sinceDays: 30,
+      minScore: 3,
+      userId: ctx.user.id,
+      showDismissed: false,
+    }),
+    listAnnouncementsWithImpact(ctx.organization.id, {
+      sinceDays: 30,
+      minScore: 3,
+      userId: ctx.user.id,
+      showDismissed: true,
+    }),
+  ]);
 
   // Relevance gate — DueDateHQ is a deadline product, so federal-level
   // policy news that doesn't impact any client AND isn't a real
@@ -132,10 +142,15 @@ async function Feed({ searchParams }: { searchParams: SearchParams }) {
   //      CPA may want to know (e.g. a brand-new federal deadline that
   //      they'll need next quarter).
   // Items satisfying neither (e.g. "Treasury issues proposed
-  // regulations on remittance transfer tax") are dropped.
-  const items = rawItems.filter(
-    (i) => i.affectedClients.length > 0 || i.relevanceScore >= 5,
-  );
+  // regulations on remittance transfer tax") are dropped from BOTH
+  // active and dismissed views — the badge count must agree with the
+  // body, otherwise the toggle dangles "(1)" with nothing behind it.
+  const passesRelevanceGate = (i: AnnouncementWithImpact) =>
+    i.affectedClients.length > 0 || i.relevanceScore >= 5;
+  const activeItems = activeRaw.filter(passesRelevanceGate);
+  const dismissedItems = dismissedRaw.filter(passesRelevanceGate);
+  const items = showDismissed ? dismissedItems : activeItems;
+  const dismissedCount = dismissedItems.length;
 
   // Sort high-relevance to the top so eyes land on what matters. Only
   // applies to the active view; dismissed view shows whatever's there.
@@ -166,12 +181,12 @@ async function Feed({ searchParams }: { searchParams: SearchParams }) {
         <Card>
           <CardHeader>
             <CardTitle>
-              {showDismissed ? "Nothing dismissed" : "Nothing yet"}
+              {showDismissed ? "Nothing dismissed" : "You're caught up"}
             </CardTitle>
             <CardDescription>
               {showDismissed
-                ? "Items you dismiss from the dashboard will show up here so you can restore them."
-                : "The scraper runs daily at 4am ET. New items will appear here when the IRS posts them. If this stays empty for more than 24 hours, something's wrong with the cron — let us know."}
+                ? "Dismissed items appear here, ready to restore."
+                : "We'll surface new announcements here as they're posted."}
             </CardDescription>
           </CardHeader>
         </Card>

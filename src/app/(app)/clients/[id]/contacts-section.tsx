@@ -37,7 +37,7 @@ import {
   MoreHorizontal,
   Star,
   Pencil,
-  Archive,
+  Trash2,
   Loader2,
   Bell,
   BellOff,
@@ -88,8 +88,7 @@ export function ContactsSection({
 
       {contacts.length === 0 ? (
         <div className="rounded-lg border border-border bg-muted/30 p-6 text-sm text-muted-foreground">
-          No contacts yet. Add one so the email cron knows where to send
-          reminders.
+          No contacts.
         </div>
       ) : (
         <div className="rounded-xl border border-border divide-y divide-border bg-card">
@@ -126,9 +125,14 @@ function ContactRow({
   clientId: string;
 }) {
   const [editOpen, setEditOpen] = useState(false);
-  const [archiveOpen, setArchiveOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
   const [pending, startTransition] = useTransition();
   const isPrimary = contact.priority === 0;
+  const identifier =
+    contact.name?.trim() || contact.email?.trim() || "";
+  const canDelete =
+    identifier.length > 0 && confirmText.trim() === identifier;
 
   // Per-client palette so all rows for one client share the same hue.
   const palette = paletteForClient(clientId);
@@ -213,7 +217,7 @@ function ContactRow({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem onClick={() => setEditOpen(true)}>
-              <Pencil className="mr-2 h-4 w-4" /> Edit
+              <Pencil className="h-4 w-4" /> Edit
             </DropdownMenuItem>
             {!isPrimary ? (
               <DropdownMenuItem
@@ -226,15 +230,18 @@ function ContactRow({
                   })
                 }
               >
-                <Star className="mr-2 h-4 w-4" /> Set as primary
+                <Star className="h-4 w-4" /> Set as primary
               </DropdownMenuItem>
             ) : null}
             <DropdownMenuSeparator />
             <DropdownMenuItem
-              onClick={() => setArchiveOpen(true)}
+              onClick={() => {
+                setConfirmText("");
+                setDeleteOpen(true);
+              }}
               className="text-destructive focus:text-destructive"
             >
-              <Archive className="mr-2 h-4 w-4" /> Remove
+              <Trash2 className="h-4 w-4" /> Delete contact
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -248,41 +255,60 @@ function ContactRow({
         contact={contact}
       />
 
-      <AlertDialog open={archiveOpen} onOpenChange={setArchiveOpen}>
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              Remove this contact?
+              Delete &ldquo;{identifier || "this contact"}&rdquo;?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {contact.name || contact.email || "This contact"} will stop
-              receiving reminders for {contact.role ? "this " + contact.role + " role" : "this client"}.
+              They&apos;ll stop receiving reminders.
               {isPrimary
-                ? " The next contact in the list will become the new primary."
-                : ""}
+                ? " The next contact in the list becomes the new primary."
+                : ""}{" "}
+              This can&apos;t be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <div className="space-y-2 py-2">
+            <Label
+              htmlFor={`confirm-contact-${contact.id}`}
+              className="text-sm"
+            >
+              Type{" "}
+              <span className="font-mono font-semibold">{identifier}</span> to
+              confirm.
+            </Label>
+            <Input
+              id={`confirm-contact-${contact.id}`}
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck={false}
+              value={confirmText}
+              onChange={(e) => setConfirmText(e.target.value)}
+              disabled={pending}
+            />
+          </div>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              disabled={pending}
+              disabled={pending || !canDelete}
               onClick={() =>
                 startTransition(async () => {
                   await archiveContactAction({
                     id: contact.id,
                     clientId,
                   });
-                  setArchiveOpen(false);
+                  setDeleteOpen(false);
                 })
               }
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {pending ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Removing…
+                  <Loader2 className="h-4 w-4 animate-spin" /> Deleting…
                 </>
               ) : (
-                "Remove"
+                "Delete contact"
               )}
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -325,8 +351,7 @@ function ContactDialog({
               {mode === "create" ? "Add contact" : "Edit contact"}
             </DialogTitle>
             <DialogDescription>
-              At least one of email or phone is required so we can reach
-              this person.
+              Email or phone required.
             </DialogDescription>
           </DialogHeader>
 
@@ -430,7 +455,7 @@ function ReceivesRemindersField({
 }) {
   const [checked, setChecked] = useState(defaultChecked);
   return (
-    <label className="flex cursor-pointer items-start gap-3 rounded-md border border-border bg-muted/30 p-3 text-sm">
+    <label className="flex items-start gap-3 rounded-md border border-border bg-muted/30 p-3 text-sm">
       <Checkbox
         checked={checked}
         onCheckedChange={(v) => setChecked(v === true)}
@@ -446,8 +471,7 @@ function ReceivesRemindersField({
           Send deadline reminders to this contact
         </div>
         <div className="text-xs text-muted-foreground">
-          When the email cron starts running (Round B), only contacts with
-          this enabled will receive emails.
+          Only contacts with this enabled receive deadline emails.
         </div>
       </div>
     </label>
@@ -457,7 +481,7 @@ function ReceivesRemindersField({
 function SetPrimaryField() {
   const [checked, setChecked] = useState(false);
   return (
-    <label className="flex cursor-pointer items-start gap-3 rounded-md border border-border bg-muted/30 p-3 text-sm">
+    <label className="flex items-start gap-3 rounded-md border border-border bg-muted/30 p-3 text-sm">
       <Checkbox
         checked={checked}
         onCheckedChange={(v) => setChecked(v === true)}

@@ -35,7 +35,7 @@ export default function AnnouncementReviewPage({
     <div className="mx-auto w-full max-w-4xl px-6 py-8">
       <Button asChild variant="ghost" size="sm" className="mb-4 -ml-3">
         <Link href="/dashboard">
-          <ArrowLeft className="mr-2 h-4 w-4" /> Back to dashboard
+          <ArrowLeft className="h-4 w-4" /> Back to dashboard
         </Link>
       </Button>
 

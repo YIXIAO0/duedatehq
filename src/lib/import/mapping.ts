@@ -16,6 +16,10 @@ import type {
   ParsedRow,
   RowPreview,
 } from "./types";
+import {
+  US_STATE_CODES,
+  US_STATE_NAME_TO_CODE,
+} from "@/lib/constants/us-states";
 
 // ---------------------------------------------------------------------------
 // Header alias tables (longest aliases first per field for better matching)
@@ -253,21 +257,10 @@ export function normalizeEntityType(raw: unknown): EntityType | null {
 export function normalizeStateCode(raw: unknown): string | null {
   if (raw == null) return null;
   const s = String(raw).trim().toUpperCase();
-  if (/^[A-Z]{2}$/.test(s)) return s;
-  // Try full state name → code (minimal subset, extend as needed)
-  const stateNames: Record<string, string> = {
-    CALIFORNIA: "CA",
-    "NEW YORK": "NY",
-    TEXAS: "TX",
-    DELAWARE: "DE",
-    "NEW JERSEY": "NJ",
-    FLORIDA: "FL",
-    ILLINOIS: "IL",
-    MASSACHUSETTS: "MA",
-    CONNECTICUT: "CT",
-    PENNSYLVANIA: "PA",
-  };
-  return stateNames[s] ?? null;
+  if (US_STATE_CODES.includes(s)) return s;
+  // Full-name fallback ("California" → "CA"). Allows messy CSVs that
+  // spell out the state name to still resolve to a valid 2-letter code.
+  return US_STATE_NAME_TO_CODE[s] ?? null;
 }
 
 export function normalizeOperatingStates(raw: unknown): string[] {
@@ -370,4 +363,38 @@ export function buildRowPreviews(
     const { mapped, warnings, errors } = applyMappingToRow(raw, mapping);
     return { index, raw, mapped, warnings, errors };
   });
+}
+
+// Re-validate a manually-edited MappedRow. Mirrors the validation tail of
+// applyMappingToRow without re-parsing raw cells — used by the preview-step
+// inline editor so a fixed row can flip from skipped → ready.
+export function validateMappedRow(input: MappedRow): {
+  mapped: MappedRow;
+  warnings: string[];
+  errors: string[];
+} {
+  const warnings: string[] = [];
+  const errors: string[] = [];
+  const mapped: MappedRow = { ...input };
+
+  if (mapped.contactEmail) {
+    const email = mapped.contactEmail.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      warnings.push(`Invalid email "${email}" — field cleared`);
+      mapped.contactEmail = undefined;
+    } else {
+      mapped.contactEmail = email;
+    }
+  }
+
+  if (!mapped.clientName?.trim()) errors.push("Missing client name");
+  if (!mapped.entityType) {
+    warnings.push("No entity type provided — defaulted to Individual");
+    mapped.entityType = "individual";
+  }
+  if (!mapped.entityName && mapped.clientName) {
+    mapped.entityName = mapped.clientName;
+  }
+
+  return { mapped, warnings, errors };
 }

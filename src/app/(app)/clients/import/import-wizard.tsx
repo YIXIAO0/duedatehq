@@ -19,30 +19,34 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import {
   FileSpreadsheet,
-  ClipboardPaste,
   Download,
   Sparkles,
-  Upload,
   CheckCircle2,
   AlertTriangle,
   XCircle,
   Loader2,
-  Check,
-  History,
-  ChevronDown,
-  ChevronUp,
+  Pencil,
 } from "lucide-react";
-import { parseFile, parsePasteText, extractSampleForSuggestion } from "@/lib/import/parse";
-import { buildRowPreviews, suggestMappingHeuristic } from "@/lib/import/mapping";
+import { parseFile, extractSampleForSuggestion } from "@/lib/import/parse";
+import {
+  buildRowPreviews,
+  suggestMappingHeuristic,
+  validateMappedRow,
+} from "@/lib/import/mapping";
 import { FILE_IN_TIME_MAPPING } from "@/lib/import/file-in-time";
 import {
   DUEDATE_FIELDS,
@@ -50,13 +54,20 @@ import {
   type ApplyImportResult,
   type ColumnMapping,
   type DueDateField,
+  type EntityType,
+  type MappedRow,
   type ParsedSheet,
   type RowPreview,
 } from "@/lib/import/types";
 import { applyImportAction } from "./actions";
+import {
+  paletteForClient,
+  clientInitials,
+} from "@/lib/utils/client-palette";
+import { cn } from "@/lib/utils";
+import { StateCombobox } from "@/components/ui/state-combobox";
 
 type Step = "upload" | "mapping" | "preview" | "result";
-type UploadTab = "file" | "paste";
 
 const FIELD_LABELS: Record<DueDateField, string> = {
   clientName: "Client name",
@@ -80,7 +91,6 @@ export function ImportWizard() {
   const [error, setError] = useState<string | null>(null);
   const [previews, setPreviews] = useState<RowPreview[]>([]);
   const [result, setResult] = useState<ApplyImportResult | null>(null);
-  const [includeHistorical, setIncludeHistorical] = useState(false);
   const [suggesting, startSuggesting] = useTransition();
   const [applying, startApplying] = useTransition();
 
@@ -98,20 +108,6 @@ export function ImportWizard() {
       await advanceFromParsedSheet(parsed);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to parse file");
-    }
-  }
-
-  async function handlePaste(text: string) {
-    setError(null);
-    try {
-      const parsed = parsePasteText(text);
-      if (parsed.totalRows === 0) {
-        setError("Couldn't find any rows. Make sure the first line is headers.");
-        return;
-      }
-      await advanceFromParsedSheet(parsed);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to parse paste");
     }
   }
 
@@ -204,7 +200,7 @@ export function ImportWizard() {
 
     const payload: ApplyImportInput = {
       rows: validRows,
-      includeHistoricalAsCompleted: includeHistorical,
+      includeHistoricalAsCompleted: false,
     };
 
     startApplying(async () => {
@@ -216,6 +212,24 @@ export function ImportWizard() {
         setError(err instanceof Error ? err.message : "Import failed");
       }
     });
+  }
+
+  // ---- step: preview row edits ------------------------------------------
+
+  function updateRow(index: number, next: MappedRow) {
+    const validated = validateMappedRow(next);
+    setPreviews((prev) =>
+      prev.map((p) =>
+        p.index === index
+          ? {
+              ...p,
+              mapped: validated.mapped,
+              warnings: validated.warnings,
+              errors: validated.errors,
+            }
+          : p,
+      ),
+    );
   }
 
   // =======================================================================
@@ -234,7 +248,7 @@ export function ImportWizard() {
       ) : null}
 
       {step === "upload" ? (
-        <UploadStep onFile={handleFile} onPaste={handlePaste} />
+        <UploadStep onFile={handleFile} />
       ) : null}
 
       {step === "mapping" && sheet && mapping ? (
@@ -256,8 +270,7 @@ export function ImportWizard() {
           onBack={() => setStep("mapping")}
           onConfirm={handleApply}
           applying={applying}
-          includeHistorical={includeHistorical}
-          onToggleHistorical={setIncludeHistorical}
+          onUpdateRow={updateRow}
         />
       ) : null}
 
@@ -324,139 +337,63 @@ function StepIndicator({ current }: { current: Step }) {
   );
 }
 
-function UploadStep({
-  onFile,
-  onPaste,
-}: {
-  onFile: (file: File) => void;
-  onPaste: (text: string) => void;
-}) {
-  const [tab, setTab] = useState<UploadTab>("file");
-  const [pasteValue, setPasteValue] = useState("");
+function UploadStep({ onFile }: { onFile: (file: File) => void }) {
   const [dragging, setDragging] = useState(false);
 
   return (
-    <div className="space-y-4">
-      {/* Tab switcher */}
-      <div className="inline-flex rounded-md border border-border p-1">
-        <button
-          onClick={() => setTab("file")}
-          className={`rounded px-4 py-1.5 text-sm transition ${
-            tab === "file"
-              ? "bg-background shadow-sm font-medium"
-              : "text-muted-foreground hover:text-foreground"
+    <Card>
+      <CardContent className="pt-6">
+        <div
+          onDragEnter={(e) => {
+            e.preventDefault();
+            setDragging(true);
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragging(false);
+            const file = e.dataTransfer.files?.[0];
+            if (file) onFile(file);
+          }}
+          className={`flex flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed p-12 text-center transition-colors ${
+            dragging
+              ? "border-primary bg-primary/5"
+              : "border-border bg-muted/20"
           }`}
         >
-          <Upload className="mr-1.5 inline h-3.5 w-3.5" /> Upload file
-        </button>
-        <button
-          onClick={() => setTab("paste")}
-          className={`rounded px-4 py-1.5 text-sm transition ${
-            tab === "paste"
-              ? "bg-background shadow-sm font-medium"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          <ClipboardPaste className="mr-1.5 inline h-3.5 w-3.5" /> Paste text
-        </button>
-      </div>
+          <FileSpreadsheet className="h-10 w-10 text-muted-foreground" />
+          <p className="font-medium">Drop your XLSX or CSV here</p>
+          <input
+            type="file"
+            accept=".xlsx,.xls,.csv"
+            className="absolute h-0 w-0 opacity-0"
+            id="file-upload"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) onFile(f);
+            }}
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => document.getElementById("file-upload")?.click()}
+          >
+            Choose file
+          </Button>
+        </div>
 
-      {tab === "file" ? (
-        <Card>
-          <CardContent className="pt-6">
-            <div
-              onDragEnter={(e) => {
-                e.preventDefault();
-                setDragging(true);
-              }}
-              onDragLeave={() => setDragging(false)}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => {
-                e.preventDefault();
-                setDragging(false);
-                const file = e.dataTransfer.files?.[0];
-                if (file) onFile(file);
-              }}
-              className={`flex flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed p-12 text-center transition-colors ${
-                dragging
-                  ? "border-primary bg-primary/5"
-                  : "border-border bg-muted/20"
-              }`}
-            >
-              <FileSpreadsheet className="h-10 w-10 text-muted-foreground" />
-              <div>
-                <p className="font-medium">Drop your XLSX or CSV here</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  or click to browse · supports File In Time exports,
-                  ProConnect / Drake / Lacerte exports, or any custom spreadsheet
-                </p>
-              </div>
-              <input
-                type="file"
-                accept=".xlsx,.xls,.csv"
-                className="absolute h-0 w-0 opacity-0"
-                id="file-upload"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) onFile(f);
-                }}
-              />
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  document.getElementById("file-upload")?.click()
-                }
-              >
-                Choose file
-              </Button>
-              <p className="mt-2 text-xs text-muted-foreground">
-                🔒 Parsed in your browser — nothing uploads until you click Confirm on the next screen.
-              </p>
-            </div>
-
-            <div className="mt-5 flex justify-center">
-              <Link
-                href="/api/import/template"
-                className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
-              >
-                <Download className="h-3.5 w-3.5" />
-                Don&apos;t have a spreadsheet? Download our template
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
-      ) : (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Paste your client list</CardTitle>
-            <CardDescription>
-              First line = column headers. Commas or tabs both work.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Textarea
-              rows={10}
-              className="font-mono text-xs"
-              placeholder={`Client Name,Entity Type,Home State,EIN
-John Smith,Individual,NY,
-Acme LLC,LLC,DE,12-3456789
-Chen Trust,Trust,CA,`}
-              value={pasteValue}
-              onChange={(e) => setPasteValue(e.target.value)}
-            />
-            <div className="mt-4 flex justify-end">
-              <Button
-                disabled={!pasteValue.trim()}
-                onClick={() => onPaste(pasteValue)}
-              >
-                Parse & continue
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-    </div>
+        <div className="mt-5 flex justify-center">
+          <Link
+            href="/api/import/template"
+            className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
+          >
+            <Download className="h-3.5 w-3.5" />
+            Don&apos;t have a spreadsheet? Download our template
+          </Link>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -483,97 +420,81 @@ function MappingStep({
 
   return (
     <div className="space-y-5">
-      {/* AI source badge */}
-      {aiPending ? (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          Asking AI to suggest mappings…
-        </div>
-      ) : aiSource === "preset" ? (
-        <Badge className="bg-[var(--color-priority-done-bg)] text-[var(--color-priority-done)] hover:bg-[var(--color-priority-done-bg)]">
-          ✨ File In Time export detected — mapping applied automatically
-        </Badge>
-      ) : aiSource === "ai" ? (
-        <Badge variant="secondary">
-          <Sparkles className="mr-1 h-3 w-3" /> AI-suggested mapping — review below
-        </Badge>
-      ) : (
-        <Badge variant="outline">Heuristic mapping — review below</Badge>
-      )}
+      <MappingSourceBadge source={aiSource} pending={aiPending} />
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Map columns to DueDateHQ fields</CardTitle>
+          <CardTitle className="text-base">
+            Map columns to DueDateHQ fields
+          </CardTitle>
           <CardDescription>
             {sheet.totalRows} rows · {sheet.headers.length} columns detected
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-3 md:grid-cols-2">
-            {sheet.headers.map((header) => (
-              <div key={header} className="flex items-center gap-3">
-                <div className="flex-1 truncate font-mono text-xs text-muted-foreground">
-                  {header}
-                </div>
-                <div className="text-muted-foreground">→</div>
-                <Select
-                  value={mapping[header] ?? "ignore"}
-                  onValueChange={(v) =>
-                    onMappingChange(header, v as DueDateField)
-                  }
+          <div className="grid gap-x-8 gap-y-1 md:grid-cols-2">
+            {sheet.headers.map((header) => {
+              const value = mapping[header] ?? "ignore";
+              const isSkipped = value === "ignore";
+              return (
+                <div
+                  key={header}
+                  className={`group flex items-center gap-3 rounded-lg px-2 py-1.5 transition-colors hover:bg-muted/40 ${
+                    isSkipped ? "opacity-70" : ""
+                  }`}
                 >
-                  <SelectTrigger className="w-[170px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {DUEDATE_FIELDS.map((f) => (
-                      <SelectItem key={f} value={f}>
-                        {FIELD_LABELS[f]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            ))}
+                  <div className="flex min-w-0 flex-1 items-center gap-3">
+                    <span
+                      className="inline-flex max-w-[140px] shrink-0 items-center truncate rounded-md bg-muted px-2 py-1 font-mono text-[11px] text-foreground/80"
+                      title={header}
+                    >
+                      {header}
+                    </span>
+                    <span
+                      aria-hidden
+                      className="h-px flex-1 border-t border-dashed border-border"
+                    />
+                  </div>
+                  <Select
+                    value={value}
+                    onValueChange={(v) =>
+                      onMappingChange(header, v as DueDateField)
+                    }
+                  >
+                    <SelectTrigger
+                      className={`w-[170px] ${
+                        isSkipped ? "text-muted-foreground" : ""
+                      }`}
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {DUEDATE_FIELDS.map((f) => (
+                        <SelectItem key={f} value={f}>
+                          {FIELD_LABELS[f]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              );
+            })}
           </div>
         </CardContent>
       </Card>
 
-      {/* Preview first 5 rows */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Preview — first 5 rows</CardTitle>
           <CardDescription>
-            Here&apos;s what those rows look like after mapping. Fix the mapping
-            above if something looks off.
+            What those rows look like after mapping. Fix the mapping above if
+            something looks off.
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="divide-y divide-border rounded-md border border-border">
+        <CardContent className="p-0">
+          <div className="divide-y divide-border">
             {previewRows.map((p) => (
-              <div key={p.index} className="px-4 py-3 text-sm">
-                <div className="font-medium">
-                  {p.mapped.clientName ?? "⚠ missing name"}
-                </div>
-                <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                  <span>{p.mapped.entityType ?? "?"}</span>
-                  {p.mapped.homeState ? <span>· {p.mapped.homeState}</span> : null}
-                  {p.mapped.operatingStates?.length ? (
-                    <span>· +{p.mapped.operatingStates.length} states</span>
-                  ) : null}
-                  {p.mapped.contactEmail ? <span>· {p.mapped.contactEmail}</span> : null}
-                </div>
-                {p.warnings.map((w, i) => (
-                  <div key={i} className="mt-1 text-xs text-[var(--color-priority-medium)]">
-                    ⚠ {w}
-                  </div>
-                ))}
-                {p.errors.map((e, i) => (
-                  <div key={i} className="mt-1 text-xs text-destructive">
-                    ✕ {e}
-                  </div>
-                ))}
-              </div>
+              <MappingPreviewRow key={p.index} preview={p} />
             ))}
           </div>
         </CardContent>
@@ -589,37 +510,138 @@ function MappingStep({
   );
 }
 
+function MappingSourceBadge({
+  source,
+  pending,
+}: {
+  source: "ai" | "heuristic" | "preset" | null;
+  pending: boolean;
+}) {
+  if (pending) {
+    return (
+      <div className="inline-flex items-center gap-2 rounded-full bg-muted px-3 py-1.5 text-xs text-muted-foreground">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        Asking AI to suggest mappings…
+      </div>
+    );
+  }
+  if (source === "preset") {
+    return (
+      <div className="inline-flex items-center gap-2 rounded-full bg-[var(--color-priority-done-bg)] px-3 py-1.5 text-xs font-medium text-[var(--color-priority-done)]">
+        <Sparkles className="h-3.5 w-3.5" />
+        File In Time export detected — mapping applied automatically
+      </div>
+    );
+  }
+  if (source === "ai") {
+    return (
+      <div className="inline-flex items-center gap-2 rounded-full bg-[#FBF3DE] px-3 py-1.5 text-xs font-medium text-[#B68C2D]">
+        <Sparkles className="h-3.5 w-3.5" />
+        AI-suggested mapping — review below
+      </div>
+    );
+  }
+  return (
+    <div className="inline-flex items-center gap-2 rounded-full bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground">
+      Heuristic mapping — review below
+    </div>
+  );
+}
+
+function MappingPreviewRow({ preview }: { preview: RowPreview }) {
+  const name = preview.mapped.clientName?.trim();
+  const palette = paletteForClient(name || `row-${preview.index}`);
+  const initials = name ? clientInitials(name) : "?";
+
+  return (
+    <div className="flex items-start gap-3 px-4 py-3">
+      <div
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold"
+        style={{ background: palette.bg, color: palette.text }}
+        aria-hidden
+      >
+        {initials}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="font-medium">
+          {name ?? (
+            <span className="italic text-muted-foreground">missing name</span>
+          )}
+        </div>
+        <div className="mt-1 flex flex-wrap items-center gap-1.5">
+          {preview.mapped.entityType ? (
+            <Badge variant="secondary" className="font-mono text-[10px]">
+              {preview.mapped.entityType}
+            </Badge>
+          ) : null}
+          {preview.mapped.homeState ? (
+            <Badge variant="outline" className="text-[10px]">
+              {preview.mapped.homeState}
+            </Badge>
+          ) : null}
+          {preview.mapped.operatingStates?.length ? (
+            <Badge variant="outline" className="text-[10px]">
+              +{preview.mapped.operatingStates.length} states
+            </Badge>
+          ) : null}
+          {preview.mapped.contactEmail ? (
+            <span className="truncate text-xs text-muted-foreground">
+              {preview.mapped.contactEmail}
+            </span>
+          ) : null}
+        </div>
+        {preview.warnings.map((w, i) => (
+          <div
+            key={i}
+            className="mt-1 text-xs text-[var(--color-priority-medium)]"
+          >
+            ⚠ {w}
+          </div>
+        ))}
+        {preview.errors.map((e, i) => (
+          <div key={i} className="mt-1 text-xs text-destructive">
+            ✕ {e}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function PreviewStep({
   previews,
   onBack,
   onConfirm,
   applying,
-  includeHistorical,
-  onToggleHistorical,
+  onUpdateRow,
 }: {
   previews: RowPreview[];
   onBack: () => void;
   onConfirm: () => void;
   applying: boolean;
-  includeHistorical: boolean;
-  onToggleHistorical: (v: boolean) => void;
+  onUpdateRow: (index: number, mapped: MappedRow) => void;
 }) {
   const valid = previews.filter((p) => p.errors.length === 0);
   const errored = previews.filter((p) => p.errors.length > 0);
   const warned = previews.filter(
     (p) => p.warnings.length > 0 && p.errors.length === 0,
   );
-  const [choiceMade, setChoiceMade] = useState(false);
-  const [showList, setShowList] = useState(false);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
 
-  const pickSkip = () => {
-    onToggleHistorical(false);
-    setChoiceMade(true);
-  };
-  const pickKeep = () => {
-    onToggleHistorical(true);
-    setChoiceMade(true);
-  };
+  // Show problem rows (errors first, then warnings) at the top of the list,
+  // followed by the clean ones, so the user lands on what needs attention.
+  const ordered = [
+    ...errored,
+    ...warned,
+    ...previews.filter(
+      (p) => p.errors.length === 0 && p.warnings.length === 0,
+    ),
+  ];
+
+  const editingRow =
+    editingIndex !== null
+      ? previews.find((p) => p.index === editingIndex) ?? null
+      : null;
 
   return (
     <div className="space-y-5">
@@ -635,224 +657,343 @@ function PreviewStep({
           label="Will be skipped"
           value={errored.length}
           color="urgent"
-          hint="Missing required fields"
+          hint="Click row to fix"
         />
       </div>
 
-      {/* Historical decision — gates the rest of the step */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">
-            Do you want last year&apos;s filings in here too?
+            Review {previews.length} rows
           </CardTitle>
           <CardDescription>
-            Some of your clients had deadlines earlier this year (3/15 S-Corps,
-            4/15 individuals, etc.). Pick one:
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-3 md:grid-cols-2">
-            <ChoiceCard
-              icon={<Sparkles className="h-5 w-5" />}
-              title="Start fresh"
-              subtitle="Recommended"
-              body="Only track upcoming work. Last year's filings aren't brought in."
-              selected={choiceMade && !includeHistorical}
-              onClick={pickSkip}
-            />
-            <ChoiceCard
-              icon={<History className="h-5 w-5" />}
-              title="Include history"
-              body="Past deadlines are added as already-filed. Useful for keeping a record of last year's work."
-              selected={choiceMade && includeHistorical}
-              onClick={pickKeep}
-            />
-          </div>
-          {!choiceMade ? (
-            <p className="mt-4 text-center text-xs text-muted-foreground">
-              Pick one above to continue.
-            </p>
-          ) : null}
-        </CardContent>
-      </Card>
-
-      {choiceMade ? (
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Ready to import</CardTitle>
-          <CardDescription>
-            This creates <strong>{valid.length} clients</strong> +{" "}
-            <strong>{valid.length} tax entities</strong>. Each entity&apos;s
-            deadlines will be auto-generated for the current and next tax year.
-            {includeHistorical ? (
-              <> Past-year deadlines will be included as completed history.</>
+            This will create <strong>{valid.length} clients</strong> +{" "}
+            <strong>{valid.length} tax entities</strong>.
+            {errored.length > 0 ? (
+              <>
+                {" "}
+                Click any <strong>skipped</strong> row to fix it and move it
+                into the import.
+              </>
+            ) : null}
+            {warned.length > 0 ? (
+              <>
+                {" "}
+                Click any <strong>flagged</strong> row to refine it before
+                importing.
+              </>
             ) : null}
           </CardDescription>
         </CardHeader>
-        <CardContent>
-
-          {errored.length > 0 ? (
-            <details className="mb-4">
-              <summary className="cursor-pointer text-sm font-medium text-destructive">
-                {errored.length} rows will be skipped — click to see why
-              </summary>
-              <ul className="mt-2 space-y-1 pl-4 text-xs text-muted-foreground">
-                {errored.slice(0, 20).map((p) => (
-                  <li key={p.index}>
-                    Row {p.index + 1}: {p.errors.join("; ")}
-                  </li>
-                ))}
-                {errored.length > 20 ? (
-                  <li>… and {errored.length - 20} more</li>
-                ) : null}
-              </ul>
-            </details>
-          ) : null}
-
-          <button
-            type="button"
-            onClick={() => setShowList((s) => !s)}
-            className="flex w-full cursor-pointer items-center justify-between rounded-md border border-border px-4 py-2.5 text-sm hover:bg-muted/40"
-          >
-            <span>
-              {showList ? "Hide" : "Show"} {valid.length} clients being imported
-            </span>
-            {showList ? (
-              <ChevronUp className="h-4 w-4 text-muted-foreground" />
-            ) : (
-              <ChevronDown className="h-4 w-4 text-muted-foreground" />
-            )}
-          </button>
-
-          {showList ? (
-            <div className="mt-3 max-h-[360px] overflow-auto divide-y divide-border rounded-md border border-border">
-              {valid.slice(0, 100).map((p) => (
-                <div
+        <CardContent className="p-0">
+          <div className="max-h-[420px] overflow-auto divide-y divide-border">
+            {ordered.slice(0, 200).map((p) => {
+              const editable =
+                p.errors.length > 0 || p.warnings.length > 0;
+              return (
+                <PreviewRow
                   key={p.index}
-                  className="flex items-center justify-between px-4 py-2 text-sm"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="font-medium">{p.mapped.clientName}</span>
-                    <Badge variant="secondary" className="font-mono text-xs">
-                      {p.mapped.entityType}
-                    </Badge>
-                    {p.mapped.homeState ? (
-                      <Badge variant="outline" className="text-xs">
-                        {p.mapped.homeState}
-                      </Badge>
-                    ) : null}
-                  </div>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span
-                        tabIndex={0}
-                        aria-label={
-                          p.warnings.length > 0
-                            ? `Warning: ${p.warnings.join("; ")}`
-                            : "Ready to import"
-                        }
-                        className="inline-flex items-center rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      >
-                        {p.warnings.length > 0 ? (
-                          <AlertTriangle className="h-3.5 w-3.5 text-[var(--color-priority-medium)]" />
-                        ) : (
-                          <CheckCircle2 className="h-3.5 w-3.5 text-[var(--color-priority-done)]" />
-                        )}
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent side="left" className="max-w-xs">
-                      {p.warnings.length > 0 ? (
-                        <ul className="space-y-1">
-                          {p.warnings.map((w, i) => (
-                            <li key={i} className="text-xs">
-                              • {w}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <span className="text-xs">Ready to import</span>
-                      )}
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
-              ))}
-            </div>
-          ) : null}
+                  preview={p}
+                  editable={editable}
+                  onClick={
+                    editable ? () => setEditingIndex(p.index) : undefined
+                  }
+                />
+              );
+            })}
+            {ordered.length > 200 ? (
+              <div className="px-4 py-3 text-xs text-muted-foreground">
+                … and {ordered.length - 200} more (will still be imported, just
+                not listed here for performance).
+              </div>
+            ) : null}
+          </div>
         </CardContent>
       </Card>
-      ) : null}
 
       <div className="flex items-center justify-between gap-2">
         <Button variant="outline" onClick={onBack} disabled={applying}>
           Back
         </Button>
-        {choiceMade ? (
-          <Button onClick={onConfirm} disabled={applying || valid.length === 0}>
-            {applying ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Importing…
-              </>
-            ) : (
-              <>Import {valid.length} clients</>
-            )}
-          </Button>
-        ) : null}
+        <Button onClick={onConfirm} disabled={applying || valid.length === 0}>
+          {applying ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" /> Importing…
+            </>
+          ) : (
+            <>Import {valid.length} clients</>
+          )}
+        </Button>
       </div>
+
+      {editingRow ? (
+        <EditRowDialog
+          row={editingRow}
+          onCancel={() => setEditingIndex(null)}
+          onSave={(next) => {
+            onUpdateRow(editingRow.index, next);
+            setEditingIndex(null);
+          }}
+        />
+      ) : null}
     </div>
   );
 }
 
-function ChoiceCard({
-  icon,
-  title,
-  subtitle,
-  body,
-  selected,
+function PreviewRow({
+  preview,
+  editable,
   onClick,
 }: {
-  icon: React.ReactNode;
-  title: string;
-  subtitle?: string;
-  body: string;
-  selected: boolean;
-  onClick: () => void;
+  preview: RowPreview;
+  editable: boolean;
+  onClick?: () => void;
 }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`group relative flex cursor-pointer flex-col items-start gap-3 rounded-lg border-2 p-5 text-left transition-all ${
-        selected
-          ? "border-primary bg-primary/5 shadow-sm"
-          : "border-border bg-card hover:border-slate-400 hover:bg-muted/30"
-      }`}
-    >
-      {selected ? (
-        <span className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground">
-          <Check className="h-3 w-3" strokeWidth={3} />
+  const hasError = preview.errors.length > 0;
+  const hasWarning = !hasError && preview.warnings.length > 0;
+  const display = preview.mapped.clientName?.trim() || (
+    <span className="text-muted-foreground italic">(no name)</span>
+  );
+
+  const content = (
+    <>
+      <div className="flex min-w-0 flex-1 items-center gap-3">
+        <span className="shrink-0">
+          {hasError ? (
+            <XCircle className="h-3.5 w-3.5 text-[var(--color-priority-urgent)]" />
+          ) : hasWarning ? (
+            <AlertTriangle className="h-3.5 w-3.5 text-[var(--color-priority-medium)]" />
+          ) : (
+            <CheckCircle2 className="h-3.5 w-3.5 text-[var(--color-priority-done)]" />
+          )}
         </span>
+        <span className="truncate font-medium">
+          Row {preview.index + 1} · {display}
+        </span>
+        {preview.mapped.entityType ? (
+          <Badge variant="secondary" className="font-mono text-xs">
+            {preview.mapped.entityType}
+          </Badge>
+        ) : null}
+        {preview.mapped.homeState ? (
+          <Badge variant="outline" className="text-xs">
+            {preview.mapped.homeState}
+          </Badge>
+        ) : null}
+        {hasError ? (
+          <span className="truncate text-xs text-[var(--color-priority-urgent)]">
+            {preview.errors.join("; ")}
+          </span>
+        ) : hasWarning ? (
+          <span className="truncate text-xs text-[var(--color-priority-medium)]">
+            {preview.warnings.join("; ")}
+          </span>
+        ) : null}
+      </div>
+      {editable ? (
+        <Pencil
+          className={cn(
+            "h-3.5 w-3.5 shrink-0 text-muted-foreground",
+            hasWarning && "opacity-50",
+          )}
+        />
       ) : null}
-      <div
-        className={`flex h-10 w-10 items-center justify-center rounded-md ${
-          selected
-            ? "bg-primary text-primary-foreground"
-            : "bg-muted text-foreground/80"
-        }`}
+    </>
+  );
+
+  if (editable) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left text-sm transition-colors hover:bg-muted/40"
       >
-        {icon}
-      </div>
-      <div>
-        <div className="flex items-center gap-2">
-          <span className="font-semibold">{title}</span>
-          {subtitle ? (
-            <span className="rounded bg-[var(--color-priority-done-bg)] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-[var(--color-priority-done)]">
-              {subtitle}
-            </span>
-          ) : null}
+        {content}
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-sm">
+      {content}
+    </div>
+  );
+}
+
+const ENTITY_TYPE_OPTIONS: Array<{ value: EntityType; label: string }> = [
+  { value: "individual", label: "Individual (1040)" },
+  { value: "s_corp", label: "S-Corporation (1120-S)" },
+  { value: "c_corp", label: "C-Corporation (1120)" },
+  { value: "partnership", label: "Partnership (1065)" },
+  { value: "llc", label: "LLC" },
+  { value: "trust", label: "Trust (1041)" },
+  { value: "estate", label: "Estate (1041)" },
+  { value: "nonprofit", label: "Nonprofit (990)" },
+];
+
+function EditRowDialog({
+  row,
+  onCancel,
+  onSave,
+}: {
+  row: RowPreview;
+  onCancel: () => void;
+  onSave: (next: MappedRow) => void;
+}) {
+  const [clientName, setClientName] = useState(row.mapped.clientName ?? "");
+  const [entityName, setEntityName] = useState(row.mapped.entityName ?? "");
+  const [entityType, setEntityType] = useState<EntityType>(
+    row.mapped.entityType ?? "individual",
+  );
+  const [homeState, setHomeState] = useState(row.mapped.homeState ?? "");
+  const [operatingStates, setOperatingStates] = useState(
+    (row.mapped.operatingStates ?? []).join(", "),
+  );
+  const [ein, setEin] = useState(row.mapped.ein ?? "");
+  const [contactEmail, setContactEmail] = useState(
+    row.mapped.contactEmail ?? "",
+  );
+  const [contactPhone, setContactPhone] = useState(
+    row.mapped.contactPhone ?? "",
+  );
+  const [notes, setNotes] = useState(row.mapped.notes ?? "");
+
+  function save() {
+    const opStates = operatingStates
+      .split(",")
+      .map((s) => s.trim().toUpperCase())
+      .filter((s) => /^[A-Z]{2}$/.test(s));
+    onSave({
+      clientName: clientName.trim() || undefined,
+      entityName: entityName.trim() || undefined,
+      entityType,
+      homeState: homeState || undefined,
+      operatingStates: opStates.length > 0 ? opStates : undefined,
+      ein: ein.trim() || undefined,
+      contactEmail: contactEmail.trim() || undefined,
+      contactPhone: contactPhone.trim() || undefined,
+      notes: notes.trim() || undefined,
+    });
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onCancel()}>
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Edit row {row.index + 1}</DialogTitle>
+          <DialogDescription>
+            Fix any missing or wrong fields. Saving re-checks this row against
+            the import rules.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="grid gap-4 py-2 sm:grid-cols-2">
+          <div className="space-y-2 sm:col-span-2">
+            <Label htmlFor="er-clientName">Client name *</Label>
+            <Input
+              id="er-clientName"
+              value={clientName}
+              onChange={(e) => setClientName(e.target.value)}
+              maxLength={200}
+              autoFocus
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="er-entityName">Entity name</Label>
+            <Input
+              id="er-entityName"
+              value={entityName}
+              onChange={(e) => setEntityName(e.target.value)}
+              maxLength={200}
+            />
+            <p className="text-xs text-muted-foreground">
+              Defaults to client name if blank.
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="er-entityType">Entity type</Label>
+            <Select
+              value={entityType}
+              onValueChange={(v) => setEntityType(v as EntityType)}
+            >
+              <SelectTrigger id="er-entityType" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {ENTITY_TYPE_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="er-homeState">Home state</Label>
+            <StateCombobox
+              id="er-homeState"
+              value={homeState || undefined}
+              onChange={(code) => setHomeState(code ?? "")}
+              placeholder="None"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="er-operatingStates">Operating states</Label>
+            <Input
+              id="er-operatingStates"
+              value={operatingStates}
+              onChange={(e) => setOperatingStates(e.target.value)}
+              placeholder="CA, NY, TX"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="er-ein">EIN / SSN</Label>
+            <Input
+              id="er-ein"
+              value={ein}
+              onChange={(e) => setEin(e.target.value)}
+              maxLength={20}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="er-contactEmail">Contact email</Label>
+            <Input
+              id="er-contactEmail"
+              type="email"
+              value={contactEmail}
+              onChange={(e) => setContactEmail(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="er-contactPhone">Contact phone</Label>
+            <Input
+              id="er-contactPhone"
+              type="tel"
+              value={contactPhone}
+              onChange={(e) => setContactPhone(e.target.value)}
+              maxLength={50}
+            />
+          </div>
+          <div className="space-y-2 sm:col-span-2">
+            <Label htmlFor="er-notes">Notes</Label>
+            <Textarea
+              id="er-notes"
+              rows={2}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              maxLength={2000}
+            />
+          </div>
         </div>
-        <p className="mt-1 text-sm text-muted-foreground">{body}</p>
-      </div>
-    </button>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button onClick={save}>Save row</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

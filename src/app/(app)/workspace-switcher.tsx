@@ -69,7 +69,7 @@ export function WorkspaceSwitcher({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        className="flex w-full cursor-pointer items-center gap-2 rounded-xl px-1.5 py-0.5 text-left transition-colors hover:bg-white/50 disabled:opacity-60"
+        className="flex w-full items-center gap-2 rounded-xl px-1.5 py-0.5 text-left transition-colors hover:bg-white/50 disabled:opacity-60"
         disabled={pending}
         aria-label="Switch workspace"
       >

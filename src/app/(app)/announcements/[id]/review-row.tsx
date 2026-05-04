@@ -199,7 +199,7 @@ function ClientLevelRow({
         aria-label={
           optimisticAcked ? "Mark as not reviewed" : "Mark as reviewed"
         }
-        className="shrink-0 cursor-pointer disabled:cursor-not-allowed"
+        className="shrink-0 disabled:cursor-not-allowed"
       >
         {pending ? (
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -356,7 +356,7 @@ function DeadlineRow({
                   <Button type="button" size="sm" disabled={pending}>
                     {pending ? (
                       <>
-                        <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+                        <Loader2 className="h-3 w-3 animate-spin" />
                         Applying…
                       </>
                     ) : (
@@ -449,7 +449,7 @@ function DeadlineRow({
               >
                 {pending ? (
                   <>
-                    <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+                    <Loader2 className="h-3 w-3 animate-spin" />
                     Applying…
                   </>
                 ) : (

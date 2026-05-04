@@ -188,8 +188,7 @@ function ProfileSection() {
       <CardHeader>
         <CardTitle className="text-base">Profile</CardTitle>
         <CardDescription>
-          Managed by Clerk — change your email, password, or sign-in methods
-          here.
+          Email, password, sign-in methods.
         </CardDescription>
       </CardHeader>
       <CardContent className="overflow-hidden rounded-md">

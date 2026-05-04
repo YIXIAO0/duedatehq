@@ -331,14 +331,18 @@ export async function removeMember(params: {
 }
 
 // ---------------------------------------------------------------------------
-// Change member role — owner-only in V1.
+// Change member role — strict-tier hierarchy.
 //
 // Rules:
-//   - Only owners can change roles (admins promoting/demoting feels
-//     too much like delegated power for a lightweight model — punt to V2)
-//   - Demoting an owner is allowed unless they're the last owner
-//   - Promoting to owner creates a co-owner; multiple owners are fine
-//   - Self-demote is allowed under the same last-owner guard
+//   - Self-edit blocked. An owner who wants to leave demotes via
+//     "Remove member" / "Leave workspace" instead, which has its own
+//     last-owner guard.
+//   - Actor must strictly outrank the target's CURRENT role. Admins
+//     can't touch other admins or owners; owners can't touch other
+//     owners.
+//   - Actor must strictly outrank the NEW role. In particular `owner`
+//     can't be assigned via this flow at all — promoting a member to
+//     owner is a deliberate ownership-transfer feature for V2.
 //
 // Note: this is the only path that flips the `role` column outside of
 // invite-redemption. Both go through audit so the org's role history
@@ -359,6 +363,10 @@ export class ChangeRoleError extends Error {
     this.name = "ChangeRoleError";
   }
 }
+
+/** Strict-tier rank: owner > admin > member. Used by both this service
+ *  and the UI's `canChangeRole` helper to keep enforcement aligned. */
+const ROLE_RANK = { owner: 3, admin: 2, member: 1 } as const;
 
 export async function changeMemberRole(params: {
   orgId: string;
@@ -384,12 +392,6 @@ export async function changeMemberRole(params: {
       "actor_not_in_org",
     );
   }
-  if (actor.role !== "owner") {
-    throw new ChangeRoleError(
-      "Only owners can change roles",
-      "forbidden",
-    );
-  }
 
   const [target] = await db
     .select()
@@ -411,20 +413,34 @@ export async function changeMemberRole(params: {
     return;
   }
 
-  // Demoting an owner: confirm at least one other owner remains.
-  if (target.role === "owner" && params.newRole !== "owner") {
-    const [{ count }] = await db
-      .select({ count: sql<number>`COUNT(*)::int` })
-      .from(memberships)
-      .where(
-        and(eq(memberships.orgId, params.orgId), eq(memberships.role, "owner")),
-      );
-    if (count <= 1) {
-      throw new ChangeRoleError(
-        "Cannot demote the last owner. Promote another member to owner first.",
-        "last_owner",
-      );
-    }
+  // Hierarchy enforcement (v1):
+  //   1. Self-edit blocked — prevents accidental self-demotion that
+  //      could orphan the workspace.
+  //   2. Actor must strictly outrank the target's CURRENT role —
+  //      admins can't touch other admins or owners, owners can't touch
+  //      other owners.
+  //   3. Actor must strictly outrank the target's NEW role — no one
+  //      can promote anyone to their own tier or above. In particular
+  //      `owner` can't be assigned via this flow at all (transferring
+  //      ownership is a separate, more deliberate v2 feature).
+  if (target.userId === params.actorUserId) {
+    throw new ChangeRoleError(
+      "You can't change your own role.",
+      "forbidden",
+    );
+  }
+  const actorRank = ROLE_RANK[actor.role];
+  if (actorRank <= ROLE_RANK[target.role]) {
+    throw new ChangeRoleError(
+      "You don't have permission to edit this member.",
+      "forbidden",
+    );
+  }
+  if (actorRank <= ROLE_RANK[params.newRole]) {
+    throw new ChangeRoleError(
+      "You can't assign a role at or above your own.",
+      "forbidden",
+    );
   }
 
   await db

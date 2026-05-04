@@ -79,7 +79,7 @@ export function NotificationsBellClient({
             "hidden md:flex absolute top-4 right-4 z-30",
             "w-8 h-8 rounded-full bg-card shadow-card",
             "items-center justify-center text-foreground/70",
-            "hover:shadow-md transition-shadow cursor-pointer",
+            "hover:shadow-md transition-shadow",
             // When open, give the bell a soft red ring so the trigger
             // anchor reads as "active" — matches Variant E mockup.
             open ? "ring-[3px] ring-[var(--priority-urgent)]/15" : "",
@@ -109,7 +109,7 @@ export function NotificationsBellClient({
             type="button"
             onClick={handleMarkAllRead}
             disabled={!hasUnread || pending}
-            className="text-[11px] font-medium text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+            className="text-[11px] font-medium text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Mark all read
           </button>

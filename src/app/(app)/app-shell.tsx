@@ -27,7 +27,7 @@ export function SidebarCollapseButton() {
     <button
       type="button"
       onClick={toggle}
-      className="w-7 h-7 rounded-full bg-white/50 hover:bg-white flex items-center justify-center text-foreground/70 transition-colors cursor-pointer"
+      className="w-7 h-7 rounded-full bg-white/50 hover:bg-white flex items-center justify-center text-foreground/70 transition-colors"
       aria-label="Collapse sidebar"
     >
       <PanelLeftClose className="h-3.5 w-3.5" />

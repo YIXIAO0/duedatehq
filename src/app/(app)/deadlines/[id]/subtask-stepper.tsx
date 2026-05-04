@@ -153,7 +153,7 @@ function AddStageTrigger() {
   return (
     <button
       type="button"
-      className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2.5 py-1 text-xs text-muted-foreground cursor-pointer hover:bg-foreground/5 hover:text-foreground transition-colors"
+      className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2.5 py-1 text-xs text-muted-foreground hover:bg-foreground/5 hover:text-foreground transition-colors"
       aria-label="Add stage"
     >
       <Plus className="h-3 w-3" aria-hidden /> Add stage
@@ -221,7 +221,7 @@ function Step({
         trigger={
           <button
             type="button"
-            className={`w-7 h-7 rounded-full border-2 flex items-center justify-center text-xs font-semibold cursor-pointer transition-shadow hover:shadow-sm ${stateClass}`}
+            className={`w-7 h-7 rounded-full border-2 flex items-center justify-center text-xs font-semibold transition-shadow hover:shadow-sm ${stateClass}`}
             aria-label={`${subtask.label} — click to edit`}
           >
             {isDone ? (
@@ -362,7 +362,7 @@ function NodeMenu({
               type="button"
               onClick={handleToggle}
               disabled={pending}
-              className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-foreground/5 cursor-pointer text-left"
+              className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-foreground/5 text-left"
             >
               {pending ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -376,7 +376,7 @@ function NodeMenu({
             <button
               type="button"
               onClick={() => setEditing(true)}
-              className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-foreground/5 cursor-pointer text-left"
+              className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-foreground/5 text-left"
             >
               <Pencil className="h-3.5 w-3.5" /> Edit label &amp; date
             </button>
@@ -488,7 +488,7 @@ function DeleteStageButton({
       <AlertDialogTrigger asChild>
         <button
           type="button"
-          className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-foreground/5 cursor-pointer text-left text-[var(--color-priority-urgent)]"
+          className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-foreground/5 text-left text-[var(--color-priority-urgent)]"
         >
           <Trash2 className="h-3.5 w-3.5" /> Delete stage
         </button>

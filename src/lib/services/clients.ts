@@ -369,6 +369,13 @@ export type ClientWithEntityCount = {
    */
   primaryEntityType: string | null;
   primaryHomeState: string | null;
+  /**
+   * Every state code touched by any of this client's active entities —
+   * union of `home_state` and each entity's `operating_states`. Drives
+   * the "Covered states" filter on the clients list. Empty array when
+   * the client has no entities yet.
+   */
+  coveredStates: string[];
 };
 
 export async function listClientsWithEntityCount(
@@ -401,6 +408,7 @@ export async function listClientsWithEntityCount(
     urgent_count: number;
     primary_entity_type: string | null;
     primary_home_state: string | null;
+    covered_states: string[] | null;
   }>(sql`
     SELECT c.id,
            c.name,
@@ -458,7 +466,29 @@ export async function listClientsWithEntityCount(
                AND e6.archived_at IS NULL
              ORDER BY e6.created_at ASC
              LIMIT 1
-           ) AS primary_home_state
+           ) AS primary_home_state,
+           -- Union of home_state and operating_states across every
+           -- non-archived entity of the client. Powers "Covered states"
+           -- filtering on the list page. NULL home_states are filtered
+           -- out so we don't end up with [null] in the array.
+           COALESCE(
+             (
+               SELECT array_agg(DISTINCT s ORDER BY s)
+               FROM (
+                 SELECT e7.home_state AS s
+                 FROM entities e7
+                 WHERE e7.client_id = c.id
+                   AND e7.archived_at IS NULL
+                   AND e7.home_state IS NOT NULL
+                 UNION
+                 SELECT jsonb_array_elements_text(e8.operating_states) AS s
+                 FROM entities e8
+                 WHERE e8.client_id = c.id
+                   AND e8.archived_at IS NULL
+               ) AS all_states
+             ),
+             ARRAY[]::text[]
+           ) AS covered_states
     FROM clients c
     WHERE c.org_id = ${parsed.orgId}
       ${archivedFilter}
@@ -478,5 +508,6 @@ export async function listClientsWithEntityCount(
     urgentCount: Number(r.urgent_count),
     primaryEntityType: r.primary_entity_type,
     primaryHomeState: r.primary_home_state,
+    coveredStates: r.covered_states ?? [],
   }));
 }

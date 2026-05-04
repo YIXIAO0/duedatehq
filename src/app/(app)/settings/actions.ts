@@ -2,10 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { getCurrentContext } from "@/lib/auth/current-org";
 import { getDb } from "@/lib/db";
-import { organizations } from "@/lib/db/schema";
+import { memberships, organizations } from "@/lib/db/schema";
 import { recordAudit } from "@/lib/services/audit";
 import {
   generateAndSendWeeklyDigest,
@@ -121,10 +121,12 @@ export async function revokeIcalTokenAction(): Promise<void> {
 // ---------------------------------------------------------------------------
 // Team — invite + revoke
 //
-// Permission: V1 doesn't gate by role yet (any member can invite). The
-// action runs scoped to the caller's current org, so cross-tenant abuse
-// is structurally impossible. Role gating goes in the next iteration once
-// we have admins distinct from members in real accounts.
+// Permission: strict-tier hierarchy.
+//   - Owners can invite admin or member.
+//   - Admins can invite member only.
+//   - Members can't invite at all.
+// Action is scoped to the caller's current org so cross-tenant abuse is
+// structurally impossible regardless.
 // ---------------------------------------------------------------------------
 
 const InviteFormSchema = z.object({
@@ -148,6 +150,30 @@ export async function inviteTeamMemberAction(
     return {
       ok: false,
       message: parsed.error.issues[0]?.message ?? "Invalid input",
+    };
+  }
+
+  // Hierarchy enforcement — same rules as `changeMemberRoleAction`.
+  // Members can't invite at all; admins can only invite members.
+  const db = getDb();
+  const [viewer] = await db
+    .select({ role: memberships.role })
+    .from(memberships)
+    .where(
+      and(
+        eq(memberships.orgId, ctx.organization.id),
+        eq(memberships.userId, ctx.user.id),
+      ),
+    )
+    .limit(1);
+  const viewerRole = viewer?.role ?? "member";
+  if (viewerRole === "member") {
+    return { ok: false, message: "You don't have permission to invite." };
+  }
+  if (viewerRole === "admin" && parsed.data.role === "admin") {
+    return {
+      ok: false,
+      message: "Admins can only invite members.",
     };
   }
 

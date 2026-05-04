@@ -121,7 +121,7 @@ export function NotesPillSlot() {
     <button
       type="button"
       onClick={ctx.startEdit}
-      className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2.5 py-1 text-xs text-muted-foreground cursor-pointer hover:bg-foreground/5 hover:text-foreground transition-colors"
+      className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2.5 py-1 text-xs text-muted-foreground hover:bg-foreground/5 hover:text-foreground transition-colors"
       aria-label="Add note"
     >
       <Plus className="h-3 w-3" aria-hidden />
@@ -195,7 +195,7 @@ export function NotesSectionSlot() {
         <button
           type="button"
           onClick={ctx.toggleCollapsed}
-          className="w-full flex items-center justify-between gap-2 text-left cursor-pointer group"
+          className="w-full flex items-center justify-between gap-2 text-left group"
           aria-label="Expand notes"
         >
           <div className="flex items-center gap-2">
@@ -225,7 +225,7 @@ export function NotesSectionSlot() {
         <button
           type="button"
           onClick={ctx.toggleCollapsed}
-          className="flex items-center gap-2 cursor-pointer hover:opacity-70 transition-opacity"
+          className="flex items-center gap-2 hover:opacity-70 transition-opacity"
           aria-label="Collapse notes"
         >
           <ChevronDown
@@ -239,7 +239,7 @@ export function NotesSectionSlot() {
         <button
           type="button"
           onClick={ctx.startEdit}
-          className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2.5 py-1 text-xs text-muted-foreground cursor-pointer hover:bg-foreground/5 hover:text-foreground transition-colors"
+          className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2.5 py-1 text-xs text-muted-foreground hover:bg-foreground/5 hover:text-foreground transition-colors"
           aria-label="Edit notes"
         >
           <NotebookPen className="h-3 w-3" aria-hidden />

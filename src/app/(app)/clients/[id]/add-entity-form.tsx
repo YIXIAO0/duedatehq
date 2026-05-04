@@ -14,6 +14,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { createEntityAction } from "../actions";
 import type { ServiceGroup } from "@/lib/db/schema";
+import { StateCombobox } from "@/components/ui/state-combobox";
 
 const ENTITY_TYPE_OPTIONS = [
   { value: "individual", label: "Individual (1040)" },
@@ -24,15 +25,6 @@ const ENTITY_TYPE_OPTIONS = [
   { value: "trust", label: "Trust (1041)" },
   { value: "estate", label: "Estate (1041)" },
   { value: "nonprofit", label: "Nonprofit (990)" },
-];
-
-// Supported states for MVP (matches seed data coverage)
-const SUPPORTED_STATES = [
-  { value: "CA", label: "California" },
-  { value: "NY", label: "New York" },
-  { value: "TX", label: "Texas" },
-  { value: "DE", label: "Delaware" },
-  { value: "NJ", label: "New Jersey" },
 ];
 
 const FYE_OPTIONS = [
@@ -61,6 +53,9 @@ export function AddEntityForm({
   // to entity-type changes — picking "C-Corp" auto-checks "C-Corp Tax
   // Filing", picking "Individual" swaps to "Personal Tax Filing".
   const [entityType, setEntityType] = useState("individual");
+  // Combobox is controlled; hidden input below carries the value into
+  // the form action's FormData.
+  const [homeState, setHomeState] = useState<string | undefined>(undefined);
 
   // Defaults for the currently-selected type. Memoized so the effect
   // below has a stable dependency.
@@ -147,22 +142,13 @@ export function AddEntityForm({
           <div className="grid gap-5 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="homeState">Home / domicile state</Label>
-              <Select name="homeState">
-                <SelectTrigger id="homeState" className="w-full">
-                  <SelectValue placeholder="Select home state (optional)" />
-                </SelectTrigger>
-                <SelectContent>
-                  {SUPPORTED_STATES.map((s) => (
-                    <SelectItem key={s.value} value={s.value}>
-                      {s.value} — {s.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                For individuals, this is where they live. For entities, where
-                they&apos;re organized.
-              </p>
+              <input type="hidden" name="homeState" value={homeState ?? ""} />
+              <StateCombobox
+                id="homeState"
+                value={homeState}
+                onChange={setHomeState}
+                placeholder="Select home state (optional)"
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="operatingStates">Other operating states</Label>
@@ -172,9 +158,6 @@ export function AddEntityForm({
                 placeholder="CA, NY, TX"
                 maxLength={200}
               />
-              <p className="text-xs text-muted-foreground">
-                Comma-separated 2-letter codes. Leave blank if single-state.
-              </p>
             </div>
           </div>
 
@@ -187,9 +170,6 @@ export function AddEntityForm({
                 placeholder="XX-XXXXXXX"
                 maxLength={20}
               />
-              <p className="text-xs text-muted-foreground">
-                Not required — used only for your reference.
-              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="fiscalYearEnd">Fiscal year end</Label>
@@ -206,9 +186,7 @@ export function AddEntityForm({
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                Drives 1120 / 1120-S / 1065 / 1041 / 990 due dates. Most
-                entities are calendar year — change only if this client
-                explicitly elected otherwise.
+                Calendar year is standard.
               </p>
             </div>
           </div>
@@ -220,9 +198,7 @@ export function AddEntityForm({
           <div className="space-y-2 border-t border-border pt-5">
             <Label>Services</Label>
             <p className="text-xs text-muted-foreground">
-              Pick which filings to track. Defaults are pre-checked
-              based on entity type — add more for clients with payroll,
-              retirement plans, or special elections.
+              Defaults checked based on entity type.
             </p>
             <div className="grid gap-2 pt-2 sm:grid-cols-2">
               {services.map((s) => {
@@ -233,7 +209,7 @@ export function AddEntityForm({
                 return (
                   <label
                     key={s.id}
-                    className={`flex cursor-pointer items-start gap-2.5 rounded-md border px-3 py-2 transition-colors ${
+                    className={`flex items-start gap-2.5 rounded-md border px-3 py-2 transition-colors ${
                       checked
                         ? "border-primary/40 bg-primary/5"
                         : "border-border bg-background hover:bg-muted/30"

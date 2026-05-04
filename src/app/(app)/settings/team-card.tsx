@@ -98,7 +98,9 @@ export function TeamCard({
             deadlines in this org.
           </p>
         </div>
-        <InviteDialog appUrl={appUrl} />
+        {canInvite(viewerRole) ? (
+          <InviteDialog appUrl={appUrl} viewerRole={viewerRole} />
+        ) : null}
       </div>
 
       <MembersList members={members} viewerRole={viewerRole} />
@@ -124,6 +126,43 @@ function canRemove(args: {
   if (args.viewerRole === "owner") return true;
   if (args.viewerRole === "admin") return args.targetRole === "member";
   return false;
+}
+
+/** Mirrors the server-side hierarchy rule in `services/team.ts` —
+ *  actor must strictly outrank the target. Self-edit is always blocked. */
+const ROLE_RANK: Record<"owner" | "admin" | "member", number> = {
+  owner: 3,
+  admin: 2,
+  member: 1,
+};
+
+/** Roles a given viewer is allowed to assign — strictly below their own.
+ *  Owner can assign admin/member, admin can assign member, member can't
+ *  assign anything. Returned in display order (highest first). */
+function assignableRoles(
+  viewerRole: "owner" | "admin" | "member",
+): Array<"owner" | "admin" | "member"> {
+  if (viewerRole === "owner") return ["admin", "member"];
+  if (viewerRole === "admin") return ["member"];
+  return [];
+}
+
+function canChangeRole(args: {
+  viewerRole: "owner" | "admin" | "member";
+  targetRole: "owner" | "admin" | "member";
+  isSelf: boolean;
+}): boolean {
+  if (args.isSelf) return false;
+  if (ROLE_RANK[args.viewerRole] <= ROLE_RANK[args.targetRole]) return false;
+  // Hide the menu when the viewer has no role they could assign that
+  // would actually change the target's role. Without this, an admin
+  // looking at a member sees a "Change role" item whose only option is
+  // "Member" (current) — wasted click.
+  return assignableRoles(args.viewerRole).some((r) => r !== args.targetRole);
+}
+
+function canInvite(viewerRole: "owner" | "admin" | "member"): boolean {
+  return viewerRole === "owner" || viewerRole === "admin";
 }
 
 // Avatar palette — soft tints that hold up against the muted Salesforce
@@ -176,7 +215,11 @@ function MembersList({
           targetRole: m.role,
           isSelf: m.isCurrentUser,
         });
-        const showRoleChange = viewerRole === "owner";
+        const showRoleChange = canChangeRole({
+          viewerRole,
+          targetRole: m.role,
+          isSelf: m.isCurrentUser,
+        });
         const showMenu = showRemove || showRoleChange;
         const palette = avatarColor(m.email);
         return (
@@ -208,6 +251,7 @@ function MembersList({
             {showMenu ? (
               <MemberRowMenu
                 member={m}
+                viewerRole={viewerRole}
                 canRemove={showRemove}
                 canChangeRole={showRoleChange}
               />
@@ -221,10 +265,12 @@ function MembersList({
 
 function MemberRowMenu({
   member,
+  viewerRole,
   canRemove,
   canChangeRole,
 }: {
   member: TeamMemberView;
+  viewerRole: "owner" | "admin" | "member";
   canRemove: boolean;
   canChangeRole: boolean;
 }) {
@@ -239,7 +285,7 @@ function MemberRowMenu({
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            className="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
             aria-label={`Actions for ${member.fullName ?? member.email}`}
           >
             <MoreHorizontal className="h-4 w-4" />
@@ -248,7 +294,7 @@ function MemberRowMenu({
         <DropdownMenuContent align="end">
           {canChangeRole ? (
             <DropdownMenuItem onClick={() => setRoleOpen(true)}>
-              <Shield className="mr-2 h-4 w-4" /> Change role
+              <Shield className="h-4 w-4" /> Change role
             </DropdownMenuItem>
           ) : null}
           {canRemove ? (
@@ -257,9 +303,9 @@ function MemberRowMenu({
               onClick={() => setRemoveOpen(true)}
             >
               {isSelf ? (
-                <LogOut className="mr-2 h-4 w-4" />
+                <LogOut className="h-4 w-4" />
               ) : (
-                <UserMinus className="mr-2 h-4 w-4" />
+                <UserMinus className="h-4 w-4" />
               )}
               {isSelf ? "Leave workspace" : "Remove member"}
             </DropdownMenuItem>
@@ -278,6 +324,7 @@ function MemberRowMenu({
       {canChangeRole ? (
         <ChangeRoleDialog
           member={member}
+          viewerRole={viewerRole}
           open={roleOpen}
           onOpenChange={setRoleOpen}
         />
@@ -359,20 +406,31 @@ const ROLE_DESCRIPTIONS: Record<
   "owner" | "admin" | "member",
   string
 > = {
-  owner: "Full control — manage members, change roles, delete workspace.",
-  admin: "Manage team members and invitations. Cannot demote owners.",
-  member: "View and edit clients, entities, deadlines.",
+  owner: "Full control over the workspace.",
+  admin: "Manage members and invitations.",
+  member: "View and edit workspace data.",
 };
 
 function ChangeRoleDialog({
   member,
+  viewerRole,
   open,
   onOpenChange,
 }: {
   member: TeamMemberView;
+  viewerRole: "owner" | "admin" | "member";
   open: boolean;
   onOpenChange: (o: boolean) => void;
 }) {
+  // Roles this viewer is allowed to assign — strictly below their own.
+  // The current target role is included in the dropdown for visual
+  // consistency (showing "Member" already-selected for a member target),
+  // even when it'd be a no-op assignment.
+  const allowedRoles = assignableRoles(viewerRole);
+  const roleOptions = allowedRoles.includes(member.role)
+    ? allowedRoles
+    : [member.role, ...allowedRoles];
+
   const [newRole, setNewRole] = useState<"owner" | "admin" | "member">(
     member.role,
   );
@@ -415,28 +473,28 @@ function ChangeRoleDialog({
           <DialogTitle>
             Change role for {member.fullName ?? member.email}
           </DialogTitle>
-          <DialogDescription>
-            Roles control who can manage members and invitations. Workspace
-            data (clients / entities / deadlines) stays visible to everyone.
-          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-3">
-          <div className="space-y-2">
-            <Label htmlFor="member-role">Role</Label>
+          <div className="flex items-center gap-3">
+            <Label htmlFor="member-role" className="w-12 shrink-0">
+              Role
+            </Label>
             <Select
               value={newRole}
               onValueChange={(v) =>
                 setNewRole(v as "owner" | "admin" | "member")
               }
             >
-              <SelectTrigger id="member-role">
+              <SelectTrigger id="member-role" className="w-[140px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="owner">Owner</SelectItem>
-                <SelectItem value="admin">Admin</SelectItem>
-                <SelectItem value="member">Member</SelectItem>
+                {roleOptions.map((r) => (
+                  <SelectItem key={r} value={r}>
+                    {r === "owner" ? "Owner" : r === "admin" ? "Admin" : "Member"}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
@@ -464,9 +522,9 @@ function ChangeRoleDialog({
             type="button"
             onClick={handleSave}
             disabled={pending || newRole === member.role}
-            className="cursor-pointer"
+            className=""
           >
-            {pending ? "Saving…" : "Save role"}
+            {pending ? "Saving…" : "Save"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -520,16 +578,16 @@ function PendingRow({ invite }: { invite: PendingInviteView }) {
         type="button"
         variant="outline"
         size="sm"
-        className="shrink-0 cursor-pointer"
+        className="shrink-0"
         onClick={copy}
       >
         {copied ? (
           <>
-            <Check className="mr-1.5 h-3.5 w-3.5" /> Copied
+            <Check className="h-3.5 w-3.5" /> Copied
           </>
         ) : (
           <>
-            <Copy className="mr-1.5 h-3.5 w-3.5" /> Copy link
+            <Copy className="h-3.5 w-3.5" /> Copy link
           </>
         )}
       </Button>
@@ -537,7 +595,7 @@ function PendingRow({ invite }: { invite: PendingInviteView }) {
         type="button"
         variant="ghost"
         size="sm"
-        className="shrink-0 cursor-pointer text-muted-foreground hover:text-destructive"
+        className="shrink-0 text-muted-foreground hover:text-destructive"
         onClick={revoke}
         disabled={pending}
         aria-label="Revoke invitation"
@@ -548,10 +606,23 @@ function PendingRow({ invite }: { invite: PendingInviteView }) {
   );
 }
 
-function InviteDialog({ appUrl }: { appUrl: string }) {
+function InviteDialog({
+  appUrl,
+  viewerRole,
+}: {
+  appUrl: string;
+  viewerRole: "owner" | "admin" | "member";
+}) {
+  // Roles this viewer is allowed to invite — admins can only invite
+  // members; owners can invite admin or member. Server enforces too.
+  const inviteOptions = (assignableRoles(viewerRole).filter(
+    (r) => r === "admin" || r === "member",
+  ) as Array<"admin" | "member">);
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<"admin" | "member">("member");
+  const [role, setRole] = useState<"admin" | "member">(
+    inviteOptions[inviteOptions.length - 1] ?? "member",
+  );
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [issuedToken, setIssuedToken] = useState<string | null>(null);
@@ -602,8 +673,8 @@ function InviteDialog({ appUrl }: { appUrl: string }) {
       }}
     >
       <DialogTrigger asChild>
-        <Button size="sm" className="cursor-pointer shrink-0">
-          <UserPlus className="mr-1.5 h-4 w-4" /> Invite teammate
+        <Button size="sm" className="shrink-0">
+          <UserPlus className="h-4 w-4" /> Invite teammate
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-lg">
@@ -612,9 +683,7 @@ function InviteDialog({ appUrl }: { appUrl: string }) {
             <DialogHeader>
               <DialogTitle>Invite link ready</DialogTitle>
               <DialogDescription>
-                Send this link to <strong>{issuedEmail}</strong>. They&apos;ll
-                land on a sign-up page that attaches them to this team. The
-                link expires in 7 days.
+                Send to <strong>{issuedEmail}</strong>. Expires in 7 days.
               </DialogDescription>
             </DialogHeader>
             <div className="rounded-md border border-border bg-muted/40 p-3 font-mono text-xs break-all">
@@ -633,15 +702,15 @@ function InviteDialog({ appUrl }: { appUrl: string }) {
               <Button
                 type="button"
                 onClick={copy}
-                className="cursor-pointer"
+                className=""
               >
                 {copied ? (
                   <>
-                    <Check className="mr-1.5 h-4 w-4" /> Copied
+                    <Check className="h-4 w-4" /> Copied
                   </>
                 ) : (
                   <>
-                    <Copy className="mr-1.5 h-4 w-4" /> Copy link
+                    <Copy className="h-4 w-4" /> Copy link
                   </>
                 )}
               </Button>
@@ -651,10 +720,6 @@ function InviteDialog({ appUrl }: { appUrl: string }) {
           <form action={submit}>
             <DialogHeader>
               <DialogTitle>Invite a teammate</DialogTitle>
-              <DialogDescription>
-                Generate an invite link to share with someone on your team.
-                They&apos;ll sign up and join this org automatically.
-              </DialogDescription>
             </DialogHeader>
 
             <div className="space-y-4 py-4">
@@ -681,19 +746,19 @@ function InviteDialog({ appUrl }: { appUrl: string }) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="member">
-                      Member — can view and edit
-                    </SelectItem>
-                    <SelectItem value="admin">
-                      Admin — also manages team
-                    </SelectItem>
+                    {inviteOptions.includes("member") ? (
+                      <SelectItem value="member">
+                        Member — view and edit workspace data
+                      </SelectItem>
+                    ) : null}
+                    {inviteOptions.includes("admin") ? (
+                      <SelectItem value="admin">
+                        Admin — also manage members
+                      </SelectItem>
+                    ) : null}
                   </SelectContent>
                 </Select>
                 <input type="hidden" name="role" value={role} />
-                <p className="text-xs text-muted-foreground">
-                  Both roles see and edit everything in this beta. Role
-                  permissions land in a future release.
-                </p>
               </div>
 
               {error ? (
@@ -714,7 +779,7 @@ function InviteDialog({ appUrl }: { appUrl: string }) {
               <Button
                 type="submit"
                 disabled={pending || !email.trim()}
-                className="cursor-pointer"
+                className=""
               >
                 {pending ? "Generating…" : "Generate invite link"}
               </Button>

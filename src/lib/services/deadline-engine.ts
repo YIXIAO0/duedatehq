@@ -22,6 +22,7 @@ import { getDb } from "@/lib/db";
 import {
   deadlineInstances,
   deadlineRules,
+  entityElections,
   entityServices,
   serviceGroupRules,
   type DeadlineRule,
@@ -172,6 +173,21 @@ async function selectApplicableRules(
   for (const state of entity.operatingStates ?? []) jurisdictions.add(state);
   const jurisdictionList = Array.from(jurisdictions);
 
+  // Election gate — rules with requires_election set (e.g. "pte") only
+  // surface when the entity has a matching opt-in row in entity_elections
+  // for the same kind + jurisdiction. NULL requires_election → always
+  // surface. Used so PTE deadlines don't clutter every CA LLC's list
+  // until the CPA explicitly marks the election.
+  const electionFilter = or(
+    isNull(deadlineRules.requiresElection),
+    sql`EXISTS (
+      SELECT 1 FROM ${entityElections} ee
+      WHERE ee.entity_id = ${entity.id}
+        AND ee.kind = ${deadlineRules.requiresElection}
+        AND ee.jurisdiction_code = ${deadlineRules.jurisdictionCode}
+    )`,
+  );
+
   // Look up active services for this entity. We do this first so we
   // can decide which path to take.
   const activeServices = await db
@@ -224,6 +240,7 @@ async function selectApplicableRules(
             isNull(deadlineRules.effectiveTo),
             sql`${deadlineRules.effectiveTo} > ${today}`,
           ),
+          electionFilter,
         ),
       );
     return rows as DeadlineRule[];
@@ -244,6 +261,7 @@ async function selectApplicableRules(
           isNull(deadlineRules.effectiveTo),
           sql`${deadlineRules.effectiveTo} > ${today}`,
         ),
+        electionFilter,
       ),
     );
 

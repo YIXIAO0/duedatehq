@@ -29,7 +29,7 @@ export function HistoryList({ children }: { children: ReactNode }) {
           onClick={() => setExpanded((v) => !v)}
           aria-expanded={expanded}
           aria-label={expanded ? "Collapse history" : "Expand history"}
-          className="group flex w-full cursor-pointer items-center justify-between gap-2 text-left"
+          className="group flex w-full items-center justify-between gap-2 text-left"
         >
           <CardTitle className="text-base">History</CardTitle>
           {expanded ? (

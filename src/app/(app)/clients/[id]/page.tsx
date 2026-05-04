@@ -51,6 +51,11 @@ import { ClientActions } from "./client-actions";
 import { ContactsSection } from "./contacts-section";
 import { EntityActions } from "./entity-actions";
 import { DeadlinesCollapse } from "./deadlines-collapse";
+import { PteElectionPills } from "./pte-election-pills";
+import {
+  eligiblePteJurisdictionsForEntity,
+  listElectionsForEntity,
+} from "@/lib/services/entity-elections";
 import {
   paletteForClient,
   clientInitials,
@@ -151,7 +156,7 @@ async function ClientDetail({
     <div className="space-y-8">
       <Button asChild variant="ghost" size="sm" className="-ml-3">
         <Link href={backHref}>
-          <ArrowLeft className="mr-2 h-4 w-4" /> {backLabel}
+          <ArrowLeft className="h-4 w-4" /> {backLabel}
         </Link>
       </Button>
 
@@ -176,7 +181,7 @@ async function ClientDetail({
                 <PopoverTrigger asChild>
                   <button
                     type="button"
-                    className="inline-flex cursor-pointer items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+                    className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
                   >
                     <StickyNote className="h-3.5 w-3.5" aria-hidden />
                     <span className="underline decoration-dotted underline-offset-4">
@@ -209,10 +214,6 @@ async function ClientDetail({
         />
       ) : null}
 
-      {/* Contacts — below deadlines because deadlines are primary work,
-          contacts are "who do I email when working on those deadlines".
-          The Round-B email cron will only reach contacts with
-          receivesReminders=true. */}
       <ContactsSection clientId={id} contacts={contacts} />
 
       {/* Entities — section header carries the "Add" trigger on the
@@ -232,16 +233,9 @@ async function ClientDetail({
           <AddEntityCollapser clientId={id} services={availableServices} />
         </div>
         {entityRows.length === 0 ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>No entities yet</CardTitle>
-              <CardDescription>
-                Click <strong>Add a tax entity</strong> above to start.
-                We&apos;ll generate the full deadline calendar for the
-                current and next tax year automatically.
-              </CardDescription>
-            </CardHeader>
-          </Card>
+          <div className="rounded-lg border border-border bg-muted/30 p-6 text-sm text-muted-foreground">
+            No entities.
+          </div>
         ) : (
           <div className="rounded-xl border border-border divide-y divide-border bg-card">
             {entityRows.map((e) => (
@@ -732,6 +726,15 @@ async function EntityCard({
   // count query above.
   const activeServices = await listActiveServicesForEntity(entity.id);
 
+  // PTE election state. eligibleJurisdictions filters to only PTE
+  // states that the entity actually operates in (so a CA-only LLC
+  // doesn't see NY/NJ/etc. pills); currentElections is what's already
+  // marked. Both are cheap (couple of indexed reads each).
+  const [pteEligible, currentElections] = await Promise.all([
+    eligiblePteJurisdictionsForEntity(entity.id),
+    listElectionsForEntity(entity.id),
+  ]);
+
   const palette = paletteForClient(clientId);
   const initials = clientInitials(entity.name);
 
@@ -783,6 +786,15 @@ async function EntityCard({
             </span>
           </div>
         )}
+        <PteElectionPills
+          entityId={entity.id}
+          clientId={clientId}
+          eligibleJurisdictions={pteEligible}
+          currentElections={currentElections.map((e) => ({
+            jurisdictionCode: e.jurisdictionCode,
+            kind: e.kind,
+          }))}
+        />
       </div>
 
       <EntityActions

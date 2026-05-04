@@ -15,7 +15,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Merge, X, AlertCircle, ArrowRight } from "lucide-react";
+import { Merge, X, AlertCircle, ArrowRight, Search } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { StateCombobox } from "@/components/ui/state-combobox";
 import { mergeClientsAction } from "./actions";
 import type { ClientWithEntityCount } from "@/lib/services/clients";
 
@@ -66,55 +68,46 @@ function entityTypeLabel(type: string): string {
   return ENTITY_TYPE_LABELS[type] ?? type;
 }
 
-/** Days from today to an ISO YYYY-MM-DD date (negative = overdue). */
-function daysUntil(iso: string): number {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const due = new Date(iso + "T00:00:00");
-  return Math.round((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-}
-
-function relativeLabel(iso: string): string {
-  const d = daysUntil(iso);
-  if (d < 0) return `${Math.abs(d)}d overdue`;
-  if (d === 0) return "Today";
-  if (d === 1) return "Tomorrow";
-  if (d <= 30) return `in ${d}d`;
-  if (d <= 90) return `in ${Math.round(d / 7)}w`;
-  if (d <= 365) return `in ${Math.round(d / 30)}mo`;
-  return `in ${Math.round(d / 365)}y`;
-}
-
-function urgencyTextClass(iso: string): string {
-  const d = daysUntil(iso);
-  if (d <= 3) return "text-[var(--color-priority-urgent)]";
-  if (d <= 14) return "text-[var(--color-priority-high)]";
-  if (d <= 30) return "text-[var(--color-priority-medium)]";
-  if (d <= 90) return "text-emerald-600 dark:text-emerald-400";
-  if (d <= 180) return "text-sky-600 dark:text-sky-400";
-  return "text-muted-foreground";
-}
-
-function formatShortDate(iso: string): string {
-  const d = new Date(iso + "T00:00:00");
-  // Include year if not the current year — keeps "Apr 15 '27" readable
-  // without the year cluttering the common same-year case.
-  const now = new Date();
-  const sameYear = d.getFullYear() === now.getFullYear();
-  return d.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    ...(sameYear ? {} : { year: "2-digit" }),
-  });
-}
-
 export function ClientsList({ clients }: { clients: ClientWithEntityCount[] }) {
   const router = useRouter();
   const [mergeMode, setMergeMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [mergeDialogOpen, setMergeDialogOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [stateFilter, setStateFilter] = useState<string | undefined>(undefined);
 
   const selectedCount = selected.size;
+
+  // Client-side filter on name / email + covered-state intersection.
+  // CPA firms top out around a few hundred clients; in-memory filtering
+  // keeps the UX instant without a round-trip per keystroke.
+  //
+  // Ordering when a state filter is active: clients whose PRIMARY home
+  // state matches come first, then clients who only touch the state
+  // via an operating_state. Within each tier the SQL order (created_at
+  // DESC) is preserved.
+  const filteredClients = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const matched = clients.filter((c) => {
+      if (q) {
+        const nameMatch = c.name.toLowerCase().includes(q);
+        const emailMatch = c.primaryContactEmail
+          ?.toLowerCase()
+          .includes(q);
+        if (!nameMatch && !emailMatch) return false;
+      }
+      if (stateFilter && !c.coveredStates.includes(stateFilter)) {
+        return false;
+      }
+      return true;
+    });
+    if (!stateFilter) return matched;
+    const primary = matched.filter((c) => c.primaryHomeState === stateFilter);
+    const operating = matched.filter(
+      (c) => c.primaryHomeState !== stateFilter,
+    );
+    return [...primary, ...operating];
+  }, [clients, query, stateFilter]);
 
   function toggleSelected(id: string) {
     setSelected((prev) => {
@@ -153,7 +146,7 @@ export function ClientsList({ clients }: { clients: ClientWithEntityCount[] }) {
             onClick={enterMergeMode}
             className="h-8"
           >
-            <Merge className="mr-2 h-3.5 w-3.5" /> Merge clients
+            <Merge className="h-3.5 w-3.5" /> Merge clients
           </Button>
         </div>
       ) : (
@@ -170,7 +163,7 @@ export function ClientsList({ clients }: { clients: ClientWithEntityCount[] }) {
               disabled={selectedCount < 2}
               className="h-8"
             >
-              <Merge className="mr-2 h-3.5 w-3.5" /> Merge {selectedCount}{" "}
+              <Merge className="h-3.5 w-3.5" /> Merge {selectedCount}{" "}
               clients
             </Button>
             <Button
@@ -179,22 +172,67 @@ export function ClientsList({ clients }: { clients: ClientWithEntityCount[] }) {
               onClick={exitMergeMode}
               className="h-8"
             >
-              <X className="mr-1.5 h-3.5 w-3.5" /> Cancel
+              <X className="h-3.5 w-3.5" /> Cancel
             </Button>
           </div>
         </div>
       )}
 
+      {/* Search + covered-state filter. Hidden in merge mode so the
+          sticky selection bar stays focused (filtering while merging
+          is rarely what you want, and the row set stays stable for
+          selection). */}
+      {!mergeMode && clients.length > 0 ? (
+        <div className="mb-3 flex flex-col gap-2 sm:flex-row">
+          <div className="relative flex-1">
+            <Search
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+              aria-hidden
+            />
+            <Input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search"
+              className="pl-9"
+            />
+            {query ? (
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                aria-label="Clear search"
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            ) : null}
+          </div>
+          <div className="sm:w-[220px]">
+            <StateCombobox
+              value={stateFilter}
+              onChange={setStateFilter}
+              placeholder="All states"
+            />
+          </div>
+        </div>
+      ) : null}
+
       <div className="divide-y divide-border rounded-lg border border-border">
-        {clients.map((client) => (
-          <ClientRow
-            key={client.id}
-            client={client}
-            mergeMode={mergeMode}
-            selected={selected.has(client.id)}
-            onToggleSelected={() => toggleSelected(client.id)}
-          />
-        ))}
+        {filteredClients.length === 0 ? (
+          <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+            No clients match the current filters.
+          </div>
+        ) : (
+          filteredClients.map((client) => (
+            <ClientRow
+              key={client.id}
+              client={client}
+              mergeMode={mergeMode}
+              selected={selected.has(client.id)}
+              onToggleSelected={() => toggleSelected(client.id)}
+            />
+          ))
+        )}
       </div>
 
       {/* key by the selection so when the user toggles a different set of
@@ -297,25 +335,17 @@ function ClientRow({
           urgency tier; the date underneath gives the absolute anchor;
           the urgent count is highlighted only when non-zero. */}
       {client.activeDeadlineCount > 0 && client.nextDueDate ? (
-        <div className="hidden shrink-0 text-right leading-tight sm:block">
-          <div
-            className={`font-mono text-[11px] font-bold uppercase tracking-wider ${urgencyTextClass(client.nextDueDate)}`}
-          >
-            {relativeLabel(client.nextDueDate)}
-          </div>
-          <div className="mt-0.5 text-[11px] text-muted-foreground">
-            {formatShortDate(client.nextDueDate)} ·{" "}
-            {client.urgentCount > 0 ? (
-              <>
-                <span className="font-semibold text-[var(--color-priority-urgent)]">
-                  {client.urgentCount} urgent
-                </span>{" "}
-                of {client.activeDeadlineCount}
-              </>
-            ) : (
-              <span>{client.activeDeadlineCount} open</span>
-            )}
-          </div>
+        <div className="hidden shrink-0 text-right text-xs text-muted-foreground sm:block">
+          {client.urgentCount > 0 ? (
+            <>
+              <span className="font-semibold text-[var(--color-priority-urgent)]">
+                {client.urgentCount} urgent
+              </span>{" "}
+              of {client.activeDeadlineCount}
+            </>
+          ) : (
+            <span>{client.activeDeadlineCount} open</span>
+          )}
         </div>
       ) : (
         <div className="hidden shrink-0 text-xs text-muted-foreground sm:block">
@@ -328,16 +358,21 @@ function ClientRow({
   );
 
   if (mergeMode) {
+    // Row wrapper is a plain <div> (not <button>) because the inner
+    // Checkbox is itself a Radix <button> — nesting button-in-button
+    // is invalid HTML and triggers a React hydration error. Keyboard
+    // users still tab to the Checkbox (which handles Space/Enter on
+    // its own); the wrapping div extends the click hit area to the
+    // whole row for mouse users.
     return (
-      <button
-        type="button"
+      <div
         onClick={onToggleSelected}
-        className={`block w-full cursor-pointer px-5 py-4 text-left transition-colors ${
+        className={`block w-full px-5 py-4 text-left transition-colors ${
           selected ? "bg-primary/5" : "hover:bg-muted/40"
         }`}
       >
         {inner}
-      </button>
+      </div>
     );
   }
   return (
@@ -431,7 +466,7 @@ function MergeDialog({
                 <label
                   key={c.id}
                   htmlFor={`primary-${c.id}`}
-                  className={`flex cursor-pointer items-start gap-3 rounded-md border p-3 text-sm transition-colors ${
+                  className={`flex items-start gap-3 rounded-md border p-3 text-sm transition-colors ${
                     c.id === primaryId
                       ? "border-primary bg-primary/5"
                       : "border-border hover:bg-muted/30"

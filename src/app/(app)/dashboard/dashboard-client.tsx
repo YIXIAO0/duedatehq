@@ -47,6 +47,7 @@ import {
   clientInitials,
 } from "@/lib/utils/client-palette";
 import { WelcomeTiles } from "../_components/welcome-tiles";
+import { US_STATE_CODES } from "@/lib/constants/us-states";
 
 export type DashboardDeadline = {
   id: string;
@@ -264,10 +265,11 @@ function bucketByTime(deadlines: DashboardDeadline[]): Bucket[] {
 // Client component
 // ---------------------------------------------------------------------------
 
-// Hardcoded filter options (from our seed data). If seed expands past
-// these, the API still supports whatever state/type the user data has —
-// this is just the dropdown labels.
-const STATE_OPTIONS = ["federal", "CA", "NY", "TX", "DE", "NJ"];
+// Filter dropdown options — "federal" is virtual (no entity has it as
+// home_state, but federal-level deadlines are tagged that way) followed
+// by the canonical 50 states + DC. The API still supports filtering by
+// any value the data carries; this list just drives the UI.
+const STATE_OPTIONS = ["federal", ...US_STATE_CODES];
 const TYPE_OPTIONS = [
   "individual",
   "c_corp",
@@ -614,7 +616,7 @@ export function DashboardClient({
           <button
             type="button"
             onClick={() => applyView("all")}
-            className="text-[12.5px] font-medium hover:underline cursor-pointer"
+            className="text-[12.5px] font-medium hover:underline"
             style={{ color: "var(--muted-foreground)" }}
           >
             Clear filter
@@ -652,12 +654,12 @@ export function DashboardClient({
           </Popover>
           <Button asChild variant="outline" className="rounded-full">
             <Link href="/clients/import">
-              <FileSpreadsheet className="mr-1.5 h-4 w-4" /> Import
+              <FileSpreadsheet className="h-4 w-4" /> Import clients
             </Link>
           </Button>
           <Button asChild className="rounded-full">
             <Link href="/clients/new">
-              <Plus className="mr-1.5 h-4 w-4" /> Add client
+              <Plus className="h-4 w-4" /> Add client
             </Link>
           </Button>
         </div>
@@ -701,7 +703,7 @@ export function DashboardClient({
             <button
               type="button"
               onClick={() => setSearchInput("")}
-              className="absolute right-1 top-1/2 -translate-y-1/2 cursor-pointer rounded p-0.5 text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
+              className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
               aria-label="Clear search"
             >
               <X className="h-3 w-3" />
@@ -721,7 +723,7 @@ export function DashboardClient({
         >
           <SelectTrigger
             size="sm"
-            className="w-[130px] cursor-pointer bg-background text-xs"
+            className="w-[130px] bg-background text-xs"
           >
             <SelectValue />
           </SelectTrigger>
@@ -738,11 +740,11 @@ export function DashboardClient({
         >
           <SelectTrigger
             size="sm"
-            className="w-[130px] cursor-pointer bg-background text-xs"
+            className="w-[130px] bg-background text-xs"
           >
             <SelectValue />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="max-h-[320px]">
             <SelectItem value="all">All jurisdictions</SelectItem>
             {STATE_OPTIONS.map((s) => (
               <SelectItem key={s} value={s}>
@@ -758,7 +760,7 @@ export function DashboardClient({
         >
           <SelectTrigger
             size="sm"
-            className="w-[140px] cursor-pointer bg-background text-xs"
+            className="w-[140px] bg-background text-xs"
           >
             <SelectValue />
           </SelectTrigger>
@@ -780,7 +782,7 @@ export function DashboardClient({
         >
           <SelectTrigger
             size="sm"
-            className="w-[130px] cursor-pointer bg-background text-xs"
+            className="w-[130px] bg-background text-xs"
           >
             <SelectValue />
           </SelectTrigger>
@@ -844,7 +846,7 @@ export function DashboardClient({
           <button
             type="button"
             onClick={() => setSelectedDate(null)}
-            className="ml-auto inline-flex cursor-pointer items-center gap-1 rounded-sm px-2 py-0.5 text-xs font-medium text-accent-foreground hover:bg-primary/10"
+            className="ml-auto inline-flex items-center gap-1 rounded-sm px-2 py-0.5 text-xs font-medium text-accent-foreground hover:bg-primary/10"
           >
             <X className="h-3 w-3" /> Clear
           </button>
@@ -914,7 +916,7 @@ export function DashboardClient({
               <button
                 type="button"
                 onClick={() => toggleCollapsed(b.id)}
-                className="flex flex-1 cursor-pointer items-center gap-3 text-left"
+                className="flex flex-1 items-center gap-3 text-left"
                 aria-expanded={isOpen}
               >
                 {isOpen ? (
@@ -1134,7 +1136,7 @@ export function DashboardClient({
                           <button
                             type="button"
                             onClick={() => toggleClientExpanded(g.clientId)}
-                            className="flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
+                            className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
                             aria-label={
                               isExpanded
                                 ? `Collapse ${g.clientName}`
@@ -1222,7 +1224,7 @@ export function DashboardClient({
           >
             {loadingMore ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading…
+                <Loader2 className="h-4 w-4 animate-spin" /> Loading…
               </>
             ) : (
               <>Load more ({PAGE_SIZE} at a time)</>
@@ -1261,11 +1263,11 @@ export function DashboardClient({
             >
               {applying ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Marking…
+                  <Loader2 className="h-4 w-4 animate-spin" /> Marking…
                 </>
               ) : (
                 <>
-                  <CheckCircle2 className="mr-2 h-4 w-4" /> Mark all as filed
+                  <CheckCircle2 className="h-4 w-4" /> Mark all as filed
                 </>
               )}
             </Button>
@@ -1342,7 +1344,7 @@ function OwnerFilterDropdown({
   return (
     <Select value={value} onValueChange={(v) => onChange(v as OwnerFilter)}>
       <SelectTrigger
-        className="h-9 rounded-full border-0 bg-card shadow-card px-3.5 text-[12.5px] font-medium hover:shadow-md transition-shadow cursor-pointer"
+        className="h-9 rounded-full border-0 bg-card shadow-card px-3.5 text-[12.5px] font-medium hover:shadow-md transition-shadow"
         aria-label="Filter by deadline owner"
       >
         <SelectValue />
@@ -1474,7 +1476,7 @@ function KPICard({
       onClick={onClick}
       aria-pressed={active}
       className={[
-        "rounded-2xl p-5 text-left transition-transform hover:scale-[1.01] cursor-pointer",
+        "rounded-2xl p-5 text-left transition-transform hover:scale-[1.01]",
         active ? "ring-2 ring-foreground/20 shadow-card" : "",
       ].join(" ")}
       style={{ background: gradient, color: textColor }}
@@ -1627,7 +1629,7 @@ function OwnerCell({
               ? `Owner: ${deadline.owner_full_name ?? deadline.owner_email}. Click to reassign.`
               : "Unassigned. Click to assign."
           }
-          className="cursor-pointer transition-opacity hover:opacity-80 disabled:opacity-50"
+          className="transition-opacity hover:opacity-80 disabled:opacity-50"
         >
           {deadline.owner_user_id ? (
             <AssignedAvatar deadline={deadline} />
@@ -1693,7 +1695,7 @@ function OwnerPickerList({
       <button
         type="button"
         onClick={() => onPick(null)}
-        className="flex items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-sm hover:bg-foreground/5 cursor-pointer"
+        className="flex items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-sm hover:bg-foreground/5"
       >
         <span
           className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] text-muted-foreground"
@@ -1721,7 +1723,7 @@ function OwnerPickerList({
             key={m.userId}
             type="button"
             onClick={() => onPick(m.userId)}
-            className="flex items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-sm hover:bg-foreground/5 cursor-pointer"
+            className="flex items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-sm hover:bg-foreground/5"
           >
             <span
               className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold"
@@ -1830,7 +1832,7 @@ function DeadlineRow({
       ) : (
         <Link
           href={`/deadlines/${d.id}`}
-          className="w-16 shrink-0 cursor-pointer text-center"
+          className="w-16 shrink-0 text-center"
           aria-label={`View ${d.rule_title}`}
         >
           <div className="text-[14px] font-semibold">

@@ -263,6 +263,48 @@ export const entities = pgTable(
 );
 
 // ---------------------------------------------------------------------------
+// Entity tax elections — opt-in flags per (entity, jurisdiction) that
+// gate the visibility of election-only deadline rules (currently PTE).
+//
+// Hard-delete on revoke for v1 — election history isn't load-bearing
+// yet. If a CPA needs "elected in 2025, revoked in 2027" semantics
+// later, add `revokedAt` and switch to soft-delete.
+// ---------------------------------------------------------------------------
+
+export const entityElections = pgTable(
+  "entity_elections",
+  {
+    id: text("id").primaryKey().$defaultFn(() => `eel_${nanoid(12)}`),
+    entityId: text("entity_id").notNull().references(() => entities.id, {
+      onDelete: "cascade",
+    }),
+    orgId: text("org_id").notNull().references(() => organizations.id, {
+      onDelete: "cascade",
+    }),
+    /** State code matching `deadline_rules.jurisdiction_code` ("CA", "NY", …). */
+    jurisdictionCode: text("jurisdiction_code").notNull(),
+    /** Election kind. Only "pte" today; future: "qsub", "composite", etc. */
+    kind: text("kind").notNull(),
+    electedAt: timestamp("elected_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    // One election per (entity, jurisdiction, kind). Repeat marks are no-ops.
+    uniqueIndex("entity_elections_unique_idx").on(
+      t.entityId,
+      t.jurisdictionCode,
+      t.kind,
+    ),
+    index("entity_elections_entity_idx").on(t.entityId),
+    index("entity_elections_org_idx").on(t.orgId),
+  ],
+);
+
+// ---------------------------------------------------------------------------
 // Deadline rule catalog (seed data — we maintain it centrally)
 // ---------------------------------------------------------------------------
 
@@ -286,6 +328,16 @@ export const deadlineRules = pgTable(
     effectiveFrom: date("effective_from").notNull(),
     effectiveTo: date("effective_to"), // null = currently active
     irrevocable: boolean("irrevocable").notNull().default(false), // e.g., NY PTET 3/15
+    /**
+     * When set (currently only "pte"), this rule is gated on the entity
+     * having a matching record in `entity_elections`. NULL means the
+     * rule always surfaces for any matching (entity_type, jurisdiction).
+     *
+     * Why: PTE elections are opt-in per-entity per-state. A CA LLC that
+     * doesn't elect doesn't want CA-3893 cluttering their deadline list;
+     * once they mark "PTE elected in CA", the rule starts surfacing.
+     */
+    requiresElection: text("requires_election"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -1027,6 +1079,8 @@ export type Client = typeof clients.$inferSelect;
 export type NewClient = typeof clients.$inferInsert;
 export type Entity = typeof entities.$inferSelect;
 export type NewEntity = typeof entities.$inferInsert;
+export type EntityElection = typeof entityElections.$inferSelect;
+export type NewEntityElection = typeof entityElections.$inferInsert;
 export type DeadlineRule = typeof deadlineRules.$inferSelect;
 export type DeadlineInstance = typeof deadlineInstances.$inferSelect;
 export type NewDeadlineInstance = typeof deadlineInstances.$inferInsert;

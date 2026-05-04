@@ -1,27 +1,32 @@
 /**
- * Daily IRS Newsroom scrape cron — fires the Workflow DevKit run.
+ * Daily announcements scrape cron — fans out across every registered source.
  *
  * Two modes:
- *   default   → fire-and-forget. Returns the runId immediately, the
- *               workflow keeps going in the background. Vercel Cron
- *               only needs to see a 200 to consider the trigger done.
+ *   default              → fire-and-forget. Returns the runIds immediately,
+ *                          each per-source workflow keeps going in the
+ *                          background. Vercel Cron only needs to see a 200.
  *
- *   ?wait=1   → block until the workflow returns. Useful for manual
- *               smoke testing, also for deciding whether to surface
- *               results in a synchronous UI flow later.
+ *   ?wait=1              → block until all source workflows complete.
+ *                          Useful for manual smoke testing.
  *
- * Auth: CRON_SECRET (Bearer token) — Vercel Cron sets this header.
- * Manual triggers from a browser will be rejected; use curl with the
- * matching token, or the dashboard "Run now" button (added in 8b).
+ *   ?source=<id>         → only run the named source (e.g. `?source=tx_comptroller`).
+ *                          Used for per-source debugging without firing the
+ *                          full fan-out. Combine with `?wait=1` to inspect
+ *                          the result inline.
+ *
+ * Auth: CRON_SECRET (Bearer token) — Vercel Cron sets this header. Manual
+ * triggers from a browser will be rejected; use curl with the matching
+ * token, or the dashboard "Run now" button.
  */
 
 import { NextResponse } from "next/server";
 import { start } from "workflow/api";
 import { scrapeAnnouncementsWorkflow } from "@/lib/workflows/scrape-announcements";
+import { ALL_SOURCE_IDS } from "@/lib/workflows/sources";
 
 // Generous duration so the manual `?wait=1` mode can sit through a
-// full classify-N-items cycle. Cron's typical fire-and-forget call
-// returns in <2s.
+// full classify-N-items cycle across multiple sources. The fire-and-
+// forget path returns in <2s.
 export const maxDuration = 600;
 
 export async function GET(req: Request) {
@@ -33,45 +38,72 @@ export async function GET(req: Request) {
 
   const url = new URL(req.url);
   const wait = url.searchParams.get("wait") === "1";
+  const onlySource = url.searchParams.get("source");
 
-  console.log(`[cron/scrape-announcements] start wait=${wait}`);
+  // Resolve which sources to fire. Default = all registered. `?source=`
+  // narrows to a single id (must be known, otherwise 400 — easier to
+  // catch typos than to silently no-op).
+  let sourceIds: string[];
+  if (onlySource) {
+    if (!ALL_SOURCE_IDS.includes(onlySource)) {
+      return NextResponse.json(
+        {
+          error: `Unknown source "${onlySource}". Known: ${ALL_SOURCE_IDS.join(", ")}`,
+        },
+        { status: 400 },
+      );
+    }
+    sourceIds = [onlySource];
+  } else {
+    sourceIds = ALL_SOURCE_IDS;
+  }
+
+  console.log(
+    `[cron/scrape-announcements] start wait=${wait} sources=${sourceIds.join(",")}`,
+  );
   const t0 = Date.now();
 
   try {
-    const run = await start(scrapeAnnouncementsWorkflow);
+    // Start every source's workflow in parallel — each gets its own
+    // runId and its own step cache, so a flaky source doesn't block
+    // the others.
+    const runs = await Promise.all(
+      sourceIds.map((id) => start(scrapeAnnouncementsWorkflow, [id])),
+    );
+    const runMeta = runs.map((r, i) => ({
+      sourceId: sourceIds[i],
+      runId: r.runId,
+    }));
+
     console.log(
-      `[cron/scrape-announcements] started runId=${run.runId} ms=${Date.now() - t0}`,
+      `[cron/scrape-announcements] started runs=${JSON.stringify(runMeta)} ms=${Date.now() - t0}`,
     );
 
     if (!wait) {
-      // Fire-and-forget mode (default for the daily cron).
       return NextResponse.json({
         ok: true,
-        runId: run.runId,
         mode: "started",
+        runs: runMeta,
         durationMs: Date.now() - t0,
       });
     }
 
-    // Manual / smoke-test mode — block until done. Useful so the
-    // operator sees full counts in the response.
-    const result = await run.returnValue;
+    // Manual / smoke-test mode — block until every source's workflow
+    // returns. Each `returnValue` resolves independently; one slow
+    // source doesn't break the others' results.
+    const results = await Promise.all(runs.map((r) => r.returnValue));
     console.log(
-      `[cron/scrape-announcements] done runId=${run.runId} ms=${Date.now() - t0} result=${JSON.stringify(result)}`,
+      `[cron/scrape-announcements] done ms=${Date.now() - t0} results=${JSON.stringify(results)}`,
     );
     return NextResponse.json({
       ok: true,
-      runId: run.runId,
       mode: "completed",
       durationMs: Date.now() - t0,
-      ...result,
+      results,
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     console.error("[cron/scrape-announcements] FAILED:", message, e);
-    return NextResponse.json(
-      { ok: false, error: message },
-      { status: 500 },
-    );
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 }

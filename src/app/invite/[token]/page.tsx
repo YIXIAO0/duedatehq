@@ -197,7 +197,7 @@ function ValidInvite({
               <form action={acceptAsExistingUser}>
                 <Button
                   type="submit"
-                  className="w-full cursor-pointer"
+                  className="w-full"
                   size="lg"
                 >
                   Accept invitation
@@ -213,7 +213,7 @@ function ValidInvite({
               <form action={startSignup}>
                 <Button
                   type="submit"
-                  className="w-full cursor-pointer"
+                  className="w-full"
                   size="lg"
                 >
                   Continue to sign up

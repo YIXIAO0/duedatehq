@@ -246,11 +246,11 @@ export function CalendarSyncCard({
       <Button onClick={handleEnable} disabled={pending}>
         {pending ? (
           <>
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Generating…
+            <Loader2 className="h-4 w-4 animate-spin" /> Generating…
           </>
         ) : (
           <>
-            <Calendar className="mr-2 h-4 w-4" /> Enable calendar sync
+            <Calendar className="h-4 w-4" /> Enable calendar sync
           </>
         )}
       </Button>
@@ -280,12 +280,12 @@ export function CalendarSyncCard({
         >
           {copied ? (
             <>
-              <Check className="mr-2 h-4 w-4 text-[var(--color-priority-done)]" />{" "}
+              <Check className="h-4 w-4 text-[var(--color-priority-done)]" />{" "}
               Copied
             </>
           ) : (
             <>
-              <Copy className="mr-2 h-4 w-4" /> Copy
+              <Copy className="h-4 w-4" /> Copy
             </>
           )}
         </Button>
@@ -379,7 +379,7 @@ export function CalendarSyncCard({
         <AlertDialog>
           <AlertDialogTrigger asChild>
             <Button variant="outline" size="sm" disabled={pending}>
-              <RefreshCw className="mr-2 h-3.5 w-3.5" /> Rotate URL
+              <RefreshCw className="h-3.5 w-3.5" /> Rotate URL
             </Button>
           </AlertDialogTrigger>
           <AlertDialogContent>
@@ -409,7 +409,7 @@ export function CalendarSyncCard({
               disabled={pending}
               className="text-[var(--color-priority-urgent)] hover:text-[var(--color-priority-urgent)]"
             >
-              <Trash2 className="mr-2 h-3.5 w-3.5" /> Disable
+              <Trash2 className="h-3.5 w-3.5" /> Disable
             </Button>
           </AlertDialogTrigger>
           <AlertDialogContent>

@@ -148,7 +148,7 @@ export function MiniCalendar({
         <button
           type="button"
           onClick={() => setViewMonth(new Date(year, month - 1, 1))}
-          className="cursor-pointer rounded-sm px-1.5 py-0.5 text-sm leading-none text-muted-foreground hover:bg-muted hover:text-foreground"
+          className="rounded-sm px-1.5 py-0.5 text-sm leading-none text-muted-foreground hover:bg-muted hover:text-foreground"
           aria-label="Previous month"
         >
           ‹
@@ -163,7 +163,7 @@ export function MiniCalendar({
                   new Date(today.getFullYear(), today.getMonth(), 1),
                 )
               }
-              className="cursor-pointer rounded-sm border border-border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground hover:bg-muted hover:text-foreground"
+              className="rounded-sm border border-border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground hover:bg-muted hover:text-foreground"
               aria-label="Jump to current month"
             >
               Today
@@ -173,7 +173,7 @@ export function MiniCalendar({
         <button
           type="button"
           onClick={() => setViewMonth(new Date(year, month + 1, 1))}
-          className="cursor-pointer rounded-sm px-1.5 py-0.5 text-sm leading-none text-muted-foreground hover:bg-muted hover:text-foreground"
+          className="rounded-sm px-1.5 py-0.5 text-sm leading-none text-muted-foreground hover:bg-muted hover:text-foreground"
           aria-label="Next month"
         >
           ›
@@ -255,7 +255,7 @@ export function MiniCalendar({
               onClick={() => onSelectDate(c.iso)}
               aria-pressed={isSelected}
               aria-label={`${c.iso}${hasDue ? " — has deadlines" : ""}${isToday ? " — today" : ""}${isTodayUrgent && isToday ? " — urgent" : ""}`}
-              className={`relative flex aspect-square cursor-pointer items-center justify-center rounded-md text-[12px] transition-colors ${fillClass} ${ringClass}`}
+              className={`relative flex aspect-square items-center justify-center rounded-md text-[12px] transition-colors ${fillClass} ${ringClass}`}
             >
               {c.day}
               {showInnerDot ? (
@@ -360,7 +360,7 @@ function SmartFilters({
             type="button"
             onClick={() => onViewChange(item.id)}
             className={[
-              "flex w-full cursor-pointer items-center justify-between rounded-md px-2.5 py-1.5 text-sm transition-colors",
+              "flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-sm transition-colors",
               active
                 ? "bg-sidebar-accent font-semibold text-sidebar-accent-foreground"
                 : "text-foreground hover:bg-muted",

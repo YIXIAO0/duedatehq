@@ -109,8 +109,8 @@ export function GlobalSearch({
         onClick={() => setOpen(true)}
         className={
           variant === "icon"
-            ? "w-7 h-7 rounded-full bg-white/50 hover:bg-white flex items-center justify-center text-foreground/70 transition-colors cursor-pointer"
-            : "flex w-full cursor-pointer items-center gap-2 rounded-xl bg-white/70 backdrop-blur px-3 py-1.5 text-[13.5px] text-foreground/60 shadow-sm transition hover:bg-white hover:text-foreground"
+            ? "w-7 h-7 rounded-full bg-white/50 hover:bg-white flex items-center justify-center text-foreground/70 transition-colors"
+            : "flex w-full items-center gap-2 rounded-xl bg-white/70 backdrop-blur px-3 py-1.5 text-[13.5px] text-foreground/60 shadow-sm transition hover:bg-white hover:text-foreground"
         }
         aria-label={variant === "icon" ? "Search (⌘K)" : "Search"}
         title={variant === "icon" ? "Search · ⌘K" : undefined}
@@ -168,9 +168,9 @@ export function GlobalSearch({
                   key={`client-${hit.id}`}
                   value={`client-${hit.id}-${hit.title}`}
                   onSelect={() => go(hit.href)}
-                  className="cursor-pointer"
+                  className=""
                 >
-                  <Users className="mr-2 h-4 w-4 text-muted-foreground" />
+                  <Users className="h-4 w-4 text-muted-foreground" />
                   <div className="flex-1 min-w-0">
                     <div className="truncate">{hit.title}</div>
                     {hit.subtitle ? (
@@ -193,9 +193,9 @@ export function GlobalSearch({
                     key={`entity-${hit.id}`}
                     value={`entity-${hit.id}-${hit.title}`}
                     onSelect={() => go(hit.href)}
-                    className="cursor-pointer"
+                    className=""
                   >
-                    <Building2 className="mr-2 h-4 w-4 text-muted-foreground" />
+                    <Building2 className="h-4 w-4 text-muted-foreground" />
                     <div className="flex-1 min-w-0">
                       <div className="truncate">{hit.title}</div>
                       <div className="truncate text-xs text-muted-foreground">
@@ -221,9 +221,9 @@ export function GlobalSearch({
                       key={`deadline-${hit.id}`}
                       value={`deadline-${hit.id}-${hit.title}`}
                       onSelect={() => go(hit.href)}
-                      className="cursor-pointer"
+                      className=""
                     >
-                      <Calendar className="mr-2 h-4 w-4 text-muted-foreground" />
+                      <Calendar className="h-4 w-4 text-muted-foreground" />
                       <div className="flex-1 min-w-0">
                         <div className="truncate">{hit.title}</div>
                         <div className="truncate text-xs text-muted-foreground">

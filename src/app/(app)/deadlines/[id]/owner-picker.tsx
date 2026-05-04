@@ -67,7 +67,7 @@ export function OwnerPicker({
           type="button"
           disabled={pending}
           aria-label={`Owner: ${triggerLabel}. Click to change.`}
-          className="inline-flex items-center gap-2 rounded-full border border-input bg-background pl-1 pr-2 py-1 text-xs cursor-pointer hover:bg-foreground/5 transition-colors disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-full border border-input bg-background pl-1 pr-2 py-1 text-xs hover:bg-foreground/5 transition-colors disabled:opacity-50"
         >
               {currentMember ? (
             <SmallAvatar
@@ -141,7 +141,7 @@ function PickerRow({
     <button
       type="button"
       onClick={onClick}
-      className="flex items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-sm hover:bg-foreground/5 cursor-pointer"
+      className="flex items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-sm hover:bg-foreground/5"
     >
       {avatar}
       <div className="min-w-0 flex-1">
