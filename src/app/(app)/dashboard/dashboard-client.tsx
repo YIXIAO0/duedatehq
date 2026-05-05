@@ -632,17 +632,11 @@ export function DashboardClient({
           </Button>
         ) : null}
 
-        <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
-          {fetching ? (
-            <span className="flex items-center gap-1.5">
-              <Loader2 className="h-3 w-3 animate-spin" /> Updating…
-            </span>
-          ) : (
-            <span>
-              {deadlines.length} loaded{hasMore ? "+" : ""}
-            </span>
-          )}
-        </div>
+        {fetching ? (
+          <div className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Loader2 className="h-3 w-3 animate-spin" /> Updating…
+          </div>
+        ) : null}
       </div>
 
       {/* Active date-filter chip — surfaces "we're showing only one day"
