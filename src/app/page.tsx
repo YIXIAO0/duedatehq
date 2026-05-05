@@ -40,9 +40,10 @@ export const metadata: Metadata = {
 /**
  * JSON-LD SoftwareApplication schema — drives Google's rich product
  * cards and AI-citation surfaces (ChatGPT / Perplexity / Gemini)
- * when crawling. Pricing reflects the public-launch anchor ($25/mo);
- * beta is free, but we don't surface "$0" in structured data because
- * it would mislead aggregators after launch.
+ * when crawling. No `offers` block on purpose: pre-launch pricing
+ * isn't committed yet, and emitting a placeholder number would let
+ * AI aggregators cite it as fact. Add an Offer once a real price
+ * is locked.
  */
 const PRODUCT_JSONLD = {
   "@context": "https://schema.org",
@@ -53,12 +54,6 @@ const PRODUCT_JSONLD = {
   description:
     "Tax deadline tracker for independent CPAs and small accounting firms. Federal + 50-state coverage, automatic IRS disaster-relief updates.",
   url: APP_URL,
-  offers: {
-    "@type": "Offer",
-    price: "25",
-    priceCurrency: "USD",
-    description: "$25/month at public launch. Free during invite-only beta.",
-  },
   audience: {
     "@type": "BusinessAudience",
     audienceType: "Independent CPAs and small accounting firms",
@@ -121,7 +116,7 @@ export default function LandingPage() {
           </Button>
         </div>
         <p className="mt-6 text-sm text-muted-foreground">
-          Free during invite-only beta · $25/mo at public launch
+          Free during invite-only beta · No card required
         </p>
       </section>
 
