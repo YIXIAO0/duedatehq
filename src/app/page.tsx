@@ -183,22 +183,6 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Audience reassurance strip — addresses the silent question
-          "is this just for solo people?" without burying it inside a
-          feature card. ICP research said design must scale solo→firm
-          from Day 1; this is the marketing reflection of that. */}
-      <section className="border-t border-border bg-muted/30 py-12">
-        <div className="mx-auto w-full max-w-4xl px-6 text-center">
-          <p className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-            Designed for the size you actually are
-          </p>
-          <p className="mt-3 text-lg text-foreground/85">
-            Built first for solo CPAs and EAs. Same product scales cleanly to
-            5–19 person firms — no SKU change, no migration, no surprises.
-          </p>
-        </div>
-      </section>
-
       {/* Footer */}
       <footer className="mt-auto border-t border-border">
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-6 text-sm text-muted-foreground">
