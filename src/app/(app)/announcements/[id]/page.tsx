@@ -128,92 +128,35 @@ async function Detail({ params }: { params: Params }) {
           </p>
         ) : null}
 
-        {/* One-line scope summary. Replaces the previous AI-scope pill
-            row that had separate "Forms:" / "Postponed window:" /
-            "New deadline:" boxes — visual noise. Inlined into a single
-            sentence the CPA can read in one beat. Only shown when AI
-            actually extracted at least one structured field. */}
-        {(a.affectedFormCodes.length > 0 ||
-          a.originalDeadlineStart ||
-          a.reliefDeadline) && (
-          <p className="mt-2 text-xs text-muted-foreground">
-            {a.affectedFormCodes.length > 0 ? (
-              <>
-                Affects{" "}
-                <span className="font-medium text-foreground/80">
-                  {a.affectedFormCodes.join(" / ")}
-                </span>
-                {" "}deadlines{" "}
-              </>
-            ) : (
-              "Affects deadlines "
-            )}
-            {a.originalDeadlineStart && a.originalDeadlineEnd ? (
-              <>
-                from{" "}
-                <span className="font-medium text-foreground/80">
-                  {formatPlainDate(a.originalDeadlineStart)}
-                </span>{" "}
-                through{" "}
-                <span className="font-medium text-foreground/80">
-                  {formatPlainDate(a.originalDeadlineEnd)}
-                </span>
-                {" "}
-              </>
-            ) : null}
-            {a.reliefDeadline ? (
-              <>
-                — moves to{" "}
-                <span className="font-medium text-foreground">
-                  {formatPlainDate(a.reliefDeadline)}
-                </span>
-              </>
-            ) : null}
-            .
-          </p>
-        )}
-
-        {/* Disaster-relief county banner. The whole point of disaster
-            relief is that it applies to specific FEMA-declared counties,
-            not a whole state. A CPA in FL whose clients are nowhere
-            near the disaster zone shouldn't auto-apply just because
-            "FL" matches. We surface the county list so the CPA can
-            verify per-client before applying — and mirror the same
-            list inside the per-deadline confirmation dialog. */}
+        {/* Inline county strip — replaces the verbose "Verify county
+            before applying" banner. The full warning + verification
+            checkbox still lives inside the per-deadline Apply dialog,
+            which is where the gate actually applies. Showing the
+            county list here is just for at-a-glance context.
+            (The redundant "Affects 1040/1065 deadlines from X through
+            Y moves to Z" sentence was removed — same info already
+            lives in the AI summary above.) */}
         {a.category === "disaster_relief" && a.affectedCounties.length > 0 ? (
-          <div className="mt-3 rounded-md border border-[var(--color-priority-medium)]/30 bg-[var(--color-priority-medium-bg)]/40 p-3 text-sm">
-            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--color-priority-medium)]">
-              Verify county before applying
-            </p>
-            <p className="mt-1 text-xs text-foreground/80">
-              IRS disaster relief applies only to taxpayers whose
-              residence or principal place of business is in one of
-              these declared counties:
-            </p>
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {a.affectedCounties.map((county) => (
-                <Badge
-                  key={county}
-                  variant="outline"
-                  className="bg-background text-[11px]"
-                >
-                  {county}
-                </Badge>
-              ))}
-            </div>
+          <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-xs">
+            <span className="text-muted-foreground">Counties:</span>
+            {a.affectedCounties.map((county) => (
+              <Badge
+                key={county}
+                variant="outline"
+                className="text-[11px]"
+              >
+                {county}
+              </Badge>
+            ))}
           </div>
         ) : a.category === "disaster_relief" ? (
-          // Disaster relief WITHOUT county list — AI couldn't pull it.
-          // Most cautious case: warn loudly so the CPA doesn't assume
-          // we narrowed correctly.
-          <div className="mt-3 rounded-md border border-[var(--color-priority-medium)]/30 bg-[var(--color-priority-medium-bg)]/40 p-3 text-xs text-foreground/80">
-            <span className="font-semibold uppercase tracking-wider text-[var(--color-priority-medium)]">
-              Verify location:
+          <p className="mt-3 text-xs text-muted-foreground">
+            <span className="font-medium text-[var(--color-priority-medium)]">
+              Verify location manually
             </span>{" "}
-            IRS disaster relief is county-specific. The IRS text didn&apos;t
-            list specific counties cleanly enough for us to extract — read
-            the original release before applying relief to any client.
-          </div>
+            — IRS didn&apos;t list specific counties cleanly enough to
+            extract. Check the official release before applying.
+          </p>
         ) : null}
 
         <div className="mt-3">
@@ -342,22 +285,6 @@ async function Detail({ params }: { params: Params }) {
       )}
     </>
   );
-}
-
-// Format an ISO YYYY-MM-DD into "Apr 15, 2026" — keeps the AI scope
-// row compact while still readable. Defensive against malformed input
-// from older rows that the AI hadn't extracted yet.
-function formatPlainDate(iso: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso + "T00:00:00");
-  if (isNaN(d.getTime())) return iso;
-  const date = d.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-  const dow = d.toLocaleDateString("en-US", { weekday: "short" });
-  return `${date} ${dow}`;
 }
 
 function CategoryBadge({ category }: { category: string }) {

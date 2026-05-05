@@ -93,16 +93,22 @@ export function ReviewRow({
           : "border-border bg-card"
       }`}
     >
-      <div className="flex items-start gap-3 px-3 py-2.5">
-        <div className="mt-0.5 shrink-0">
-          {allDone ? (
-            <CheckCircle2 className="h-5 w-5 text-[var(--color-priority-done)]" />
-          ) : (
-            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border-2 border-foreground/30 text-[10px] font-semibold tabular-nums">
-              {actioned}/{total}
-            </span>
-          )}
-        </div>
+      <div className="flex items-center gap-3 px-3 py-2.5">
+        {/* Status chip only renders for multi-deadline clients (where
+            progress is non-trivial info). For total=1 the deadline row
+            below already shows the state — the chip would just be a
+            redundant tiny "0/1" floating next to the client name. */}
+        {total > 1 ? (
+          <div className="shrink-0">
+            {allDone ? (
+              <CheckCircle2 className="h-4 w-4 text-[var(--color-priority-done)]" />
+            ) : (
+              <span className="inline-flex h-4 min-w-[18px] items-center justify-center rounded-full bg-muted/60 px-1 text-[10px] font-medium tabular-nums text-muted-foreground">
+                {actioned}/{total}
+              </span>
+            )}
+          </div>
+        ) : null}
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -353,7 +359,11 @@ function DeadlineRow({
               // right county.
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button type="button" size="sm" disabled={pending}>
+                  <button
+                    type="button"
+                    disabled={pending}
+                    className="inline-flex items-center gap-1 rounded-full border border-[var(--client-rose)]/30 bg-[var(--client-rose-bg)]/40 px-3 py-1 text-[11.5px] font-medium text-[var(--client-rose-text)] transition-colors hover:bg-[var(--client-rose-bg)]/70 disabled:opacity-50"
+                  >
                     {pending ? (
                       <>
                         <Loader2 className="h-3 w-3 animate-spin" />
@@ -362,27 +372,19 @@ function DeadlineRow({
                     ) : (
                       <>Apply {humanShort(reliefDeadline)}</>
                     )}
-                  </Button>
+                  </button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
                     <AlertDialogTitle>
-                      Verify {clientName} qualifies for relief
+                      Confirm {clientName} is in a declared county
                     </AlertDialogTitle>
                     <AlertDialogDescription asChild>
                       <div className="space-y-3 text-sm">
-                        <div>
-                          You&apos;re about to extend{" "}
+                        <div className="text-foreground/80">
+                          Extending{" "}
                           <span className="font-mono font-semibold text-foreground">
                             {deadline.formCode}
-                          </span>{" "}
-                          for{" "}
-                          <span className="font-semibold text-foreground">
-                            {clientName}
-                          </span>{" "}
-                          from{" "}
-                          <span className="font-medium text-foreground">
-                            {humanDate(deadline.currentEffectiveDate)}
                           </span>{" "}
                           to{" "}
                           <span className="font-medium text-foreground">
@@ -394,12 +396,8 @@ function DeadlineRow({
                           <div className="rounded-md border border-[var(--color-priority-medium)]/30 bg-[var(--color-priority-medium-bg)]/30 p-2.5 text-xs">
                             <div className="flex items-center gap-1.5 font-semibold text-[var(--color-priority-medium)]">
                               <AlertTriangle className="h-3.5 w-3.5" />
-                              Relief is county-specific
+                              Declared counties
                             </div>
-                            <p className="mt-1 text-foreground/80">
-                              IRS relief applies only to taxpayers in
-                              these declared counties:
-                            </p>
                             <div className="mt-1.5 flex flex-wrap gap-1">
                               {affectedCounties.map((c) => (
                                 <Badge
@@ -416,36 +414,31 @@ function DeadlineRow({
                           <div className="rounded-md border border-[var(--color-priority-medium)]/30 bg-[var(--color-priority-medium-bg)]/30 p-2.5 text-xs">
                             <div className="flex items-center gap-1.5 font-semibold text-[var(--color-priority-medium)]">
                               <AlertTriangle className="h-3.5 w-3.5" />
-                              Relief is county-specific
+                              County list unavailable
                             </div>
                             <p className="mt-1 text-foreground/80">
-                              We couldn&apos;t extract specific counties
-                              from the IRS text. Verify against the
-                              official release before applying.
+                              Verify against the official IRS release
+                              before applying.
                             </p>
                           </div>
                         )}
-                        <p className="text-xs text-muted-foreground">
-                          Confirm only if {clientName} is located in a
-                          declared county.
-                        </p>
                       </div>
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel>Cancel</AlertDialogCancel>
                     <AlertDialogAction onClick={apply}>
-                      Confirmed — apply
+                      Confirm
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
             ) : (
-              <Button
+              <button
                 type="button"
-                size="sm"
                 onClick={apply}
                 disabled={pending}
+                className="inline-flex items-center gap-1 rounded-full border border-[var(--client-rose)]/30 bg-[var(--client-rose-bg)]/40 px-3 py-1 text-[11.5px] font-medium text-[var(--client-rose-text)] transition-colors hover:bg-[var(--client-rose-bg)]/70 disabled:opacity-50"
               >
                 {pending ? (
                   <>
@@ -455,7 +448,7 @@ function DeadlineRow({
                 ) : (
                   <>Apply {humanShort(reliefDeadline)}</>
                 )}
-              </Button>
+              </button>
             )}
             <Button
               type="button"
