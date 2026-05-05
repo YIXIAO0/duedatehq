@@ -3,9 +3,11 @@
 import type { SmartView } from "./dashboard-sidebar";
 
 /**
- * 3 gradient KPI cards — Today / This week / All open. Carries the
- * urgency signal so the buckets below can stay calm. Cards are
- * clickable — each maps to the matching SmartView.
+ * 3 gradient KPI cards — Today / This week / Next 60 days. All three
+ * are time-window counts, naming kept parallel so the third card
+ * doesn't sound like a lifetime metric (the dashboard query only
+ * loads 60 days ahead). Cards are clickable — each maps to a
+ * matching SmartView.
  */
 export function KPICards({
   counts,
@@ -16,22 +18,11 @@ export function KPICards({
   view: SmartView;
   onApplyView: (v: SmartView) => void;
 }) {
-  // "All open" = total open across the loaded window. Not a true
-  // calendar-month count — the dashboard windows 60 days ahead — but
-  // it's the right approximation for "how full is the queue overall".
-  const monthCount = counts.all;
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
       <KPICard
         label="Today"
         value={counts.today}
-        sub={
-          counts.overdue > 0
-            ? `${counts.overdue} overdue · clear first`
-            : counts.today === 0
-              ? "All clear"
-              : "Two estimated · one surcharge"
-        }
         gradient="linear-gradient(135deg, #FFD0D0 0%, #FFE3D0 100%)"
         textColor="#8A2B2B"
         active={view === "today"}
@@ -40,16 +31,14 @@ export function KPICards({
       <KPICard
         label="This week"
         value={counts.thisWeek}
-        sub={`${counts.thisWeek} through Sunday`}
         gradient="linear-gradient(135deg, #FFEFC9 0%, #FFE3D0 100%)"
         textColor="#8A6420"
         active={view === "thisWeek"}
         onClick={() => onApplyView("thisWeek")}
       />
       <KPICard
-        label="All open"
-        value={monthCount}
-        sub={`${monthCount} total in your book`}
+        label="Next 60 days"
+        value={counts.all}
         gradient="linear-gradient(135deg, #D7E5F8 0%, #E0DAF6 100%)"
         textColor="#3F4F87"
         active={view === "all"}
@@ -62,7 +51,6 @@ export function KPICards({
 function KPICard({
   label,
   value,
-  sub,
   gradient,
   textColor,
   active,
@@ -70,7 +58,6 @@ function KPICard({
 }: {
   label: string;
   value: number;
-  sub: string;
   gradient: string;
   textColor: string;
   active: boolean;
@@ -99,7 +86,6 @@ function KPICard({
       >
         {value}
       </div>
-      <div className="text-[12px] mt-2 opacity-75">{sub}</div>
     </button>
   );
 }

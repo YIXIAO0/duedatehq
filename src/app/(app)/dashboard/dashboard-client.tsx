@@ -745,7 +745,7 @@ export function DashboardClient({
                     style={{ color: headerTextColor, opacity: 0.7 }}
                   />
                 )}
-                <div className="flex flex-1 items-baseline gap-2.5 flex-wrap">
+                <div className="flex flex-1 items-center gap-2.5 flex-wrap">
                   <span
                     className="text-[18px]"
                     style={{ color: headerTextColor, fontWeight: 700 }}
