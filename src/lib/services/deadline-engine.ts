@@ -24,12 +24,38 @@ import {
   deadlineRules,
   entityElections,
   entityServices,
+  memberships,
   serviceGroupRules,
   type DeadlineRule,
   type Entity,
 } from "@/lib/db/schema";
 import { recordAudit } from "./audit";
 import { nextBusinessDay } from "@/lib/dates/business-days";
+
+/**
+ * Pick a default owner for newly-generated deadlines in `orgId`.
+ *
+ * Returns the only member's user id when the org has exactly one
+ * member (the solo-CPA case — there's no meaningful "unassigned"
+ * state when there's only one person), and NULL when 2+ members
+ * exist (let a partner explicitly assign).
+ *
+ * Why this matters: the daily reminder cron filters by
+ * `owner_user_id IS NOT NULL`. Solo CPAs end up with every deadline
+ * silently skipped if we don't pick them as implicit owner here.
+ */
+async function resolveDefaultOwnerForOrg(
+  orgId: string,
+): Promise<string | null> {
+  const db = getDb();
+  const members = await db
+    .select({ userId: memberships.userId })
+    .from(memberships)
+    .where(eq(memberships.orgId, orgId))
+    .limit(2); // 2 is enough to disambiguate "solo" from "multi"
+  if (members.length === 1) return members[0].userId;
+  return null;
+}
 
 export const GenerateDeadlinesInputSchema = z.object({
   orgId: z.string(),
@@ -292,6 +318,12 @@ export async function generateDeadlinesForEntity(
   const today = new Date().toISOString().slice(0, 10);
   const includeHistorical = parsed.includeHistoricalAsCompleted;
 
+  // Solo orgs auto-assign the lone member as owner so the reminder
+  // cron's `owner_user_id IS NOT NULL` filter doesn't silently skip
+  // every deadline. Multi-member orgs stay NULL until a partner
+  // explicitly assigns. See resolveDefaultOwnerForOrg() rationale.
+  const defaultOwnerId = await resolveDefaultOwnerForOrg(parsed.orgId);
+
   const values = rules
     .map((rule) => {
       const payload = rule.rulePayload as unknown as RulePayload;
@@ -309,6 +341,7 @@ export async function generateDeadlinesForEntity(
         ruleId: rule.id,
         taxYear: parsed.taxYear,
         dueDate,
+        ownerUserId: defaultOwnerId,
         status: isPast ? ("completed" as const) : ("pending" as const),
         completedAt: isPast ? new Date(dueDate + "T23:59:59Z") : null,
         completedByActorType: isPast ? ("system" as const) : null,
