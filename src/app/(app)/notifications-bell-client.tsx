@@ -73,23 +73,26 @@ export function NotificationsBellClient({
               : "Notifications"
           }
           className={[
-            // Mirror of app-shell.tsx's collapse expand-toggle:
-            // hidden md:flex absolute top-4 left-4 z-30 w-8 h-8 rounded-full bg-card shadow-card
-            // items-center justify-center hover:shadow-md text-foreground/70 transition-shadow
             "hidden md:flex absolute top-4 right-4 z-30",
             "w-8 h-8 rounded-full bg-card shadow-card",
             "items-center justify-center text-foreground/70",
-            "hover:shadow-md transition-shadow",
-            // When open, give the bell a soft red ring so the trigger
-            // anchor reads as "active" — matches Variant E mockup.
-            open ? "ring-[3px] ring-[var(--priority-urgent)]/15" : "",
+            "transition-all hover:shadow-md hover:scale-[1.04] hover:text-foreground",
+            // Active state uses the warm client-rose family (matches the
+            // dashboard IRS strip + bulk-extend gradient pill) instead of
+            // the harsh priority-urgent red, so the ring + badge read as
+            // one coherent "tax-update" signal across the app.
+            open ? "ring-[3px] ring-[var(--client-rose)]/25" : "",
           ].join(" ")}
         >
           <Bell className="h-4 w-4" strokeWidth={1.8} />
           {hasUnread ? (
             <span
-              className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full text-[10px] font-bold text-white flex items-center justify-center"
-              style={{ background: "var(--priority-urgent)" }}
+              // ring-2 ring-card lifts the badge off the bell-circle so
+              // it reads as a separate floating chip, not a colored
+              // smudge on the icon. font-semibold (vs bold) keeps the
+              // small numeral readable without going chunky.
+              className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 rounded-full text-[10px] font-semibold text-white flex items-center justify-center ring-2 ring-card shadow-sm"
+              style={{ background: "var(--client-rose)" }}
               aria-hidden
             >
               {unreadCount > 99 ? "99+" : unreadCount}
