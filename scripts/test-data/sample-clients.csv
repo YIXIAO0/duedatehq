@@ -1,0 +1,16 @@
+Client,Filer Name,Type,State,Other States,Tax ID,Email,Phone,Comments
+John & Jane Smith,John Smith,Individual,CA,CA,,jane@smith.example,(415) 555-0123,Filed jointly last year
+John & Jane Smith,Jane Smith,Individual,CA,"CA, NY",,jane@smith.example,(415) 555-0123,NY rental property income — needs IT-203
+Acme Holdings,Acme Holdings LLC,LLC,DE,"CA, TX",12-3456789,cfo@acme.example,(415) 555-0144,"Multi-member, taxed as partnership"
+Chen Family,Chen Holdings Inc.,S Corporation,NY,NY,98-7654321,michael@chen.example,(212) 555-0144,NY PTET opted in for 2026
+Chen Family,Michael Chen,Individual,NY,NY,,michael@chen.example,(212) 555-0144,K-1 from S-Corp above
+Verde Tech Solutions,Verde Tech Solutions Inc.,C-Corp,CA,"CA, WA",45-6789012,accounting@verde.example,(650) 555-0167,"Series A startup, claiming R&D credit"
+Wilson Family LLC,Wilson Family LLC,LLC,TX,TX,22-3344556,tom@wilson.example,(713) 555-0188,Family rental properties — 4 units in Houston
+Greenleaf Consulting,Sarah Greenleaf,Sole Proprietor,OR,"OR, WA",,sarah@greenleaf.example,(503) 555-0199,"Schedule C, marketing consultant"
+Patel Enterprises LP,Patel Enterprises LP,Partnership,NJ,"NJ, NY, PA",33-4455667,rajesh@patel.example,(973) 555-0211,NJ BAIT election in effect
+Green Valley Foundation,Green Valley Foundation,Nonprofit,MA,MA,55-6677889,director@gvf.example,(617) 555-0233,"501(c)(3), Form 990 filer"
+O'Brien & Sons Inc.,O'Brien & Sons Inc.,C Corporation,IL,IL,77-8899001,accounting@obrien.example,(312) 555-0244,Family construction company
+Park Avenue Realty,Park Avenue Realty LLC,LLC,NY,"NY, FL",99-1122334,leasing@parkave.example,,Single-member LLC — elected 1120-S treatment
+Tasha Williams,Tasha Williams,Individual,GA,GA,,tasha.w@example.com,(404) 555-0277,"First-time client, freelance designer"
+Hawthorne Capital Partners,Hawthorne Capital LP,Partnership,DE,"DE, NY, CA",11-2233445,ops@hawthorne.example,(212) 555-0288,Hedge fund — extensive K-1 prep
+Riverside Bakery,Riverside Bakery LLC,LLC,OR,OR,66-7788990,mary@riverside.example,(503) 555-0322,Single-member — Schedule C treatment

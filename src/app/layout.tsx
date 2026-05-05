@@ -34,10 +34,74 @@ const sohneMono = localFont({
   display: "swap",
 });
 
+/**
+ * SEO foundation. `metadataBase` lets relative URLs in OG / Twitter
+ * resolve correctly across preview deploys. The title `template` lets
+ * per-page metadata set just `%s` and have " · DueDateHQ" appended
+ * automatically; the landing page opts out via `title.absolute`.
+ */
+const APP_URL =
+  process.env.NEXT_PUBLIC_APP_URL ?? "https://duedatehq.com";
+
 export const metadata: Metadata = {
-  title: "DueDateHQ — Never miss another tax deadline",
+  metadataBase: new URL(APP_URL),
+  title: {
+    default: "DueDateHQ — Tax Deadline Tool for Small CPAs",
+    template: "%s · DueDateHQ",
+  },
   description:
-    "Cloud-based tax deadline tracking for independent CPAs and tax pros. Federal + 50-state coverage, auto-updates for IRS disaster extensions.",
+    "DueDateHQ is the modern tax deadline tracker built for independent CPAs and small accounting firms. Federal + 50-state coverage, automatic IRS disaster-relief updates, and per-client deadline workflows.",
+  keywords: [
+    "tax deadline tool",
+    "tax deadline tool for small CPAs",
+    "CPA deadline tool",
+    "tax deadline tracker",
+    "CPA deadline tracker",
+    "tax filing deadline software",
+    "IRS deadline tracker for accountants",
+    "tax deadline management",
+    "small accounting firm software",
+    "CPA practice management",
+    "tax due date tracker",
+    "tax workflow software",
+    "IRS deadline reminder",
+    "PTE election tracker",
+    "state tax deadlines",
+  ],
+  applicationName: "DueDateHQ",
+  authors: [{ name: "DueDateHQ" }],
+  creator: "DueDateHQ",
+  publisher: "DueDateHQ",
+  category: "Business Software",
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+      "max-video-preview": -1,
+    },
+  },
+  alternates: {
+    canonical: APP_URL,
+  },
+  openGraph: {
+    type: "website",
+    url: APP_URL,
+    siteName: "DueDateHQ",
+    title: "DueDateHQ — Tax Deadline Tool for Small CPAs",
+    description:
+      "Modern tax deadline tracker for independent CPAs. Federal + 50-state coverage, automatic IRS disaster-relief updates, per-client deadline workflows.",
+    locale: "en_US",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "DueDateHQ — Tax Deadline Tool for Small CPAs",
+    description:
+      "Tax deadline tracker for independent CPAs. Federal + 50-state, IRS auto-updates.",
+  },
 };
 
 export default function RootLayout({

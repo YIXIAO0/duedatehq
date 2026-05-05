@@ -1,10 +1,78 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Calendar, Shield, Zap } from "lucide-react";
 
+const APP_URL =
+  process.env.NEXT_PUBLIC_APP_URL ?? "https://duedatehq.com";
+
+/**
+ * Landing-page metadata. `title.absolute` opts out of the root layout's
+ * "%s · DueDateHQ" template so the home title reads cleanly as a single
+ * SEO phrase rather than duplicating the brand. Description is tuned
+ * for the "tax deadline tool for small CPAs" search-intent cluster.
+ */
+export const metadata: Metadata = {
+  title: {
+    absolute: "Tax Deadline Tool for Small CPAs | DueDateHQ",
+  },
+  description:
+    "DueDateHQ is the tax deadline tool for small CPA firms. Track federal + 50-state filing deadlines, PTE elections, and IRS disaster relief auto-updates. Built for solo CPAs and small accounting practices.",
+  alternates: { canonical: APP_URL },
+  openGraph: {
+    type: "website",
+    url: APP_URL,
+    siteName: "DueDateHQ",
+    title: "Tax Deadline Tool for Small CPAs | DueDateHQ",
+    description:
+      "Track federal + 50-state tax deadlines, PTE elections, and IRS disaster relief auto-updates. Built for solo CPAs.",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Tax Deadline Tool for Small CPAs | DueDateHQ",
+    description:
+      "Federal + 50-state tax deadlines, PTE elections, IRS auto-updates. Built for solo CPAs.",
+  },
+};
+
+/**
+ * JSON-LD SoftwareApplication schema — drives Google's rich product
+ * cards and AI-citation surfaces (ChatGPT / Perplexity / Gemini)
+ * when crawling. Kept minimal and accurate; aspirational claims here
+ * actively harm trust signals.
+ */
+const PRODUCT_JSONLD = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: "DueDateHQ",
+  applicationCategory: "BusinessApplication",
+  operatingSystem: "Web",
+  description:
+    "Tax deadline tracker for independent CPAs and small accounting firms. Federal + 50-state coverage, automatic IRS disaster-relief updates.",
+  url: APP_URL,
+  offers: {
+    "@type": "Offer",
+    price: "19",
+    priceCurrency: "USD",
+    description: "Founding price during beta — $19/month for life.",
+  },
+  audience: {
+    "@type": "BusinessAudience",
+    audienceType: "Independent CPAs and small accounting firms",
+  },
+};
+
 export default function LandingPage() {
   return (
     <main className="flex flex-col flex-1">
+      {/* Structured data for rich Google results + AI-search citations.
+          dangerouslySetInnerHTML is the Next-recommended way to inject
+          schema.org JSON-LD; the content is a static literal, so no
+          XSS risk. */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(PRODUCT_JSONLD) }}
+      />
       {/* Header — sticky, solid background (legibility > trendiness for a pro tool) */}
       <header className="sticky top-0 z-40 border-b border-border bg-background">
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-4">
