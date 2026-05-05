@@ -3,13 +3,44 @@
 import {
   createContext,
   useContext,
-  useEffect,
-  useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 import { PanelLeftClose, PanelLeft } from "lucide-react";
 
 const STORAGE_KEY = "ddhq-sidebar-collapsed";
+
+// In-tab pub/sub for the localStorage-backed collapsed flag. The native
+// `storage` event only fires for OTHER tabs, so toggling within the
+// current tab needs our own notify. Using useSyncExternalStore avoids
+// the React 19 react-hooks/set-state-in-effect lint violation that the
+// previous useEffect-on-mount pattern produced.
+const collapsedListeners = new Set<() => void>();
+function notifyCollapsedChange() {
+  collapsedListeners.forEach((listener) => listener());
+}
+function subscribeCollapsed(callback: () => void) {
+  collapsedListeners.add(callback);
+  if (typeof window !== "undefined") {
+    window.addEventListener("storage", callback);
+  }
+  return () => {
+    collapsedListeners.delete(callback);
+    if (typeof window !== "undefined") {
+      window.removeEventListener("storage", callback);
+    }
+  };
+}
+function getCollapsedSnapshot(): boolean {
+  if (typeof window === "undefined") return false;
+  return localStorage.getItem(STORAGE_KEY) === "1";
+}
+function getCollapsedServerSnapshot(): boolean {
+  // SSR / first paint always renders the sidebar open. After hydration
+  // useSyncExternalStore swaps in the localStorage snapshot — same
+  // 50ms-flash trade-off as before, no blocking inline script needed.
+  return false;
+}
 
 const SidebarToggleContext = createContext<(() => void) | null>(null);
 
@@ -65,26 +96,21 @@ export function AppShell({
   topRightContent?: ReactNode;
   children: ReactNode;
 }) {
-  const [collapsed, setCollapsed] = useState(false);
-  const [hydrated, setHydrated] = useState(false);
-
-  useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored === "1") setCollapsed(true);
-    setHydrated(true);
-  }, []);
+  const collapsed = useSyncExternalStore(
+    subscribeCollapsed,
+    getCollapsedSnapshot,
+    getCollapsedServerSnapshot,
+  );
 
   function toggle() {
-    setCollapsed((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem(STORAGE_KEY, next ? "1" : "0");
-      } catch {
-        // localStorage may be unavailable (private mode); behavior
-        // still works for the session.
-      }
-      return next;
-    });
+    const next = !collapsed;
+    try {
+      localStorage.setItem(STORAGE_KEY, next ? "1" : "0");
+    } catch {
+      // localStorage may be unavailable (private mode); behavior
+      // still works for the session.
+    }
+    notifyCollapsedChange();
   }
 
   return (
@@ -93,9 +119,7 @@ export function AppShell({
         <aside
           className={[
             "hidden md:flex shrink-0 sticky top-0 h-screen flex-col overflow-hidden",
-            // Skip the transition on first paint so users who reload
-            // with a collapsed sidebar don't see it slide in from open.
-            hydrated ? "transition-[width,border-color] duration-200" : "",
+            "transition-[width,border-color] duration-200",
             collapsed ? "w-0 border-r-0" : "w-60 border-r border-border",
           ].join(" ")}
           style={{

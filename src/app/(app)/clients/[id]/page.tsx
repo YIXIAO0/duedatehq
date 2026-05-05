@@ -5,7 +5,6 @@ import { and, eq } from "drizzle-orm";
 import { Button } from "@/components/ui/button";
 import {
   Card,
-  CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
@@ -24,7 +23,6 @@ import {
   AlertTriangle,
   Calendar,
   ChevronRight,
-  Clock,
   StickyNote,
 } from "lucide-react";
 import { getCurrentContext } from "@/lib/auth/current-org";

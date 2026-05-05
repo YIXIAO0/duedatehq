@@ -134,7 +134,7 @@ export function NotificationsBellClient({
               All caught up
             </div>
             <div className="text-[11.5px] text-muted-foreground">
-              We'll let you know when something needs your attention.
+              We&apos;ll let you know when something needs your attention.
             </div>
           </div>
         )}

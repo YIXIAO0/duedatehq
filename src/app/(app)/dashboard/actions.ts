@@ -26,7 +26,7 @@ export async function bulkMarkCompleteAction(
         actorId: ctx.user.id,
       });
       succeeded += 1;
-    } catch (err) {
+    } catch {
       failed.push(id);
     }
   }

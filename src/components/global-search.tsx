@@ -60,10 +60,12 @@ export function GlobalSearch({
   // Debounced fetch
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (!query.trim()) {
-      setHits([]);
-      return;
-    }
+    // Empty query: skip the fetch. We don't reset hits state here —
+    // the rendered hit lists below are gated on `query.trim()` so
+    // stale state stays invisible without an extra setState->rerender
+    // round-trip (which the react-hooks/set-state-in-effect lint rule
+    // flags as cascading).
+    if (!query.trim()) return;
     debounceRef.current = setTimeout(async () => {
       setLoading(true);
       try {
@@ -95,9 +97,12 @@ export function GlobalSearch({
     [router],
   );
 
-  const clients = hits.filter((h) => h.type === "client");
-  const entities = hits.filter((h) => h.type === "entity");
-  const deadlines = hits.filter((h) => h.type === "deadline");
+  // Gate visible hits on the trimmed query so cleared inputs hide
+  // stale results without needing to reset state inside the effect.
+  const trimmed = query.trim();
+  const clients = trimmed ? hits.filter((h) => h.type === "client") : [];
+  const entities = trimmed ? hits.filter((h) => h.type === "entity") : [];
+  const deadlines = trimmed ? hits.filter((h) => h.type === "deadline") : [];
 
   return (
     <>

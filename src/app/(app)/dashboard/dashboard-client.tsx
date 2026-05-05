@@ -3,13 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
@@ -1278,18 +1272,6 @@ export function DashboardClient({
   );
 }
 
-// "Wed · Apr 30" — short date label rendered in the chips row.
-// Time-aware greeting. Most CPAs open the dashboard first thing in the
-// morning (the persona was built around "before coffee"). Falls back to
-// neutral wording outside business hours.
-function dateLabel(): string {
-  return new Date().toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  });
-}
-
 /**
  * "Today" date display — Variant C (outlined pill, color dot accent).
  *
@@ -1355,32 +1337,6 @@ function OwnerFilterDropdown({
         <SelectItem value="unassigned">Unassigned only</SelectItem>
       </SelectContent>
     </Select>
-  );
-}
-
-// CountChip — display-only count pill. Used to be a clickable filter
-// duplicating the KPI cards below; the dark-fill active state also
-// fought with the calm pastel theme. Now it's a passive label —
-// "here's a number you should know" — and the action surface is the
-// KPI cards (Today / This week / All open).
-function CountChip({
-  label,
-  tone,
-}: {
-  label: string;
-  tone: "rose" | "amber";
-}) {
-  const palette =
-    tone === "rose"
-      ? { bg: "var(--client-rose-bg)", text: "var(--client-rose-text)" }
-      : { bg: "var(--client-amber-bg)", text: "var(--client-amber-text)" };
-  return (
-    <span
-      className="rounded-full px-3 py-1 text-[12.5px] font-medium"
-      style={{ background: palette.bg, color: palette.text }}
-    >
-      {label}
-    </span>
   );
 }
 

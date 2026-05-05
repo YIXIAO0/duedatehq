@@ -22,6 +22,7 @@
 
 import "server-only";
 import { Suspense } from "react";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { auth } from "@clerk/nextjs/server";
@@ -118,7 +119,7 @@ function InvalidInvite() {
             Ask whoever invited you to send a fresh link.
           </p>
           <Button asChild variant="outline" size="sm">
-            <a href="/">Back to home</a>
+            <Link href="/">Back to home</Link>
           </Button>
         </CardContent>
       </Card>

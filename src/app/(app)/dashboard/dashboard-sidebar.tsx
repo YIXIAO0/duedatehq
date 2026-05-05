@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Inbox, Star, Calendar, Flame, Clock4, Plus } from "lucide-react";
+import { Inbox, Star, Calendar, Flame, Plus } from "lucide-react";
 import type { DashboardDeadline } from "./dashboard-client";
 
 export type SidebarClient = {
