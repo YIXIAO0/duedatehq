@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { getCurrentContext } from "@/lib/auth/current-org";
 import { getAnnouncementReview } from "@/lib/services/announcements";
 import { ReviewRow } from "./review-row";
+import { BulkApplyButton, type PendingDeadline } from "./bulk-apply-button";
 
 type Params = Promise<{ id: string }>;
 
@@ -78,6 +79,21 @@ async function Detail({ params }: { params: Params }) {
         (d) => d.appliedAt != null || d.alreadyCovered,
       ).length,
     0,
+  );
+  // Flat list of deadlines still actionable — not yet applied/skipped
+  // and not already covered by a pre-existing extension. Drives the
+  // bulk-apply button. Computed here so the button can be a pure
+  // presentational client component.
+  const pendingDeadlines: PendingDeadline[] = clients.flatMap((c) =>
+    c.affectedDeadlines
+      .filter((d) => d.appliedAt == null && !d.alreadyCovered)
+      .map((d) => ({
+        deadlineId: d.deadlineId,
+        clientId: c.clientId,
+        clientName: c.clientName,
+        formCode: d.formCode,
+        currentEffectiveDate: d.currentEffectiveDate,
+      })),
   );
   const totalClients = clients.length;
   const ackedClients = clients.filter((c) => c.acked).length;
@@ -232,7 +248,7 @@ async function Detail({ params }: { params: Params }) {
                 {doneDeadlines}
               </span>
             )}
-            <div>
+            <div className="min-w-0 flex-1">
               <div className="text-sm font-semibold">
                 {allDone
                   ? "All affected deadlines handled"
@@ -246,6 +262,19 @@ async function Detail({ params }: { params: Params }) {
                   : "Mark each deadline reviewed once you've decided what to do."}
               </div>
             </div>
+            {/* Bulk-apply CTA — only renders when there's actually a
+                relief date to apply AND at least one pending deadline.
+                Sits inside the strip so the count summary and the
+                action are read together as one band. */}
+            {a.reliefDeadline && pendingDeadlines.length > 0 ? (
+              <BulkApplyButton
+                announcementId={a.id}
+                reliefDeadline={a.reliefDeadline}
+                pendingDeadlines={pendingDeadlines}
+                requiresVerify={a.category === "disaster_relief"}
+                affectedCounties={a.affectedCounties}
+              />
+            ) : null}
           </div>
         ) : (
           // Unscoped path: per-client review, with a clear explanation
