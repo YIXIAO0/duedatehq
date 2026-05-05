@@ -30,7 +30,6 @@ import {
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { bulkMarkCompleteAction } from "./actions";
-import { assignDeadlineAction } from "../deadlines/[id]/actions";
 import {
   MiniCalendar,
   type SidebarClient,
@@ -41,7 +40,24 @@ import {
   clientInitials,
 } from "@/lib/utils/client-palette";
 import { WelcomeTiles } from "../_components/welcome-tiles";
-import { US_STATE_CODES } from "@/lib/constants/us-states";
+import {
+  bucketByTime,
+  STATE_OPTIONS,
+  TYPE_OPTIONS,
+  PAGE_SIZE,
+  type Bucket,
+  type FilterState,
+  type StatusFilter,
+  type UrgencyFilter,
+} from "./dashboard-buckets";
+import {
+  groupByClient,
+  entityTypeLabel,
+  formatStageDate,
+  timeAwareGreeting,
+} from "./dashboard-helpers";
+import { KPICards } from "./dashboard-kpi-cards";
+import { OwnerCell } from "./dashboard-owner-picker";
 
 export type DashboardDeadline = {
   id: string;
@@ -81,200 +97,11 @@ export type DashboardDeadline = {
   };
 };
 
-type UrgencyFilter = "all" | "urgent" | "irrevocable";
-type StatusFilter = "active" | "extended_only" | "all";
-
-interface FilterState {
-  urgency: UrgencyFilter;
-  status: StatusFilter;
-  state: string; // state code or "all"
-  entityType: string; // entity_type or "all"
-}
-
 // Search lives outside FilterState — it's applied purely client-side over
 // the already-loaded deadline set, so no debounce / no fetch / no SQL.
 // Server-side dropdown filters still trigger a refetch via FilterState.
-
-// ---------------------------------------------------------------------------
-// Time bucketing
-// ---------------------------------------------------------------------------
-
-type Bucket = {
-  id: string;
-  label: string;
-  description: string;
-  deadlines: DashboardDeadline[];
-  urgency: "urgent" | "high" | "medium" | "low";
-  defaultCollapsed: boolean;
-};
-
-function bucketByTime(deadlines: DashboardDeadline[]): Bucket[] {
-  // Anchor to local-midnight today so date-only comparisons stay clean.
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-
-  // Week boundary: Sunday-start week. End-of-this-week = upcoming Saturday.
-  const dayOfWeek = today.getDay(); // Sun=0..Sat=6
-  const endOfThisWeek = new Date(today);
-  endOfThisWeek.setDate(endOfThisWeek.getDate() + (6 - dayOfWeek));
-  const endOfNextWeek = new Date(endOfThisWeek);
-  endOfNextWeek.setDate(endOfNextWeek.getDate() + 7);
-
-  // Month boundary: end-of-month is "last day at 00:00", inclusive.
-  const endOfThisMonth = new Date(
-    today.getFullYear(),
-    today.getMonth() + 1,
-    0,
-  );
-  const endOfNextMonth = new Date(
-    today.getFullYear(),
-    today.getMonth() + 2,
-    0,
-  );
-
-  const monthName = today.toLocaleDateString("en-US", { month: "long" });
-  const nextMonthName = new Date(
-    today.getFullYear(),
-    today.getMonth() + 1,
-    1,
-  ).toLocaleDateString("en-US", { month: "long", year: "numeric" });
-
-  const dateRangeLabel = (from: Date, to: Date) => {
-    const opts = { month: "short", day: "numeric" } as const;
-    return `${from.toLocaleDateString("en-US", opts)} – ${to.toLocaleDateString("en-US", opts)}`;
-  };
-
-  const buckets: Bucket[] = [
-    {
-      id: "overdue",
-      label: "Overdue",
-      description: "Past the effective due date — triage first",
-      deadlines: [],
-      urgency: "urgent",
-      defaultCollapsed: false,
-    },
-    {
-      id: "today",
-      label: "Today",
-      description: today.toLocaleDateString("en-US", {
-        weekday: "long",
-        month: "short",
-        day: "numeric",
-      }),
-      deadlines: [],
-      urgency: "urgent",
-      defaultCollapsed: false,
-    },
-    {
-      id: "tomorrow",
-      label: "Tomorrow",
-      description: tomorrow.toLocaleDateString("en-US", {
-        weekday: "long",
-        month: "short",
-        day: "numeric",
-      }),
-      deadlines: [],
-      urgency: "urgent",
-      defaultCollapsed: false,
-    },
-    {
-      id: "rest-of-week",
-      label: "Rest of this week",
-      description: dateRangeLabel(
-        new Date(tomorrow.getTime() + 86400000),
-        endOfThisWeek,
-      ),
-      deadlines: [],
-      urgency: "high",
-      defaultCollapsed: false,
-    },
-    {
-      id: "next-week",
-      label: "Next week",
-      description: dateRangeLabel(
-        new Date(endOfThisWeek.getTime() + 86400000),
-        endOfNextWeek,
-      ),
-      deadlines: [],
-      urgency: "high",
-      defaultCollapsed: false,
-    },
-    {
-      id: "later-this-month",
-      label: `Later in ${monthName}`,
-      description: dateRangeLabel(
-        new Date(endOfNextWeek.getTime() + 86400000),
-        endOfThisMonth,
-      ),
-      deadlines: [],
-      urgency: "medium",
-      defaultCollapsed: true,
-    },
-    {
-      id: "next-month",
-      label: nextMonthName,
-      description: "Plan ahead",
-      deadlines: [],
-      urgency: "medium",
-      defaultCollapsed: true,
-    },
-    {
-      id: "beyond",
-      label: "Beyond",
-      description: "Further out",
-      deadlines: [],
-      urgency: "low",
-      defaultCollapsed: true,
-    },
-  ];
-
-  const tMs = today.getTime();
-  for (const d of deadlines) {
-    const due = new Date(d.effective_due_date + "T00:00:00").getTime();
-    if (due < tMs) buckets[0].deadlines.push(d);
-    else if (due === tMs) buckets[1].deadlines.push(d);
-    else if (due === tomorrow.getTime()) buckets[2].deadlines.push(d);
-    else if (due <= endOfThisWeek.getTime()) buckets[3].deadlines.push(d);
-    else if (due <= endOfNextWeek.getTime()) buckets[4].deadlines.push(d);
-    else if (due <= endOfThisMonth.getTime()) buckets[5].deadlines.push(d);
-    else if (due <= endOfNextMonth.getTime()) buckets[6].deadlines.push(d);
-    else buckets[7].deadlines.push(d);
-  }
-
-  for (const b of buckets) {
-    b.deadlines.sort((a, b) => {
-      if (a.effective_due_date !== b.effective_due_date) {
-        return a.effective_due_date.localeCompare(b.effective_due_date);
-      }
-      return Number(b.irrevocable) - Number(a.irrevocable);
-    });
-  }
-
-  return buckets;
-}
-
-// ---------------------------------------------------------------------------
-// Client component
-// ---------------------------------------------------------------------------
-
-// Filter dropdown options — "federal" is virtual (no entity has it as
-// home_state, but federal-level deadlines are tagged that way) followed
-// by the canonical 50 states + DC. The API still supports filtering by
-// any value the data carries; this list just drives the UI.
-const STATE_OPTIONS = ["federal", ...US_STATE_CODES];
-const TYPE_OPTIONS = [
-  "individual",
-  "c_corp",
-  "s_corp",
-  "partnership",
-  "llc",
-  "trust",
-  "estate",
-  "nonprofit",
-];
-const PAGE_SIZE = 100;
+// (Bucket / FilterState types + bucketByTime + STATE/TYPE_OPTIONS + PAGE_SIZE
+// live in ./dashboard-buckets — pure logic, dependency-free.)
 
 export interface MemberSummary {
   userId: string;
@@ -1301,13 +1128,6 @@ function DatePill() {
   );
 }
 
-function timeAwareGreeting(): string {
-  const h = new Date().getHours();
-  if (h < 12) return "Good morning";
-  if (h < 18) return "Good afternoon";
-  return "Good evening";
-}
-
 // OwnerFilterDropdown — quiet "show ▾" dropdown that lives in the
 // utility group (next to calendar / Import / Add client). Default state
 // is "All" — the dropdown only shows up at all in multi-user orgs.
@@ -1351,106 +1171,6 @@ function Hero() {
     >
       {timeAwareGreeting()}.
     </h1>
-  );
-}
-
-// 3 gradient KPI cards — Today / This week / This month. Carries the
-// urgency signal so the buckets can stay calm. Cards are clickable —
-// each maps to the matching SmartView.
-function KPICards({
-  counts,
-  view,
-  onApplyView,
-}: {
-  counts: { today: number; thisWeek: number; overdue: number; all: number };
-  view: SmartView;
-  onApplyView: (v: SmartView) => void;
-}) {
-  // "This month" = total open across the loaded window. Not a true
-  // calendar-month count — the dashboard windows 60 days ahead — but
-  // it's the right approximation for "how full is the queue overall".
-  const monthCount = counts.all;
-  return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-      <KPICard
-        label="Today"
-        value={counts.today}
-        sub={
-          counts.overdue > 0
-            ? `${counts.overdue} overdue · clear first`
-            : counts.today === 0
-              ? "All clear"
-              : "Two estimated · one surcharge"
-        }
-        gradient="linear-gradient(135deg, #FFD0D0 0%, #FFE3D0 100%)"
-        textColor="#8A2B2B"
-        active={view === "today"}
-        onClick={() => onApplyView("today")}
-      />
-      <KPICard
-        label="This week"
-        value={counts.thisWeek}
-        sub={`${counts.thisWeek} through Sunday`}
-        gradient="linear-gradient(135deg, #FFEFC9 0%, #FFE3D0 100%)"
-        textColor="#8A6420"
-        active={view === "thisWeek"}
-        onClick={() => onApplyView("thisWeek")}
-      />
-      <KPICard
-        label="All open"
-        value={monthCount}
-        sub={`${monthCount} total in your book`}
-        gradient="linear-gradient(135deg, #D7E5F8 0%, #E0DAF6 100%)"
-        textColor="#3F4F87"
-        active={view === "all"}
-        onClick={() => onApplyView("all")}
-      />
-    </div>
-  );
-}
-
-function KPICard({
-  label,
-  value,
-  sub,
-  gradient,
-  textColor,
-  active,
-  onClick,
-}: {
-  label: string;
-  value: number;
-  sub: string;
-  gradient: string;
-  textColor: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={[
-        "rounded-2xl p-5 text-left transition-transform hover:scale-[1.01]",
-        active ? "ring-2 ring-foreground/20 shadow-card" : "",
-      ].join(" ")}
-      style={{ background: gradient, color: textColor }}
-    >
-      <div
-        className="text-[12px] uppercase tracking-wider"
-        style={{ fontWeight: 600 }}
-      >
-        {label}
-      </div>
-      <div
-        className="text-[44px] leading-none mt-3"
-        style={{ fontWeight: 700 }}
-      >
-        {value}
-      </div>
-      <div className="text-[12px] mt-2 opacity-75">{sub}</div>
-    </button>
   );
 }
 
@@ -1544,160 +1264,6 @@ function DateSubheader({ date, count }: { date: string; count: number }) {
 // enum. With state collapsed to Pending / Filed, a 3-segment bar adds
 // chrome without information — the row's status badge already says
 // "Filed" / "Overdue" / nothing-for-pending.)
-
-/**
- * Clickable owner cell — assigned avatar OR "+ in dashed circle" for
- * unassigned. Click opens an inline popover with the member list so
- * the CPA can assign / reassign without leaving the dashboard. The
- * detail page has a richer picker (with email and avatar preview);
- * this is the keep-flowing-through-the-list version.
- *
- * Stable per-user color slot via paletteForClient — owner colors stay
- * consistent across sessions regardless of which client they're on.
- */
-function OwnerCell({
-  deadline,
-  members,
-}: {
-  deadline: DashboardDeadline;
-  members: MemberSummary[];
-}) {
-  const [open, setOpen] = useState(false);
-  const [pending, startTransition] = useTransition();
-
-  function assign(userId: string | null) {
-    if (userId === deadline.owner_user_id) {
-      setOpen(false);
-      return;
-    }
-    startTransition(() => assignDeadlineAction(deadline.id, userId));
-    setOpen(false);
-  }
-
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          disabled={pending}
-          aria-label={
-            deadline.owner_user_id
-              ? `Owner: ${deadline.owner_full_name ?? deadline.owner_email}. Click to reassign.`
-              : "Unassigned. Click to assign."
-          }
-          className="transition-opacity hover:opacity-80 disabled:opacity-50"
-        >
-          {deadline.owner_user_id ? (
-            <AssignedAvatar deadline={deadline} />
-          ) : (
-            <UnassignedPlus />
-          )}
-        </button>
-      </PopoverTrigger>
-      <PopoverContent
-        align="end"
-        sideOffset={6}
-        className="w-56 p-1"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <OwnerPickerList
-          members={members}
-          currentOwnerUserId={deadline.owner_user_id}
-          onPick={assign}
-        />
-      </PopoverContent>
-    </Popover>
-  );
-}
-
-function AssignedAvatar({ deadline }: { deadline: DashboardDeadline }) {
-  const palette = paletteForClient(deadline.owner_user_id ?? "");
-  const display = deadline.owner_full_name ?? deadline.owner_email ?? "Owner";
-  const initials = clientInitials(display);
-  return (
-    <span
-      title={display}
-      className="inline-flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-semibold"
-      style={{ background: palette.bg, color: palette.text }}
-    >
-      {initials}
-    </span>
-  );
-}
-
-function UnassignedPlus() {
-  return (
-    <span
-      title="Unassigned — click to assign"
-      className="inline-flex h-6 w-6 items-center justify-center rounded-full text-muted-foreground hover:text-foreground"
-      style={{ border: "1px dashed var(--border)" }}
-    >
-      <Plus className="h-3 w-3" />
-    </span>
-  );
-}
-
-function OwnerPickerList({
-  members,
-  currentOwnerUserId,
-  onPick,
-}: {
-  members: MemberSummary[];
-  currentOwnerUserId: string | null;
-  onPick: (userId: string | null) => void;
-}) {
-  return (
-    <div className="flex flex-col">
-      <button
-        type="button"
-        onClick={() => onPick(null)}
-        className="flex items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-sm hover:bg-foreground/5"
-      >
-        <span
-          className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] text-muted-foreground"
-          style={{ border: "1px dashed var(--border)" }}
-        >
-          ·
-        </span>
-        <span
-          className={
-            currentOwnerUserId === null
-              ? "font-medium"
-              : "text-muted-foreground"
-          }
-        >
-          Unassigned
-        </span>
-      </button>
-      <div className="my-1 border-t border-border" />
-      {members.map((m) => {
-        const palette = paletteForClient(m.userId);
-        const display = m.fullName ?? m.email.split("@")[0];
-        const isCurrent = m.userId === currentOwnerUserId;
-        return (
-          <button
-            key={m.userId}
-            type="button"
-            onClick={() => onPick(m.userId)}
-            className="flex items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-sm hover:bg-foreground/5"
-          >
-            <span
-              className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold"
-              style={{ background: palette.bg, color: palette.text }}
-            >
-              {clientInitials(display)}
-            </span>
-            <span
-              className={`truncate ${isCurrent ? "font-medium" : ""}`}
-            >
-              {display}
-            </span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
 
 function DeadlineRow({
   d,
@@ -1890,54 +1456,6 @@ function DeadlineRow({
   );
 }
 
-// Group deadlines by client for the "client-centric" view. Clients with
-// multiple deadlines in the same bucket get a shared header; single-deadline
-// clients are rendered flat (no extra nesting for no reason).
-function groupByClient(
-  deadlines: DashboardDeadline[],
-): Array<{
-  clientId: string;
-  clientName: string;
-  deadlines: DashboardDeadline[];
-}> {
-  const map = new Map<
-    string,
-    { clientId: string; clientName: string; deadlines: DashboardDeadline[] }
-  >();
-  for (const d of deadlines) {
-    const existing = map.get(d.client_id);
-    if (existing) {
-      existing.deadlines.push(d);
-    } else {
-      map.set(d.client_id, {
-        clientId: d.client_id,
-        clientName: d.client_name,
-        deadlines: [d],
-      });
-    }
-  }
-  // Sort groups by earliest due within group (preserves bucket's sort order)
-  return Array.from(map.values()).sort((a, b) =>
-    a.deadlines[0].effective_due_date.localeCompare(
-      b.deadlines[0].effective_due_date,
-    ),
-  );
-}
-
-function entityTypeLabel(type: string): string {
-  const map: Record<string, string> = {
-    individual: "Individual",
-    c_corp: "C-Corp",
-    s_corp: "S-Corp",
-    partnership: "Partnership",
-    llc: "LLC",
-    trust: "Trust",
-    estate: "Estate",
-    nonprofit: "Nonprofit",
-  };
-  return map[type] ?? type;
-}
-
 /**
  * Compact prep-stage progress for the dashboard row. Two lines collapse
  * into one strip: a 60px progress bar + "N/M prep" + the next-up hint.
@@ -1984,7 +1502,3 @@ function SubtaskProgressStrip({
   );
 }
 
-function formatStageDate(iso: string): string {
-  const d = new Date(iso + "T00:00:00");
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
