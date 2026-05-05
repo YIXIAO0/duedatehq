@@ -84,7 +84,6 @@ export function SubtaskStepper({
         <AddStageDialog
           deadlineId={deadlineId}
           deadlineDueDate={deadlineDueDate}
-          trigger={<AddStageTrigger />}
         />
       </div>
     );
@@ -101,7 +100,6 @@ export function SubtaskStepper({
         <AddStageDialog
           deadlineId={deadlineId}
           deadlineDueDate={deadlineDueDate}
-          trigger={<AddStageTrigger />}
         />
       </div>
 
@@ -140,24 +138,6 @@ export function SubtaskStepper({
         </div>
       </div>
     </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Add-stage trigger — outlined-pill button. Matches the "Add note"
-// trigger in notes-form.tsx exactly so the two action affordances on
-// the deadline detail page read as a single visual pattern.
-// ---------------------------------------------------------------------------
-
-function AddStageTrigger() {
-  return (
-    <button
-      type="button"
-      className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2.5 py-1 text-xs text-muted-foreground hover:bg-foreground/5 hover:text-foreground transition-colors"
-      aria-label="Add stage"
-    >
-      <Plus className="h-3 w-3" aria-hidden /> Add stage
-    </button>
   );
 }
 
@@ -530,11 +510,9 @@ function DeleteStageButton({
 function AddStageDialog({
   deadlineId,
   deadlineDueDate,
-  trigger,
 }: {
   deadlineId: string;
   deadlineDueDate: string;
-  trigger: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const [label, setLabel] = useState("");
@@ -571,7 +549,15 @@ function AddStageDialog({
         if (!v) reset();
       }}
     >
-      <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2.5 py-1 text-xs text-muted-foreground hover:bg-foreground/5 hover:text-foreground transition-colors"
+          aria-label="Add stage"
+        >
+          <Plus className="h-3 w-3" aria-hidden /> Add stage
+        </button>
+      </PopoverTrigger>
       <PopoverContent align="end" sideOffset={6} className="w-[300px] p-3">
         <form onSubmit={submit} className="space-y-2">
           <div>
