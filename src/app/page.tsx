@@ -11,29 +11,28 @@ const APP_URL =
  * Landing-page metadata. `title.absolute` opts out of the root layout's
  * "%s · DueDateHQ" template so the home title reads cleanly as a single
  * SEO phrase rather than duplicating the brand. Description is tuned
- * for the "tax deadline tool for independent tax pros" search-intent
- * cluster — covers both CPA and EA queries.
+ * for the "tax deadline tool for small CPAs" search-intent cluster.
  */
 export const metadata: Metadata = {
   title: {
-    absolute: "Tax Deadline Tracker for Independent Tax Pros | DueDateHQ",
+    absolute: "Tax Deadline Tracker for Small CPAs | DueDateHQ",
   },
   description:
-    "DueDateHQ is the cloud deadline tracker for independent tax professionals. Federal + 50-state coverage, automatic IRS disaster-relief updates, and live sync to Google or Apple Calendar.",
+    "DueDateHQ is the cloud deadline tracker for small CPA firms. Federal + 50-state coverage, automatic IRS disaster-relief updates, and live sync to Google or Apple Calendar.",
   alternates: { canonical: APP_URL },
   openGraph: {
     type: "website",
     url: APP_URL,
     siteName: "DueDateHQ",
-    title: "Tax Deadline Tracker for Independent Tax Pros | DueDateHQ",
+    title: "Tax Deadline Tracker for Small CPAs | DueDateHQ",
     description:
-      "Federal + 50-state tax deadline coverage with automatic IRS disaster-relief updates. Built for solo CPAs and small firms.",
+      "Federal + 50-state tax deadline coverage with automatic IRS disaster-relief updates. Built for small CPA firms.",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Tax Deadline Tracker for Independent Tax Pros | DueDateHQ",
+    title: "Tax Deadline Tracker for Small CPAs | DueDateHQ",
     description:
-      "Federal + 50-state coverage, IRS auto-updates, calendar sync. Built for independent tax pros.",
+      "Federal + 50-state coverage, IRS auto-updates, calendar sync. Built for small CPA firms.",
   },
 };
 
@@ -52,11 +51,11 @@ const PRODUCT_JSONLD = {
   applicationCategory: "BusinessApplication",
   operatingSystem: "Web",
   description:
-    "Tax deadline tracker for independent CPAs and small accounting firms. Federal + 50-state coverage, automatic IRS disaster-relief updates.",
+    "Tax deadline tracker for small CPA firms. Federal + 50-state coverage, automatic IRS disaster-relief updates.",
   url: APP_URL,
   audience: {
     "@type": "BusinessAudience",
-    audienceType: "Independent CPAs and small accounting firms",
+    audienceType: "Small CPA firms",
   },
 };
 
@@ -93,7 +92,7 @@ export default function LandingPage() {
           before the reader scrolls. */}
       <section className="relative mx-auto w-full max-w-5xl px-6 pb-12 pt-16 text-center md:pb-16 md:pt-24">
         <p className="mb-4 text-sm font-medium uppercase tracking-wider text-muted-foreground">
-          For independent tax professionals
+          For small CPAs
         </p>
         <h1 className="text-4xl font-semibold tracking-tight md:text-6xl">
           The tax deadline tracker

@@ -319,7 +319,12 @@ function DeadlineRow({
           {deadline.formCode}
         </span>
         <span className="text-xs text-muted-foreground">
-          {humanDate(deadline.currentEffectiveDate)}
+          {/* Show the ORIGINAL statutory date, not the current
+              effective date. For already-extended deadlines those
+              two would be identical (e.g. "Oct 15 → Oct 15") which
+              reads as a no-op. The original-due framing tells the
+              real story: "Mar 15 originally → Oct 15 under relief". */}
+          {humanDate(deadline.originalDueDate)}
           {reliefDeadline ? (
             <>
               {" "}
