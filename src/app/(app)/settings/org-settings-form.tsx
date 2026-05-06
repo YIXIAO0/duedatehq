@@ -37,7 +37,7 @@ export function OrgSettingsForm({
     <form action={handleSubmit} className="space-y-4">
       <input type="hidden" name="id" value={orgId} />
       <div className="space-y-2">
-        <Label htmlFor="name">Organization name</Label>
+        <Label htmlFor="name">Name</Label>
         <Input
           id="name"
           name="name"
@@ -48,20 +48,21 @@ export function OrgSettingsForm({
         />
       </div>
 
-      <div className="flex items-center gap-2">
-        <Label className="text-sm text-muted-foreground">Plan</Label>
-        <Badge variant="outline" className="text-xs uppercase">
+      {/* Footer row: plan badge (just identity, no label needed) +
+          save button. Saved / unsaved indicator sits between them so
+          state is visible without an extra row. */}
+      <div className="flex items-center justify-between gap-3">
+        <Badge variant="outline" className="text-[10px] uppercase tracking-wider">
           {plan}
         </Badge>
-      </div>
-
-      <div className="flex items-center justify-between">
-        <span className="text-xs text-muted-foreground">
-          {saved ? "✓ Saved" : changed ? "Unsaved changes" : ""}
-        </span>
-        <Button type="submit" size="sm" disabled={!changed || saving}>
-          {saving ? "Saving…" : "Save changes"}
-        </Button>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-muted-foreground">
+            {saved ? "✓ Saved" : changed ? "Unsaved changes" : ""}
+          </span>
+          <Button type="submit" size="sm" disabled={!changed || saving}>
+            {saving ? "Saving…" : "Save changes"}
+          </Button>
+        </div>
       </div>
     </form>
   );

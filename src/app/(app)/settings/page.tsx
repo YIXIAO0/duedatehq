@@ -25,9 +25,6 @@ export default function SettingsPage() {
     <div className="mx-auto w-full max-w-4xl px-6 py-8">
       <div className="mb-8">
         <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Profile, organization, and preferences.
-        </p>
       </div>
 
       <div className="space-y-8">
@@ -83,9 +80,6 @@ async function OrgSettingsSection() {
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Organization</CardTitle>
-        <CardDescription>
-          The name shown on exports, emails, and audit logs.
-        </CardDescription>
       </CardHeader>
       <CardContent>
         <OrgSettingsForm
@@ -139,9 +133,6 @@ async function TeamSection() {
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Team</CardTitle>
-        <CardDescription>
-          Invite teammates to collaborate on this org&apos;s clients.
-        </CardDescription>
       </CardHeader>
       <CardContent>
         <TeamCard
@@ -217,15 +208,9 @@ function PreferencesSection() {
           </Badge>
         </CardTitle>
         <CardDescription>
-          Default reminder lead times, working hours, email digest cadence.
+          Reminder lead times, working hours, digest cadence.
         </CardDescription>
       </CardHeader>
-      <CardContent>
-        <p className="text-sm text-muted-foreground">
-          We&apos;ll open this up after we gather feedback from the first 20
-          pilots. If there&apos;s a preference you&apos;re missing, email us.
-        </p>
-      </CardContent>
     </Card>
   );
 }

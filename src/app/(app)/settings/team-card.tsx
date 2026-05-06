@@ -90,18 +90,15 @@ export function TeamCard({
 }) {
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h3 className="text-base font-semibold">Members</h3>
-          <p className="text-sm text-muted-foreground">
-            Anyone you invite can see and edit all clients, entities, and
-            deadlines in this org.
-          </p>
-        </div>
-        {canInvite(viewerRole) ? (
+      {/* Header line: just the action button, right-aligned. The
+          parent Card already says "Team" — repeating "Members" + a
+          permission paragraph here was filler. Permissions surface
+          inline next to each row instead (OWNER / ADMIN / MEMBER). */}
+      {canInvite(viewerRole) ? (
+        <div className="flex justify-end">
           <InviteDialog appUrl={appUrl} viewerRole={viewerRole} />
-        ) : null}
-      </div>
+        </div>
+      ) : null}
 
       <MembersList members={members} viewerRole={viewerRole} />
 

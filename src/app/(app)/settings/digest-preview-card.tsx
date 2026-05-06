@@ -70,7 +70,7 @@ export function DigestPreviewCard({
         </CardTitle>
         <CardDescription>
           Mondays at 7am ET — the week&apos;s deadlines, elections, and overdue
-          items. Send yourself a sample.
+          items.
         </CardDescription>
       </CardHeader>
       <CardContent>
