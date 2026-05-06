@@ -18,7 +18,7 @@ import {
   listPendingInvitations,
   buildInviteUrl,
 } from "@/lib/services/team";
-import { TeamCard } from "./team-card";
+import { TeamCard, TeamHeaderAction } from "./team-card";
 
 export default function SettingsPage() {
   return (
@@ -131,8 +131,9 @@ async function TeamSection() {
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0">
         <CardTitle className="text-base">Team</CardTitle>
+        <TeamHeaderAction appUrl={appUrl} viewerRole={viewerRole} />
       </CardHeader>
       <CardContent>
         <TeamCard

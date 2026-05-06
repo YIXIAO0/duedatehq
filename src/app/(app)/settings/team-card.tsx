@@ -88,19 +88,17 @@ export function TeamCard({
   /** Current user's role in this org — gates the per-row remove menu. */
   viewerRole: "owner" | "admin" | "member";
 }) {
+  const ownerCount = members.reduce(
+    (n, m) => (m.role === "owner" ? n + 1 : n),
+    0,
+  );
   return (
     <div className="space-y-6">
-      {/* Header line: just the action button, right-aligned. The
-          parent Card already says "Team" — repeating "Members" + a
-          permission paragraph here was filler. Permissions surface
-          inline next to each row instead (OWNER / ADMIN / MEMBER). */}
-      {canInvite(viewerRole) ? (
-        <div className="flex justify-end">
-          <InviteDialog appUrl={appUrl} viewerRole={viewerRole} />
-        </div>
-      ) : null}
-
-      <MembersList members={members} viewerRole={viewerRole} />
+      <MembersList
+        members={members}
+        viewerRole={viewerRole}
+        ownerCount={ownerCount}
+      />
 
       {pendingInvites.length > 0 ? (
         <div className="space-y-3 border-t border-border pt-6">
@@ -114,11 +112,31 @@ export function TeamCard({
   );
 }
 
+export function TeamHeaderAction({
+  appUrl,
+  viewerRole,
+}: {
+  appUrl: string;
+  viewerRole: "owner" | "admin" | "member";
+}) {
+  if (!canInvite(viewerRole)) return null;
+  return <InviteDialog appUrl={appUrl} viewerRole={viewerRole} />;
+}
+
 function canRemove(args: {
   viewerRole: "owner" | "admin" | "member";
   targetRole: "owner" | "admin" | "member";
   isSelf: boolean;
+  ownerCount: number;
 }): boolean {
+  // Last-owner guard. The server rejects the same case with
+  // RemoveMemberError("last_owner"); blocking it here too prevents a
+  // misleading "Leave workspace" item that always errors. Ownership
+  // transfer is V2, so a sole owner is genuinely stuck on this screen
+  // until they invite + promote another owner.
+  if (args.isSelf && args.targetRole === "owner" && args.ownerCount <= 1) {
+    return false;
+  }
   if (args.isSelf) return true;
   if (args.viewerRole === "owner") return true;
   if (args.viewerRole === "admin") return args.targetRole === "member";
@@ -200,9 +218,11 @@ function memberInitials(fullName: string | null, email: string): string {
 function MembersList({
   members,
   viewerRole,
+  ownerCount,
 }: {
   members: TeamMemberView[];
   viewerRole: "owner" | "admin" | "member";
+  ownerCount: number;
 }) {
   return (
     <ul className="divide-y divide-border rounded-md border border-border">
@@ -211,6 +231,7 @@ function MembersList({
           viewerRole,
           targetRole: m.role,
           isSelf: m.isCurrentUser,
+          ownerCount,
         });
         const showRoleChange = canChangeRole({
           viewerRole,
